@@ -57,7 +57,7 @@ After 25+ sessions of Claude ignoring delegation rules, burning context, and req
 
 ```bash
 # Clone the repo
-git clone https://github.com/dikshantjoshi/devsquad.git
+git clone https://github.com/joshidikshant/devsquad.git
 
 # Symlink to Claude Code plugins directory
 mkdir -p ~/.claude/plugins
@@ -165,4 +165,4 @@ Configuration is stored in `.devsquad/config.json` (created on first run):
 
 ## License
 
-MIT © [Dikshant Joshi](https://github.com/dikshantjoshi)
+MIT © [Dikshant Joshi](https://github.com/joshidikshant)
