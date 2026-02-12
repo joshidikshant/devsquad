@@ -10,7 +10,10 @@
     "plugins": [
         {
             "name": "devsquad",
-            "source": ".",
+            "source": {
+                "source": "path",
+                "path": "."
+            },
             "description": "Engineering Manager that coordinates AI coding agents through enforced delegation",
             "version": "0.1.0"
         }
