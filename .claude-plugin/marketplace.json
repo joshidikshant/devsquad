@@ -4,16 +4,13 @@
         "name": "Dikshant Joshi"
     },
     "metadata": {
-        "description": "DevSquad - Engineering Manager that coordinates AI coding agents through enforced delegation",
+        "description": "DevSquad - Engineering Manager that coordinates AI coding agents",
         "version": "0.1.0"
     },
     "plugins": [
         {
             "name": "devsquad",
-            "source": {
-                "source": "path",
-                "path": "."
-            },
+            "source": "./",
             "description": "Engineering Manager that coordinates AI coding agents through enforced delegation",
             "version": "0.1.0"
         }
