@@ -55,17 +55,24 @@ After 25+ sessions of Claude ignoring delegation rules, burning context, and req
 
 ## Installation
 
+### Quick Install
+
 ```bash
-# Clone the repo
 git clone https://github.com/joshidikshant/devsquad.git
-
-# Symlink to Claude Code plugins directory
-mkdir -p ~/.claude/plugins
-ln -s "$(pwd)/devsquad" ~/.claude/plugins/devsquad
-
-# Run setup (inside any Claude Code session)
-/devsquad:setup
+cd devsquad && bash install.sh
 ```
+
+### Manual Install
+
+```bash
+# Register the marketplace
+claude plugin marketplace add https://github.com/joshidikshant/devsquad.git
+
+# Install the plugin
+claude plugin install devsquad@devsquad-marketplace
+```
+
+After installing, restart Claude Code and run `/devsquad:setup` to complete onboarding.
 
 ## Usage
 
@@ -99,39 +106,43 @@ ln -s "$(pwd)/devsquad" ~/.claude/plugins/devsquad
 ```
 devsquad/
 ├── .claude-plugin/
-│   └── plugin.json          # Plugin manifest
-├── agents/                   # Agent personas
-│   ├── codex-developer.md    # Codex for code generation
-│   ├── codex-tester.md       # Codex for test generation
-│   ├── gemini-developer.md   # Gemini for development tasks
-│   ├── gemini-reader.md      # Gemini for file reading
-│   ├── gemini-researcher.md  # Gemini for web research
-│   └── gemini-tester.md      # Gemini for test generation
-├── commands/                 # Slash commands
-│   ├── config.md             # /devsquad:config
-│   ├── setup.md              # /devsquad:setup
-│   └── status.md             # /devsquad:status
-├── hooks/                    # Runtime enforcement
-│   ├── hooks.json            # Hook registration
-│   └── scripts/
-│       ├── pre-compact.sh    # Pre-compaction state save
-│       ├── pre-tool-use.sh   # Delegation enforcement
-│       ├── session-start.sh  # Environment detection
-│       └── stop.sh           # Session cleanup
-├── lib/                      # Shared libraries
-│   ├── cli-detect.sh         # CLI availability detection
-│   ├── codex-wrapper.sh      # Codex CLI wrapper
-│   ├── enforcement.sh        # Enforcement logic
-│   ├── gemini-wrapper.sh     # Gemini CLI wrapper
-│   ├── routing.sh            # Task routing engine
-│   ├── state.sh              # State management
-│   └── usage.sh              # Usage tracking
-└── skills/                   # Interactive skills
-    ├── devsquad-config/      # Configuration management
-    ├── devsquad-dispatch/    # Manual dispatch
-    ├── devsquad-status/      # Status dashboard
-    ├── environment-detection/# CLI detection
-    └── onboarding/           # First-run setup
+│   └── marketplace.json      # Marketplace manifest
+├── install.sh                # One-line installer
+├── plugin/                   # Plugin root
+│   ├── .claude-plugin/
+│   │   └── plugin.json       # Plugin manifest
+│   ├── agents/               # Agent personas
+│   │   ├── codex-developer.md
+│   │   ├── codex-tester.md
+│   │   ├── gemini-developer.md
+│   │   ├── gemini-reader.md
+│   │   ├── gemini-researcher.md
+│   │   └── gemini-tester.md
+│   ├── commands/             # Slash commands
+│   │   ├── config.md         # /devsquad:config
+│   │   ├── setup.md          # /devsquad:setup
+│   │   └── status.md         # /devsquad:status
+│   ├── hooks/                # Runtime enforcement
+│   │   ├── hooks.json        # Hook registration
+│   │   └── scripts/
+│   │       ├── pre-compact.sh
+│   │       ├── pre-tool-use.sh
+│   │       ├── session-start.sh
+│   │       └── stop.sh
+│   ├── lib/                  # Shared libraries
+│   │   ├── cli-detect.sh
+│   │   ├── codex-wrapper.sh
+│   │   ├── enforcement.sh
+│   │   ├── gemini-wrapper.sh
+│   │   ├── routing.sh
+│   │   ├── state.sh
+│   │   └── usage.sh
+│   └── skills/               # Interactive skills
+│       ├── devsquad-config/
+│       ├── devsquad-dispatch/
+│       ├── devsquad-status/
+│       ├── environment-detection/
+│       └── onboarding/
 ```
 
 ## Configuration
