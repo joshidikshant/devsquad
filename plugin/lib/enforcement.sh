@@ -164,3 +164,63 @@ log_degradation() {
   mkdir -p "$log_dir"
   echo "${timestamp} | strict_degraded | ${tool_name} | ${agent} | ${reason}" >> "$log_file"
 }
+
+# Estimate token savings for delegating a file read to Gemini
+# Uses file size heuristic: ~4 bytes per token for text files
+# Returns human-readable estimate (e.g., "~12K tokens")
+estimate_token_savings() {
+  local file_path="$1"
+
+  # If file doesn't exist or path is generic, return generic estimate
+  if [[ ! -f "$file_path" ]]; then
+    echo "~5-20K tokens"
+    return
+  fi
+
+  local file_size
+  file_size=$(stat -f%z "$file_path" 2>/dev/null || stat -c%s "$file_path" 2>/dev/null || echo "0")
+
+  if [[ "$file_size" -eq 0 ]]; then
+    echo "~5-20K tokens"
+    return
+  fi
+
+  # Approximate: 4 bytes per token
+  local estimated_tokens=$((file_size / 4))
+
+  # Format as human-readable
+  if [[ "$estimated_tokens" -ge 1000000 ]]; then
+    local millions=$((estimated_tokens / 1000000))
+    echo "~${millions}M tokens"
+  elif [[ "$estimated_tokens" -ge 1000 ]]; then
+    local thousands=$((estimated_tokens / 1000))
+    echo "~${thousands}K tokens"
+  else
+    echo "~${estimated_tokens} tokens"
+  fi
+}
+
+# Estimate cumulative savings for all reads above threshold
+estimate_session_savings() {
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local read_count_file="${project_dir}/.devsquad/read_count"
+  local threshold="${1:-3}"
+
+  if [[ ! -f "$read_count_file" ]]; then
+    echo "~5-20K tokens"
+    return
+  fi
+
+  local count
+  count=$(cat "$read_count_file" 2>/dev/null || echo "0")
+  local excess=$((count - threshold))
+
+  if [[ "$excess" -le 0 ]]; then
+    echo "~5-20K tokens"
+    return
+  fi
+
+  # Rough estimate: 8K tokens per file on average
+  local estimated=$((excess * 8))
+  echo "~${estimated}K tokens"
+}
