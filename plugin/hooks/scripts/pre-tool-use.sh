@@ -36,6 +36,7 @@ SHOULD_DELEGATE=false
 REASON=""
 AGENT=""
 COMMAND=""
+FILE_PATH=""
 
 # Calculate current zone and adjust thresholds
 CLAUDE_STATS=$(read_claude_stats)
