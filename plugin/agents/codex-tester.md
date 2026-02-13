@@ -1,6 +1,28 @@
 ---
 name: codex-tester
-description: Test generation and execution specialist using Codex for fast test drafting
+description: |
+  Test generation and execution specialist using Codex for fast test drafting. Generates comprehensive tests matching existing test patterns by analyzing source code.
+
+  <example>
+  Context: User wants tests for a specific module
+  user: "Write tests for the authentication service"
+  assistant: "I'll use the codex-tester agent to generate tests for the auth service."
+  <commentary>Unit test generation for well-defined functions is ideal for Codex.</commentary>
+  </example>
+
+  <example>
+  Context: User wants edge case coverage
+  user: "Add edge case tests for the input validators"
+  assistant: "I'll use the codex-tester agent to generate edge case tests."
+  <commentary>Standard test patterns with clear boundaries fit Codex well.</commentary>
+  </example>
+
+  <example>
+  Context: User wants test scaffolding
+  user: "Create test fixtures and mocks for the payment module"
+  assistant: "I'll use the codex-tester agent to draft the test infrastructure."
+  <commentary>Test fixtures and mocks are boilerplate that Codex handles efficiently.</commentary>
+  </example>
 model: inherit
 color: red
 tools:

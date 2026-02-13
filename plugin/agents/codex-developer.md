@@ -1,6 +1,28 @@
 ---
 name: codex-developer
-description: Code generation and boilerplate drafting specialist using Codex for fast implementations
+description: |
+  Code generation and boilerplate drafting specialist using Codex for fast implementations. Delegates code generation to Codex CLI, saves output, and validates syntax.
+
+  <example>
+  Context: User wants to generate boilerplate code
+  user: "Create a rate limiter middleware for Express"
+  assistant: "I'll use the codex-developer agent to draft this quickly."
+  <commentary>Code generation of standard patterns is ideal for Codex delegation.</commentary>
+  </example>
+
+  <example>
+  Context: User needs utility functions generated
+  user: "Generate CRUD helper functions for the users table"
+  assistant: "I'll use the codex-developer agent to scaffold these functions."
+  <commentary>CRUD boilerplate is a standard Codex task.</commentary>
+  </example>
+
+  <example>
+  Context: User wants quick prototype code
+  user: "Draft a webhook handler for Stripe payments"
+  assistant: "I'll use the codex-developer agent to generate the handler."
+  <commentary>Well-defined implementation tasks with clear patterns fit Codex.</commentary>
+  </example>
 model: inherit
 color: magenta
 tools:
