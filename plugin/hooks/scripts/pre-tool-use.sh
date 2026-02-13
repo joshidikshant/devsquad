@@ -29,6 +29,9 @@ if [[ -z "$TOOL_NAME" ]]; then
   exit 0
 fi
 
+# Check if previous suggestion was accepted or declined
+check_and_log_suggestion_outcome "$TOOL_NAME"
+
 SHOULD_DELEGATE=false
 REASON=""
 AGENT=""
@@ -70,14 +73,17 @@ case "$TOOL_NAME" in
       if [[ "$CURRENT_ZONE" == "red" ]]; then
         ZONE_PREFIX="RED ZONE (heavy daily token usage). "
       fi
-      REASON="${ZONE_PREFIX}You have read ${NEW_COUNT} files this session (threshold: ${READ_THRESHOLD}). Delegate bulk reading to @gemini-reader with 1M context to preserve your context window."
-      AGENT="gemini-reader"
-      # Extract file_path for helpful command
+      # Extract file_path for helpful command and savings estimation
       if command -v jq &>/dev/null; then
         FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // "the target files"')
       else
         FILE_PATH="the target files"
       fi
+      # Estimate context savings
+      FILE_SAVINGS=$(estimate_token_savings "$FILE_PATH")
+      SESSION_SAVINGS=$(estimate_session_savings "$READ_THRESHOLD")
+      REASON="${ZONE_PREFIX}You have read ${NEW_COUNT} files this session (threshold: ${READ_THRESHOLD}). Delegate bulk reading to @gemini-reader with 1M context to preserve your context window.\n\nEstimated savings: ${FILE_SAVINGS} for this file (${SESSION_SAVINGS} total this session)."
+      AGENT="gemini-reader"
       COMMAND="@gemini-reader \"Analyze and summarize: ${FILE_PATH}\""
     fi
     ;;
@@ -155,6 +161,8 @@ if command -v jq &>/dev/null; then
   else
     # Advisory: allow but add context
     log_suggestion "$TOOL_NAME" "$AGENT"
+    # Record suggestion for acceptance tracking
+    record_suggestion "$TOOL_NAME" "$AGENT" "$FILE_PATH"
     jq -n --arg reason "$REASON" --arg cmd "$COMMAND" '{
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
@@ -166,6 +174,8 @@ if command -v jq &>/dev/null; then
 else
   # No jq fallback -- advisory mode only (cannot safely construct deny JSON without jq)
   log_suggestion "$TOOL_NAME" "$AGENT"
+  # Record suggestion for acceptance tracking
+  record_suggestion "$TOOL_NAME" "$AGENT" "${FILE_PATH:-}"
   # Escape for JSON manually
   ESCAPED_REASON=$(printf '%s' "$REASON" | sed 's/\\/\\\\/g; s/"/\\"/g')
   ESCAPED_CMD=$(printf '%s' "$COMMAND" | sed 's/\\/\\\\/g; s/"/\\"/g')
