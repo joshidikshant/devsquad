@@ -70,6 +70,85 @@ log_override() {
   echo "${timestamp} | advisory_override | ${tool_name} | ${agent} | allowed" >> "$log_file"
 }
 
+# Record delegation suggestion in session state for acceptance tracking
+record_suggestion() {
+  local tool_name="$1"
+  local agent="$2"
+  local file_path="$3"
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local state_file="${project_dir}/.devsquad/state.json"
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  if command -v jq &>/dev/null && [[ -f "$state_file" ]]; then
+    local temp_file="${state_file}.tmp.$$"
+    jq --arg ts "$timestamp" --arg tool "$tool_name" --arg agent "$agent" --arg fp "$file_path" \
+      '.session.last_suggestion = {"timestamp": $ts, "tool": $tool, "agent": $agent, "file_path": $fp}' \
+      "$state_file" > "$temp_file" && mv "$temp_file" "$state_file"
+  fi
+}
+
+# Check if previous suggestion was accepted or declined based on next tool call
+check_and_log_suggestion_outcome() {
+  local current_tool="$1"
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local state_file="${project_dir}/.devsquad/state.json"
+
+  if ! command -v jq &>/dev/null || [[ ! -f "$state_file" ]]; then
+    return
+  fi
+
+  local last_suggestion
+  last_suggestion=$(jq -r '.session.last_suggestion // empty' "$state_file" 2>/dev/null)
+  if [[ -z "$last_suggestion" ]]; then
+    return
+  fi
+
+  local suggested_tool
+  suggested_tool=$(echo "$last_suggestion" | jq -r '.tool // empty')
+  local suggested_agent
+  suggested_agent=$(echo "$last_suggestion" | jq -r '.agent // empty')
+
+  if [[ -z "$suggested_tool" ]]; then
+    return
+  fi
+
+  # Determine outcome: if user immediately reads again, they declined
+  if [[ "$current_tool" == "$suggested_tool" ]]; then
+    log_suggestion_declined "$suggested_tool" "$suggested_agent"
+  else
+    log_suggestion_accepted "$suggested_tool" "$suggested_agent"
+  fi
+
+  # Clear last_suggestion after logging outcome
+  local temp_file="${state_file}.tmp.$$"
+  jq 'del(.session.last_suggestion)' "$state_file" > "$temp_file" && mv "$temp_file" "$state_file"
+}
+
+# Log that a delegation suggestion was accepted (user switched tools)
+log_suggestion_accepted() {
+  local tool_name="$1"
+  local agent="$2"
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local log_file="${project_dir}/.devsquad/logs/compliance.log"
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  mkdir -p "$(dirname "$log_file")"
+  echo "${timestamp} | advisory_accepted | ${tool_name} | ${agent} | accepted" >> "$log_file"
+}
+
+# Log that a delegation suggestion was declined (user continued with same tool)
+log_suggestion_declined() {
+  local tool_name="$1"
+  local agent="$2"
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local log_file="${project_dir}/.devsquad/logs/compliance.log"
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  mkdir -p "$(dirname "$log_file")"
+  echo "${timestamp} | advisory_declined | ${tool_name} | ${agent} | declined" >> "$log_file"
+}
+
 # Increment session-scoped read counter
 increment_read_counter() {
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
