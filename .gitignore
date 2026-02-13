@@ -1,5 +1,8 @@
 # Runtime state (generated per-user)
 .devsquad/
+.planning/
+.claude/
+.agent/
 
 # Dependencies
 node_modules/

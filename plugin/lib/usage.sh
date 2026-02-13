@@ -234,6 +234,128 @@ USAGE_TEXT
   fi
 }
 
+# Capacity cache file location
+# Stores user-reported usage percentages from CLI /stats and /status commands
+# Format: {"claude_pct":32,"gemini_pct":9,"codex_5hr_pct":3,"codex_weekly_pct":5,"timestamp":"2026-02-13T18:30:00Z"}
+CAPACITY_CACHE_FILE="${CLAUDE_PROJECT_DIR:-.}/.devsquad/capacity.json"
+CAPACITY_STALE_MINUTES=30
+
+# Save user-reported capacity to cache
+# Usage: save_capacity claude_pct gemini_pct codex_5hr_pct codex_weekly_pct
+save_capacity() {
+  local claude_pct="${1:-0}"
+  local gemini_pct="${2:-0}"
+  local codex_5hr_pct="${3:-0}"
+  local codex_weekly_pct="${4:-0}"
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  mkdir -p "${project_dir}/.devsquad"
+
+  if command -v jq &>/dev/null; then
+    jq -n \
+      --argjson claude "$claude_pct" \
+      --argjson gemini "$gemini_pct" \
+      --argjson codex_5hr "$codex_5hr_pct" \
+      --argjson codex_weekly "$codex_weekly_pct" \
+      --arg ts "$timestamp" \
+      '{claude_pct:$claude, gemini_pct:$gemini, codex_5hr_pct:$codex_5hr, codex_weekly_pct:$codex_weekly, timestamp:$ts}' \
+      > "$CAPACITY_CACHE_FILE"
+  else
+    cat > "$CAPACITY_CACHE_FILE" <<CACHE
+{"claude_pct":${claude_pct},"gemini_pct":${gemini_pct},"codex_5hr_pct":${codex_5hr_pct},"codex_weekly_pct":${codex_weekly_pct},"timestamp":"${timestamp}"}
+CACHE
+  fi
+}
+
+# Read cached capacity data
+# Returns JSON from cache file, or defaults with stale=true if expired/missing
+read_capacity_cache() {
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local cache_file="${project_dir}/.devsquad/capacity.json"
+
+  if [[ ! -f "$cache_file" ]]; then
+    echo '{"claude_pct":0,"gemini_pct":0,"codex_5hr_pct":0,"codex_weekly_pct":0,"timestamp":"never","stale":true}'
+    return
+  fi
+
+  # Check staleness (older than CAPACITY_STALE_MINUTES)
+  local file_age_seconds
+  if [[ "$(uname)" == "Darwin" ]]; then
+    file_age_seconds=$(( $(date +%s) - $(stat -f%m "$cache_file") ))
+  else
+    file_age_seconds=$(( $(date +%s) - $(stat -c%Y "$cache_file") ))
+  fi
+  local stale_threshold=$(( CAPACITY_STALE_MINUTES * 60 ))
+
+  local is_stale="false"
+  if [[ $file_age_seconds -gt $stale_threshold ]]; then
+    is_stale="true"
+  fi
+
+  if command -v jq &>/dev/null; then
+    jq --argjson stale "$is_stale" --argjson age "$file_age_seconds" \
+      '. + {stale: $stale, age_seconds: $age}' "$cache_file"
+  else
+    # Simple fallback: read file, append stale field
+    local content
+    content=$(cat "$cache_file")
+    echo "${content%\}},\"stale\":${is_stale},\"age_seconds\":${file_age_seconds}}"
+  fi
+}
+
+# Get capacity-aware delegation recommendation
+# Returns: "green", "yellow", or "red" for each agent
+# Usage: get_delegation_recommendation
+get_delegation_recommendation() {
+  local capacity
+  capacity=$(read_capacity_cache)
+
+  if command -v jq &>/dev/null; then
+    local claude_pct gemini_pct codex_5hr_pct is_stale
+    claude_pct=$(echo "$capacity" | jq -r '.claude_pct // 0')
+    gemini_pct=$(echo "$capacity" | jq -r '.gemini_pct // 0')
+    codex_5hr_pct=$(echo "$capacity" | jq -r '.codex_5hr_pct // 0')
+    is_stale=$(echo "$capacity" | jq -r '.stale // true')
+
+    local claude_zone="green" gemini_zone="green" codex_zone="green"
+
+    if [[ $claude_pct -ge 75 ]]; then claude_zone="red"
+    elif [[ $claude_pct -ge 50 ]]; then claude_zone="yellow"; fi
+
+    if [[ $gemini_pct -ge 80 ]]; then gemini_zone="red"
+    elif [[ $gemini_pct -ge 50 ]]; then gemini_zone="yellow"; fi
+
+    if [[ $codex_5hr_pct -ge 80 ]]; then codex_zone="red"
+    elif [[ $codex_5hr_pct -ge 50 ]]; then codex_zone="yellow"; fi
+
+    cat <<REC_JSON
+{
+  "claude": {"pct": ${claude_pct}, "zone": "${claude_zone}"},
+  "gemini": {"pct": ${gemini_pct}, "zone": "${gemini_zone}"},
+  "codex": {"pct": ${codex_5hr_pct}, "zone": "${codex_zone}"},
+  "stale": ${is_stale},
+  "recommendation": "$(
+    if [[ "$claude_zone" == "red" ]]; then
+      echo "CRITICAL: Claude at ${claude_pct}% — delegate ALL work to Gemini/Codex"
+    elif [[ "$claude_zone" == "yellow" && "$gemini_zone" == "green" ]]; then
+      echo "Claude at ${claude_pct}% — route research to Gemini (${gemini_pct}% used)"
+    elif [[ "$claude_zone" == "yellow" && "$codex_zone" == "green" ]]; then
+      echo "Claude at ${claude_pct}% — route code generation to Codex (${codex_5hr_pct}% used)"
+    elif [[ "$claude_zone" == "yellow" ]]; then
+      echo "All agents above 50% — proceed carefully, synthesis only"
+    else
+      echo "All systems green — normal operation"
+    fi
+  )"
+}
+REC_JSON
+  else
+    echo '{"claude":{"pct":0,"zone":"green"},"gemini":{"pct":0,"zone":"green"},"codex":{"pct":0,"zone":"green"},"stale":true,"recommendation":"Run /devsquad:capacity to report usage"}'
+  fi
+}
+
 # Reset usage tracking for new session
 # Creates session start marker without deleting historical data
 reset_usage_session() {

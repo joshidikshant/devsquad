@@ -47,7 +47,13 @@ else
 fi
 
 # Calculate percentage of daily budget (200K limit for Red zone)
-output_percent=$(echo "scale=1; $output_tokens * 100 / 200000" | bc)
+# Ensure output_tokens is numeric and not empty
+output_tokens=${output_tokens:-0}
+if [[ "$output_tokens" =~ ^[0-9]+$ ]]; then
+  output_percent=$(echo "scale=1; $output_tokens * 100 / 200000" | bc)
+else
+  output_percent=0
+fi
 
 # Determine zone display with uppercase
 zone_upper=$(echo "$zone" | tr '[:lower:]' '[:upper:]')
@@ -70,30 +76,59 @@ suggestions_made=0
 overrides=0
 
 if [[ -f "${delegation_dir}/delegation.log" ]]; then
-  suggestions_made=$(wc -l < "${delegation_dir}/delegation.log" 2>/dev/null | tr -d ' ' || echo "0")
+  suggestions_made=$(wc -l < "${delegation_dir}/delegation.log" 2>/dev/null | tr -d ' \n' || echo "0")
 fi
 
 if [[ -f "${delegation_dir}/compliance.log" ]]; then
   # Count actual overrides (advisory_override events only, not advisory_suggested)
-  overrides=$(grep -c 'advisory_override' "${delegation_dir}/compliance.log" 2>/dev/null || echo "0")
+  overrides=$(grep -c 'advisory_override' "${delegation_dir}/compliance.log" 2>/dev/null | tr -d ' \n' || echo "0")
 fi
+
+# Sanitize numeric values (remove any whitespace/newlines)
+suggestions_made=$(echo "$suggestions_made" | tr -d ' \n')
+overrides=$(echo "$overrides" | tr -d ' \n')
 
 # Calculate compliance rate (use bc for floating point precision)
 compliance_rate=100
-if [[ $suggestions_made -gt 0 ]]; then
+if [[ $suggestions_made -gt 0 ]] && [[ $overrides =~ ^[0-9]+$ ]]; then
   compliance_rate=$(echo "scale=1; 100 - ($overrides * 100 / $suggestions_made)" | bc)
 fi
 
-# Check squad availability
-gemini_available="not available"
-codex_available="not available"
+# Read cached capacity data (user-reported via /devsquad:capacity)
+capacity_json=$(read_capacity_cache)
 
-if command -v gemini &>/dev/null; then
-  gemini_available="available"
+if command -v jq &>/dev/null; then
+  claude_pct=$(echo "$capacity_json" | jq -r '.claude_pct // 0')
+  gemini_pct=$(echo "$capacity_json" | jq -r '.gemini_pct // 0')
+  codex_5hr=$(echo "$capacity_json" | jq -r '.codex_5hr_pct // 0')
+  codex_weekly=$(echo "$capacity_json" | jq -r '.codex_weekly_pct // 0')
+  capacity_stale=$(echo "$capacity_json" | jq -r 'if .stale == null then "true" else (.stale | tostring) end')
+  capacity_age=$(echo "$capacity_json" | jq -r '.age_seconds // 0')
+  capacity_ts=$(echo "$capacity_json" | jq -r '.timestamp // "never"')
+else
+  claude_pct=0; gemini_pct=0; codex_5hr=0; codex_weekly=0
+  capacity_stale="true"; capacity_age=0; capacity_ts="never"
 fi
 
+# Format age as human-readable
+if [[ "$capacity_ts" == "never" ]]; then
+  capacity_age_str="never reported"
+elif [[ "$capacity_stale" == "true" ]]; then
+  capacity_age_min=$(( capacity_age / 60 ))
+  capacity_age_str="${capacity_age_min}m ago (STALE)"
+else
+  capacity_age_min=$(( capacity_age / 60 ))
+  capacity_age_str="${capacity_age_min}m ago"
+fi
+
+# Check squad availability
+gemini_available_str="❌ not available"
+codex_available_str="❌ not available"
+if command -v gemini &>/dev/null; then
+  gemini_available_str="✅ available"
+fi
 if command -v codex &>/dev/null; then
-  codex_available="available"
+  codex_available_str="✅ available"
 fi
 
 # Format numbers with commas (simple approach for readability)
@@ -142,30 +177,72 @@ if [[ "$enforcement_mode" == "strict" ]]; then
   fi
 fi
 
+# Determine capacity zones
+claude_zone_icon="🟢"
+gemini_zone_icon="🟢"
+codex_zone_icon="🟢"
+
+if [[ $claude_pct -ge 75 ]]; then claude_zone_icon="🔴"
+elif [[ $claude_pct -ge 50 ]]; then claude_zone_icon="🟡"; fi
+
+if [[ $gemini_pct -ge 80 ]]; then gemini_zone_icon="🔴"
+elif [[ $gemini_pct -ge 50 ]]; then gemini_zone_icon="🟡"; fi
+
+if [[ $codex_5hr -ge 80 ]]; then codex_zone_icon="🔴"
+elif [[ $codex_5hr -ge 50 ]]; then codex_zone_icon="🟡"; fi
+
+# Generate recommendation
+recommendation=""
+if [[ "$capacity_ts" == "never" ]]; then
+  recommendation="Run /devsquad:capacity to report your CLI usage for smart delegation"
+elif [[ "$capacity_stale" == "true" ]]; then
+  recommendation="Capacity data is stale — run /devsquad:capacity to refresh"
+elif [[ "$claude_zone_icon" == "🔴" ]]; then
+  recommendation="CRITICAL: Claude at ${claude_pct}% — delegate ALL work to Gemini/Codex"
+elif [[ "$claude_zone_icon" == "🟡" ]]; then
+  if [[ "$gemini_zone_icon" == "🟢" ]]; then
+    recommendation="Claude at ${claude_pct}% — route research to Gemini (${gemini_pct}% used)"
+  elif [[ "$codex_zone_icon" == "🟢" ]]; then
+    recommendation="Claude at ${claude_pct}% — route code generation to Codex (${codex_5hr}% used)"
+  else
+    recommendation="All agents above 50% — proceed carefully, synthesis only"
+  fi
+elif [[ "$gemini_zone_icon" == "🔴" ]]; then
+  recommendation="Gemini at capacity — use Codex or Haiku subagents for delegation"
+else
+  recommendation="All systems green — normal operation"
+fi
+
 # Display formatted status
 cat <<STATUS
 
-=== DevSquad Status ===
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                           DevSquad Status Report                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-Claude Usage (today):
-  Zone: ${zone_upper} (${output_percent}%)
-  Output tokens: ${output_formatted}
-  Messages: ${message_count}
-  Tool calls: ${tool_call_count}
+📊 Capacity (reported ${capacity_age_str})
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ${claude_zone_icon} Claude:  ${claude_pct}% used
+  ${gemini_zone_icon} Gemini:  ${gemini_pct}% used
+  ${codex_zone_icon} Codex:   ${codex_5hr}% (5hr) | ${codex_weekly}% (weekly)
 
-Squad Usage (this session):
-  Gemini: ${gemini_count} invocations, ~${gemini_chars_formatted} chars response
-  Codex:  ${codex_count} invocations, ~${codex_chars_formatted} chars response
-  Self:   ${self_calls} calls
+📈 Session Activity
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Claude:  ${output_formatted} output tokens | ${message_count} msgs | ${tool_call_count} tool calls
+  Gemini:  ${gemini_count} invocations | ~${gemini_chars_formatted} chars
+  Codex:   ${codex_count} invocations | ~${codex_chars_formatted} chars
 
-Delegation Compliance:
-  Suggestions made: ${suggestions_made}
-  User overrides: ${overrides}
-  Compliance rate: ${compliance_rate}%
+💼 Engineering Manager
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Direct work:      ${self_calls} self-calls
+  Delegation rate:  ${compliance_rate}% compliant (${suggestions_made} suggestions, ${overrides} overrides)
 
-Squad Availability:
-  Gemini CLI: ${gemini_available}
-  Codex CLI:  ${codex_available}
+🛠️  Squad
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Gemini CLI:  ${gemini_available_str}
+  Codex CLI:   ${codex_available_str}
+
+🎯 ${recommendation}
 
 STATUS
 
