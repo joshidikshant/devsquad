@@ -46,6 +46,9 @@ else
   codex_chars=$(echo "$usage_json" | grep -o '"total_response_chars":[[:space:]]*[0-9]*' | tail -1 | grep -o '[0-9]*$' || echo "0")
 fi
 
+# Calculate percentage of daily budget (200K limit for Red zone)
+output_percent=$(echo "scale=1; $output_tokens * 100 / 200000" | bc)
+
 # Determine zone display with uppercase
 zone_upper=$(echo "$zone" | tr '[:lower:]' '[:upper:]')
 
@@ -75,10 +78,10 @@ if [[ -f "${delegation_dir}/compliance.log" ]]; then
   overrides=$(grep -c 'advisory_override' "${delegation_dir}/compliance.log" 2>/dev/null || echo "0")
 fi
 
-# Calculate compliance rate
+# Calculate compliance rate (use bc for floating point precision)
 compliance_rate=100
 if [[ $suggestions_made -gt 0 ]]; then
-  compliance_rate=$(( 100 - (overrides * 100 / suggestions_made) ))
+  compliance_rate=$(echo "scale=1; 100 - ($overrides * 100 / $suggestions_made)" | bc)
 fi
 
 # Check squad availability
@@ -145,7 +148,7 @@ cat <<STATUS
 === DevSquad Status ===
 
 Claude Usage (today):
-  Zone: ${zone_upper}
+  Zone: ${zone_upper} (${output_percent}%)
   Output tokens: ${output_formatted}
   Messages: ${message_count}
   Tool calls: ${tool_call_count}

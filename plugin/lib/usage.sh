@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # lib/usage.sh -- Usage tracking and zone calculation for DevSquad
 # Sourced by hooks and other scripts. Do not execute directly.
-set -euo pipefail
 
 # Record an agent invocation to usage files
 # Usage: record_usage agent_name prompt_chars response_chars
@@ -158,26 +157,32 @@ get_usage_summary() {
     local zone
     zone=$(calculate_zone "$input_tokens" "$output_tokens")
 
-    # Count Gemini invocations and sum response chars
+    # Count Gemini invocations and sum chars/tokens
     local gemini_count=0
     local gemini_total=0
+    local gemini_input=0
     if [[ -f "${usage_dir}/gemini.json" ]]; then
       gemini_count=$(jq 'length' "${usage_dir}/gemini.json" 2>/dev/null || echo "0")
       gemini_total=$(jq '[.[].response_chars] | add // 0' "${usage_dir}/gemini.json" 2>/dev/null || echo "0")
+      gemini_input=$(jq '[.[].prompt_chars] | add // 0 | . / 4 | floor' "${usage_dir}/gemini.json" 2>/dev/null || echo "0")
     elif [[ -f "${usage_dir}/gemini.jsonl" ]]; then
       gemini_count=$(wc -l < "${usage_dir}/gemini.jsonl" 2>/dev/null | tr -d ' ' || echo "0")
       gemini_total=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/response_chars/){print $(i+1)}}}' "${usage_dir}/gemini.jsonl" 2>/dev/null | awk '{s+=$1}END{print s+0}')
+      gemini_input=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/prompt_chars/){print $(i+1)}}}' "${usage_dir}/gemini.jsonl" 2>/dev/null | awk '{s+=$1}END{print int(s/4)}')
     fi
 
-    # Count Codex invocations and sum response chars
+    # Count Codex invocations and sum chars/tokens
     local codex_count=0
     local codex_total=0
+    local codex_input=0
     if [[ -f "${usage_dir}/codex.json" ]]; then
       codex_count=$(jq 'length' "${usage_dir}/codex.json" 2>/dev/null || echo "0")
       codex_total=$(jq '[.[].response_chars] | add // 0' "${usage_dir}/codex.json" 2>/dev/null || echo "0")
+      codex_input=$(jq '[.[].prompt_chars] | add // 0 | . / 4 | floor' "${usage_dir}/codex.json" 2>/dev/null || echo "0")
     elif [[ -f "${usage_dir}/codex.jsonl" ]]; then
       codex_count=$(wc -l < "${usage_dir}/codex.jsonl" 2>/dev/null | tr -d ' ' || echo "0")
       codex_total=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/response_chars/){print $(i+1)}}}' "${usage_dir}/codex.jsonl" 2>/dev/null | awk '{s+=$1}END{print s+0}')
+      codex_input=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/prompt_chars/){print $(i+1)}}}' "${usage_dir}/codex.jsonl" 2>/dev/null | awk '{s+=$1}END{print int(s/4)}')
     fi
 
     # Build JSON summary
@@ -192,10 +197,12 @@ get_usage_summary() {
   },
   "gemini": {
     "invocations": ${gemini_count},
+    "input_tokens": ${gemini_input},
     "total_response_chars": ${gemini_total}
   },
   "codex": {
     "invocations": ${codex_count},
+    "input_tokens": ${codex_input},
     "total_response_chars": ${codex_total}
   }
 }
