@@ -303,3 +303,27 @@ estimate_session_savings() {
   local estimated=$((excess * 8))
   echo "~${estimated}K tokens"
 }
+
+# Get suggestion acceptance metrics from compliance log
+get_suggestion_metrics() {
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  local log_file="${project_dir}/.devsquad/logs/compliance.log"
+
+  if [[ ! -f "$log_file" ]]; then
+    echo '{"suggested": 0, "accepted": 0, "declined": 0, "acceptance_rate": "N/A"}'
+    return
+  fi
+
+  local suggested accepted declined
+  suggested=$(grep -c "advisory_suggested" "$log_file" 2>/dev/null || echo "0")
+  accepted=$(grep -c "advisory_accepted" "$log_file" 2>/dev/null || echo "0")
+  declined=$(grep -c "advisory_declined" "$log_file" 2>/dev/null || echo "0")
+
+  local rate="N/A"
+  local total=$((accepted + declined))
+  if [[ "$total" -gt 0 ]]; then
+    rate="$((accepted * 100 / total))%"
+  fi
+
+  echo "{\"suggested\": ${suggested}, \"accepted\": ${accepted}, \"declined\": ${declined}, \"acceptance_rate\": \"${rate}\"}"
+}
