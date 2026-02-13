@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/codex-wrapper.sh -- Codex CLI wrapper for DevSquad agents
 # Sourced by agent system prompts. Do not execute directly.
+set -euo pipefail
 
 # Resolve state directory (local helper)
 _resolve_state_dir() {

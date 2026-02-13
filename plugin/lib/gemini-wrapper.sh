@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/gemini-wrapper.sh -- Shared Gemini CLI invocation library
 # Sourced by Gemini agent system prompts. Do not execute directly.
+set -euo pipefail
 #
 # Provides:
 # - invoke_gemini(prompt, word_limit, timeout_secs): Execute Gemini CLI with auto word-bound appending, timeout, error handling

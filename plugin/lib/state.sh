@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/state.sh -- State management for DevSquad
 # Sourced by hooks and other scripts. Do not execute directly.
+set -euo pipefail
 
 # Initialize state directory structure
 init_state_dir() {

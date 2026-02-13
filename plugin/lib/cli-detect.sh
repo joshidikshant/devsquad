@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/cli-detect.sh -- Detect availability of AI CLI tools
 # Sourced by hooks and other scripts. Do not execute directly.
+set -euo pipefail
 
 detect_cli() {
   local cli_name="$1"

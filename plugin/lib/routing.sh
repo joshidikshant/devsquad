@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/routing.sh -- Delegation decision tree for DevSquad
 # Sourced by skills and hooks. Do not execute directly.
+set -euo pipefail
 
 # route_task(task_description) -> JSON { recommended_agent, command, reason }
 route_task() {

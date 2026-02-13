@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/enforcement.sh -- Enforcement utilities for DevSquad delegation
 # Sourced by hooks and other scripts. Do not execute directly.
+set -euo pipefail
 
 # Get enforcement mode from config (advisory or strict)
 get_enforcement_mode() {

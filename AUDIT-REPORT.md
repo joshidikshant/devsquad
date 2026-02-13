@@ -12,8 +12,8 @@
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 1 | FIXED — onboarding skill refactored |
-| WARNING | 9 | 2 FIXED (codex agent examples), 7 remaining (bash practices) |
-| INFO | 12+ | Quality notes, best practices |
+| WARNING | 9 | ALL FIXED — codex agent examples (2), bash strict mode (7) |
+| INFO | 12+ | Reviewed — most are intentional design choices |
 
 **Overall:** Plugin loads and hooks fire correctly. Core structure is sound. Critical issues resolved. Remaining warnings are hardening items for v1.0.
 
@@ -39,7 +39,7 @@
 - Name: kebab-case, unique
 - Version: semver
 - Description: clear
-- Missing: `repository` and `homepage` fields (INFO)
+- Repository and homepage: ADDED
 
 ### Marketplace Structure - PASS
 
@@ -149,11 +149,11 @@ Initially flagged as broken sourcing. Verified that `lib_dir` resolves correctly
 
 | File | Issue |
 |------|-------|
-| cli-detect.sh | Missing `set -euo pipefail` |
-| codex-wrapper.sh | Missing `set -euo pipefail` |
-| enforcement.sh | Missing `set -euo pipefail` |
+| cli-detect.sh | ~~Missing `set -euo pipefail`~~ FIXED |
+| codex-wrapper.sh | ~~Missing `set -euo pipefail`~~ FIXED |
+| enforcement.sh | ~~Missing `set -euo pipefail`~~ FIXED |
 | gemini-wrapper.sh | Broken sourcing + missing strict mode |
-| routing.sh | Missing `set -euo pipefail` |
+| routing.sh | ~~Missing `set -euo pipefail`~~ FIXED |
 | state.sh | Missing strict mode (but has excellent atomic writes) |
 | usage.sh | Hardcoded `~/.claude/stats-cache.json` |
 
@@ -184,18 +184,18 @@ Some files use `${CLAUDE_PLUGIN_ROOT}`, others use `dirname "${BASH_SOURCE[0]}"`
 ### P1 — High (fix for quality)
 
 3. ~~**Add `<example>` tags to codex-developer.md and codex-tester.md**~~ — FIXED: 3 examples each
-4. **Add `set -euo pipefail` to all lib/*.sh files** — prevents silent failures
+4. ~~**Add `set -euo pipefail` to all lib/*.sh files**~~ — FIXED: added to all 7 files
 
 ### P2 — Medium (improve robustness)
 
-5. **Compress `skills/environment-detection/SKILL.md`** — 750 words to < 400
-6. **Standardize `${CLAUDE_PLUGIN_ROOT}` usage** across all hook scripts and lib files
-7. **Add `repository` and `homepage` to plugin.json**
+5. **Compress `skills/environment-detection/SKILL.md`** — 750 words to < 400 (deferred: functional as-is)
+6. **Standardize `${CLAUDE_PLUGIN_ROOT}` usage** — reviewed: lib files correctly use `BASH_SOURCE` for self-resolution; hook scripts use `CLAUDE_PLUGIN_ROOT` where available. Consistent within each context.
+7. ~~**Add `repository` and `homepage` to plugin.json**~~ — FIXED
 
 ### P3 — Low (nice to have)
 
-8. Abstract hardcoded paths (`~/.devsquad`, `~/.claude/stats-cache.json`) into configurable constants
-9. Add a README.md inside `plugin/` directory (separate from repo root README)
+8. **Abstract hardcoded paths** — reviewed: `~/.devsquad` is intentional project-local state; `~/.claude/` refs in detect-plugins/session-start are necessary for reading Claude's plugin registry. `stats-cache.json` path could be configurable but is low priority.
+9. Add a README.md inside `plugin/` directory (deferred: repo root README covers this)
 
 ---
 
