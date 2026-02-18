@@ -4,7 +4,7 @@ plan: 02
 type: execute
 wave: 2
 depends_on:
-  - 03-01
+  - 01-PLAN-skill-scaffold.md
 files_modified:
   - plugin/skills/code-generation/scripts/generate-skill.sh
 autonomous: true
