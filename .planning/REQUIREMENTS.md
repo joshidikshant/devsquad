@@ -32,9 +32,9 @@ Requirements for Phase 2 release. Each maps to roadmap phases.
 
 ### Workflow Orchestration
 
-- [ ] **WFLO-01**: Feature workflow orchestrates research → generate → review → commit
-- [ ] **WFLO-02**: Workflow handles user input/approval gates
-- [ ] **WFLO-03**: Workflow auto-commits with semantic messages
+- [x] **WFLO-01**: Feature workflow orchestrates research → generate → review → commit
+- [x] **WFLO-02**: Workflow handles user input/approval gates
+- [x] **WFLO-03**: Workflow auto-commits with semantic messages
 - [ ] **WFLO-04**: Cleanup workflow finds and fixes repo issues automatically
 
 ## v2 Requirements
@@ -82,9 +82,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CGEN-03 | Phase 3 | Complete |
 | CGEN-04 | Phase 3 | Complete |
 | CGEN-05 | Phase 3 | Complete |
-| WFLO-01 | Phase 4 | Pending |
-| WFLO-02 | Phase 4 | Pending |
-| WFLO-03 | Phase 4 | Pending |
+| WFLO-01 | Phase 4 | Complete |
+| WFLO-02 | Phase 4 | Complete |
+| WFLO-03 | Phase 4 | Complete |
 | WFLO-04 | Phase 4 | Pending |
 
 **Coverage:**

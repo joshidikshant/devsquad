@@ -12,9 +12,9 @@
 
 **Active Milestone:** Phase 2: Git Health Check (Complete)
 **Current Phase:** 04
-**Current Plan:** Plan 02 (run-workflow.sh orchestrator)
-**Plan Status:** Plan 01 (lib-workflow.sh + SKILL.md + feature-workflow.json) completed successfully
-**Progress:** [███████░░░] 67%
+**Current Plan:** Plan 03 (integration tests and end-to-end verification)
+**Plan Status:** Plan 02 (run-workflow.sh + workflow.md command stub) completed successfully
+**Progress:** [████████░░] 83%
 
 ---
 
@@ -72,6 +72,9 @@
 17. **read -r REPLY </dev/tty for workflow_gate (Phase 4, Plan 01):** Ensures gate prompt works when run-workflow.sh is invoked in a pipe or with stdin redirected
 18. **git diff --quiet guard before commit in workflow_checkpoint (Phase 4, Plan 01):** Prevents empty commit errors when a workflow step produces no file changes; checks both working tree and index
 19. **Atomic write (.tmp.$$ then mv) for state.json in workflow_checkpoint (Phase 4, Plan 01):** Consistent with plugin/lib/state.sh pattern; prevents partial writes from corrupting state on interrupt
+20. **envsubst with perl/bash fallback for run-workflow.sh (Phase 4, Plan 02):** envsubst not available on macOS by default; perl -pe with defined check leaves undefined vars intact; bash-native substitution as last resort — all avoid eval (no arbitrary code execution)
+21. **continue-on-failure loop in run-workflow.sh (Phase 4, Plan 02):** Step failures append to WORKFLOW_FAILED_STEPS and continue rather than aborting — enables partial workflow logging, FINAL_STATUS=partial on exit
+22. **workflow_validate called once after all steps (Phase 4, Plan 02):** Single post-workflow validation gate rather than per-step; matches ORCH-04 requirement
 
 ### Architecture Notes
 
@@ -88,11 +91,11 @@ None identified.
 
 ## Session Continuity
 
-**Last Action:** Completed Phase 4, Plan 01 (lib-workflow.sh + SKILL.md + feature-workflow.json)
-**Next Action:** Execute Phase 4, Plan 02 (run-workflow.sh orchestrator)
-**Files Written:** plugin/skills/workflow-orchestration/scripts/lib-workflow.sh, plugin/skills/workflow-orchestration/SKILL.md, plugin/skills/workflow-orchestration/templates/feature-workflow.json
-**Last Session Timestamp:** 2026-02-19T09:54:04Z
-**Stopped At:** Completed 04-01-PLAN.md
+**Last Action:** Completed Phase 4, Plan 02 (run-workflow.sh + workflow.md command stub)
+**Next Action:** Execute Phase 4, Plan 03 (integration tests and end-to-end verification)
+**Files Written:** plugin/skills/workflow-orchestration/scripts/run-workflow.sh, plugin/commands/workflow.md
+**Last Session Timestamp:** 2026-02-19T10:03:18Z
+**Stopped At:** Completed 04-02-PLAN.md
 
 **For Next Session:**
 - Phase 2 is fully complete — git-health check covers all 5 requirements (GHLT-01 through GHLT-05)
@@ -136,3 +139,4 @@ None identified.
 - Phase 3 Plan 01 commits: ec3db00, 6444d48
 - Phase 3 Plan 02 commits: 08ffb9f
 - Phase 4 Plan 01 commits: 263a80e, ad8c29a
+- Phase 4 Plan 02 commits: 62f3986, 91451a2
