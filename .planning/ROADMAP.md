@@ -100,6 +100,13 @@ Plans:
 4. Post-workflow validation checks repo health, runs tests, reports results
 5. Failed workflow steps are logged with rollback suggestions (user can revert to last checkpoint)
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Core library and skill metadata (lib-workflow.sh, SKILL.md, feature-workflow.json)
+- [ ] 04-02-PLAN.md — Main driver and command stub (run-workflow.sh, workflow.md)
+- [ ] 04-03-PLAN.md — End-to-end verification (dry-run + human checkpoint)
+
 ---
 
 ## Phase Coverage
