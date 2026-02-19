@@ -161,13 +161,239 @@ fi
 echo "  Draft complete ($(echo "$DRAFT" | wc -l | tr -d ' ') lines)"
 
 # ---------------------------------------------------------------------------
-# Phase 3: Review — implemented in Plan 03
+# Phase 3: Review — interactive [y/N/e] loop
 # ---------------------------------------------------------------------------
+
+# parse_draft_files: parse DRAFT by "=== FILE: <name> ===" delimiters.
+# Writes each file section to the output directory atomically.
+# Arguments: $1=draft content, $2=output root dir
+write_draft_files() {
+  local draft="$1"
+  local out_dir="$2"
+  local current_file=""
+  local buffer=""
+  local files_written=()
+
+  # Helper: strip leading and trailing blank lines from a string
+  strip_blank_lines() {
+    local text="$1"
+    # Remove leading blank lines
+    text="$(printf '%s' "$text" | awk 'NF{found=1} found{print}')"
+    # Remove trailing blank lines via awk reading in reverse is complex;
+    # use a simple Python/perl if available, else basic awk
+    if command -v perl &>/dev/null; then
+      text="$(printf '%s' "$text" | perl -0777 -pe 's/\s+$/\n/')"
+    else
+      text="$(printf '%s\n' "$text" | awk 'NF{last=NR} NR<=last{print}' | head -"$(printf '%s' "$text" | awk 'NF{c=NR} END{print c}')")"
+    fi
+    printf '%s' "$text"
+  }
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^===\ FILE:\ (.+)\ ===$ ]]; then
+      # Flush previous section
+      if [[ -n "$current_file" && -n "$buffer" ]]; then
+        local dest="${out_dir}/${current_file}"
+        mkdir -p "$(dirname "$dest")"
+        local stripped
+        stripped="$(strip_blank_lines "$buffer")"
+        printf '%s\n' "$stripped" > "$dest"
+        files_written+=("$dest")
+        buffer=""
+      fi
+      current_file="${BASH_REMATCH[1]}"
+    else
+      buffer="${buffer}${line}
+"
+    fi
+  done <<< "$draft"
+
+  # Flush final section
+  if [[ -n "$current_file" && -n "$buffer" ]]; then
+    local dest="${out_dir}/${current_file}"
+    mkdir -p "$(dirname "$dest")"
+    local stripped
+    stripped="$(strip_blank_lines "$buffer")"
+    printf '%s\n' "$stripped" > "$dest"
+    files_written+=("$dest")
+  fi
+
+  # Make any .sh files executable
+  for f in "${files_written[@]:-}"; do
+    if [[ "$f" == *.sh ]]; then
+      chmod +x "$f"
+    fi
+  done
+
+  # Return list of written files via global
+  WRITTEN_FILES=("${files_written[@]:-}")
+}
+
+# validate_shell_scripts: run bash -n on each .sh file in WRITTEN_FILES
+validate_shell_scripts() {
+  local errors=0
+  for f in "${WRITTEN_FILES[@]:-}"; do
+    if [[ "$f" == *.sh ]]; then
+      if bash -n "$f" 2>/dev/null; then
+        echo "  [ok] syntax valid: $(basename "$f")"
+      else
+        echo "  [WARN] syntax error in: $f" >&2
+        bash -n "$f" >&2 || true
+        errors=$((errors + 1))
+      fi
+    fi
+  done
+  return $errors
+}
+
+# Target directory: skills/<name>/ under the plugin root
+SKILL_DIR="${PLUGIN_ROOT}/skills/${SKILL_NAME}"
+
 echo "[3/4] Draft ready for review..."
 echo ""
 echo "=== GENERATED DRAFT ==="
 echo "$DRAFT"
 echo "========================"
 echo ""
-# STUB — confirmation and file writing implemented in Plan 03
-echo "[dry-run or stub mode — Plan 03 will implement write phase]"
+
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "[dry-run] Skipping write phase. Files would be written to: ${SKILL_DIR}/"
+  echo "Done."
+  exit 0
+fi
+
+# Interactive review loop
+while true; do
+  printf "Accept draft and write files? [y/N/e] (y=yes, n=abort, e=edit/feedback): "
+  read -r REPLY </dev/tty
+
+  case "${REPLY,,}" in
+    y|yes)
+      echo ""
+      echo "[4/4] Writing skill files..."
+
+      write_draft_files "$DRAFT" "${PLUGIN_ROOT}"
+
+      if [[ ${#WRITTEN_FILES[@]} -eq 0 ]]; then
+        echo "Error: No files were parsed from draft. Check delimiter format." >&2
+        exit 1
+      fi
+
+      echo "  Written files:"
+      for f in "${WRITTEN_FILES[@]}"; do
+        echo "    ${f#${PLUGIN_ROOT}/}"
+      done
+
+      echo ""
+      echo "  Validating generated scripts..."
+      if ! validate_shell_scripts; then
+        echo "Warning: One or more generated scripts have syntax errors." >&2
+        echo "Files have been written — fix them manually or re-run generate with feedback." >&2
+        exit 2
+      fi
+
+      echo ""
+      echo "=== Skill '${SKILL_NAME}' generated successfully ==="
+      echo "  Skill dir : ${SKILL_DIR}/"
+      echo "  Command   : /devsquad:${SKILL_NAME}"
+      echo ""
+      break
+      ;;
+
+    n|no|"")
+      echo ""
+      echo "Aborted. No files written."
+      exit 0
+      ;;
+
+    e|edit)
+      echo ""
+      printf "Enter feedback for Codex (describe what to change): "
+      read -r FEEDBACK </dev/tty
+      if [[ -z "$FEEDBACK" ]]; then
+        echo "No feedback provided — keeping current draft."
+        continue
+      fi
+
+      echo ""
+      echo "[2/4] Re-drafting with feedback..."
+      DRAFT=$(invoke_codex \
+"Generate a complete DevSquad skill named '${SKILL_NAME}' that does: ${DESCRIPTION}
+
+Use EXACTLY these conventions observed in the codebase:
+${RESEARCH}
+
+Previous draft was rejected. User feedback:
+${FEEDBACK}
+
+Output three files using these EXACT delimiters (no extra text before or after each section):
+
+=== FILE: SKILL.md ===
+---
+name: ${SKILL_NAME}
+description: [one-sentence activation trigger — describe when Claude should use this skill]
+version: 1.0.0
+---
+
+# [Skill Title]
+
+[What the skill does]
+
+## When to Use
+[bullet list of triggers]
+
+## Usage
+\`\`\`bash
+bash \"\${CLAUDE_PLUGIN_ROOT}/skills/${SKILL_NAME}/scripts/${SKILL_NAME}.sh\" [arguments]
+\`\`\`
+
+## Dependencies
+- lib/state.sh — [purpose]
+[add other libs as needed]
+
+=== FILE: skills/${SKILL_NAME}/scripts/${SKILL_NAME}.sh ===
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=\"\$(cd \"\$(dirname \"\${BASH_SOURCE[0]:-\$0}\")\" && pwd)\"
+PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/../../..\" && pwd)\"
+
+source \"\${PLUGIN_ROOT}/lib/state.sh\"
+[add other sources as needed]
+
+[implementation using while-loop argument parsing, following codebase conventions]
+
+=== FILE: commands/${SKILL_NAME}.md ===
+---
+description: [one-line command description]
+argument-hint: \"[argument hint]\"
+allowed-tools: [\"Read\", \"Write\", \"Bash\", \"Skill\"]
+---
+
+# DevSquad $(echo "${SKILL_NAME}" | sed 's/-/ /g' | sed 's/\b./\u&/g')
+
+Arguments: \$ARGUMENTS
+
+Invoke the devsquad:${SKILL_NAME} skill and follow it exactly." \
+        0 \
+        120)
+
+      if [[ $? -ne 0 ]]; then
+        echo "Error: Codex re-draft failed." >&2
+        echo "$DRAFT" >&2
+        exit 1
+      fi
+
+      echo "  Re-draft complete ($(echo "$DRAFT" | wc -l | tr -d ' ') lines)"
+      echo ""
+      echo "=== REVISED DRAFT ==="
+      echo "$DRAFT"
+      echo "====================="
+      echo ""
+      ;;
+
+    *)
+      echo "Please enter y, n, or e."
+      ;;
+  esac
+done
