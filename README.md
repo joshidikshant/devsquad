@@ -83,6 +83,9 @@ After installing, restart Claude Code and run `/devsquad:setup` to complete onbo
 | `/devsquad:setup` | Run onboarding — detect environment, set preferences, generate config |
 | `/devsquad:config` | View or edit delegation preferences (e.g., `enforcement_mode=strict`) |
 | `/devsquad:status` | Show squad health, token usage, delegation stats, and budget zone |
+| `/devsquad:git-health` | Scan repo for broken symlinks, orphaned branches, uncommitted changes |
+| `/devsquad:generate <description>` | Generate a new DevSquad skill — Gemini research → Codex draft → review → write |
+| `/devsquad:workflow` | Run a multi-step workflow from a JSON definition file |
 
 ### How It Works
 
@@ -90,9 +93,43 @@ After installing, restart Claude Code and run `/devsquad:setup` to complete onbo
 2. **You work normally** → Claude handles your requests as usual
 3. **Hook intercepts** → When Claude tries to Read files or WebSearch, the `pre-tool-use` hook fires
 4. **Routing decides** → Task is classified and routed to the best agent (Gemini for research/reading, Codex for scaffolding/testing, Claude for synthesis)
-5. **Agent executes** → Wrapper invokes the external CLI with timeout handling, rate-limit backoff, and error classification
-6. **Usage tracked** → Every invocation is logged; budget zones (green/yellow/red) guide behavior
-7. **Session ends** → `stop` hook persists session stats
+5. **Delegation advised** → After 3+ file reads in a session, Claude is prompted to delegate remaining reads to Gemini with estimated token savings shown
+6. **Agent executes** → Wrapper invokes the external CLI with timeout handling, rate-limit backoff, and error classification
+7. **Usage tracked** → Every invocation is logged; budget zones (green/yellow/red) guide behavior; delegation acceptance rate tracked
+8. **Session ends** → `stop` hook persists session stats
+
+### Skills
+
+#### Git Health Check
+Scans the repository for common problems that impede workflow:
+
+```bash
+/devsquad:git-health              # full scan, human-readable output
+/devsquad:git-health --json       # machine-readable: {"total_issues": N, ...}
+/devsquad:git-health --check symlinks|branches|changes
+```
+
+Detects: broken symlinks, orphaned branches (merged but not deleted, stale >30 days), uncommitted changes (untracked, modified, staged, ahead of remote).
+
+#### Code Generation
+Generates a new DevSquad skill from a natural language description:
+
+```bash
+/devsquad:generate "bulk rename files matching a pattern"
+```
+
+Pipeline: Gemini scans existing skills for patterns → Codex drafts SKILL.md + implementation → `[y]es / [N]o / [e]dit` review → files written to `plugin/skills/<name>/` → `bash -n` syntax validation.
+
+#### Workflow Orchestration
+Executes multi-step workflows defined in JSON:
+
+```bash
+/devsquad:workflow                                          # interactive picker
+run-workflow.sh --workflow templates/feature-workflow.json  # direct
+run-workflow.sh --workflow my-workflow.json --dry-run        # preview steps
+```
+
+Built-in `feature-workflow.json` template: create branch → generate skill → validate repo health → clean up staging files. Each step supports destructive gates (confirm before running), git checkpoints (auto-commit), and post-workflow health validation.
 
 ### Enforcement Modes
 
@@ -138,11 +175,14 @@ devsquad/
 │   │   ├── state.sh
 │   │   └── usage.sh
 │   └── skills/               # Interactive skills
+│       ├── code-generation/      # /devsquad:generate — Gemini→Codex pipeline
 │       ├── devsquad-config/
 │       ├── devsquad-dispatch/
 │       ├── devsquad-status/
 │       ├── environment-detection/
-│       └── onboarding/
+│       ├── git-health/           # /devsquad:git-health — repo health scanner
+│       ├── onboarding/
+│       └── workflow-orchestration/  # /devsquad:workflow — JSON workflow engine
 ```
 
 ## Configuration
@@ -173,6 +213,9 @@ Configuration is stored in `.devsquad/config.json` (created on first run):
 - Strict mode requires `jq` — silently degrades to advisory without it
 - Usage zones are based on daily output token volume, not context window percentage
 - Codex tester routing is currently manual-only (not auto-routed)
+- Delegation acceptance tracking uses heuristic correlation (same-tool = decline, different-tool = accept) — hooks cannot directly observe CLI invocations
+- Workflow engine requires `envsubst` or Perl for variable substitution; falls back to bash-native if neither is available
+- Cleanup workflow (auto-fix repo issues) not yet implemented — planned for v2.1
 
 ## License
 

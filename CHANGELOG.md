@@ -2,6 +2,21 @@
 
 All notable changes to DevSquad are documented here.
 
+## [2.0.0] — 2026-02-19
+
+### Added
+- **Delegation Advisor**: Hook fires when Claude reads 3+ files in a session — suggests Gemini delegation with estimated token savings (per-file and cumulative)
+- **Acceptance tracking**: Heuristic correlation tracks which delegation suggestions users accept vs decline; metrics reported via `/devsquad:status`
+- **Git Health Check skill**: `/devsquad:git-health` — detects broken symlinks, orphaned branches, and uncommitted changes; supports `--json` output (`total_issues` integer) and `--check <category>` for targeted scans
+- **Code Generation skill**: `/devsquad:generate <description>` — full pipeline: Gemini researches existing patterns → Codex drafts skill → `[y/N/e]` review prompt → files written → `bash -n` syntax validation
+- **Workflow Orchestration engine**: `run-workflow.sh` — executes multi-step JSON workflow definitions with destructive gates, git checkpoints, post-workflow validation, and `--dry-run` mode
+- **lib-workflow.sh**: Shared helper library — `workflow_gate` (interactive confirm), `workflow_checkpoint` (git commit + state.json), `workflow_validate` (health check + optional test command)
+- **feature-workflow.json**: Built-in workflow template — branch create → generate skill → validate → cleanup staging
+
+### Fixed
+- `workflow_validate` now reads `total_issues` (integer) from `git-health --json` instead of non-existent `.status` field — post-workflow validation no longer always reports failure
+- `feature-workflow.json` step paths use `$PLUGIN_ROOT`-absolute references instead of CWD-relative paths — workflow runs correctly from any invocation directory
+
 ## [1.1.0] — 2026-02-12
 
 ### Fixed
