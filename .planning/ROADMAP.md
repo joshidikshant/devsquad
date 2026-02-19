@@ -63,7 +63,7 @@ This roadmap delivers four interconnected capabilities that together achieve Dev
 - CGEN-04: Present draft for user review/iteration before writing
 - CGEN-05: Skill generates itself (self-referential — code-generation skill is invocable via /devsquad:generate)
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 03-01-PLAN-skill-scaffold.md — Create SKILL.md, command stub, and generate-skill.sh skeleton with argument parsing
@@ -108,7 +108,7 @@ Plans:
 |-------|----------|-------------------|--------|
 | 1 | Delegation Advisor | 4 | Complete |
 | 2 | Git Health Check | 5 | Complete |
-| 3 | 2/3 | In Progress|  |
+| 3 | 3/3 | Complete   | 2026-02-19 |
 | 4 | Workflow Orchestration | 4 | Planned |
 
 **Total Requirements:** 18/18 mapped
