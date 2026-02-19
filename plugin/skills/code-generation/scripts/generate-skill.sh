@@ -76,15 +76,89 @@ echo ""
 # Phase 1: Research (Gemini) — implemented in Plan 02
 # ---------------------------------------------------------------------------
 echo "[1/4] Researching DevSquad patterns with Gemini..."
-# STUB — replaced by Plan 02
-RESEARCH="[research stub — Plan 02 will implement]"
+RESEARCH=$(invoke_gemini_with_files \
+  "@${PLUGIN_ROOT}/skills/ @${PLUGIN_ROOT}/commands/" \
+  "Analyze these DevSquad skill and command files. Extract the exact SKILL.md frontmatter fields (name, description, version) and prose structure (## When to Use, ## Usage, ## Dependencies sections). Extract the shell script conventions: path resolution via BASH_SOURCE, library sourcing order (state.sh first, then wrappers), argument parsing with while-loop. List how the command stub in commands/ references the skill. Under 500 words." \
+  500 \
+  90)
+
+if [[ $? -ne 0 ]]; then
+  echo "Error: Gemini research failed." >&2
+  echo "$RESEARCH" >&2
+  exit 1
+fi
+
+echo "  Research complete (${#RESEARCH} chars)"
 
 # ---------------------------------------------------------------------------
 # Phase 2: Draft (Codex) — implemented in Plan 02
 # ---------------------------------------------------------------------------
 echo "[2/4] Drafting skill implementation with Codex..."
-# STUB — replaced by Plan 02
-DRAFT="[draft stub — Plan 02 will implement]"
+DRAFT=$(invoke_codex \
+"Generate a complete DevSquad skill named '${SKILL_NAME}' that does: ${DESCRIPTION}
+
+Use EXACTLY these conventions observed in the codebase:
+${RESEARCH}
+
+Output three files using these EXACT delimiters (no extra text before or after each section):
+
+=== FILE: SKILL.md ===
+---
+name: ${SKILL_NAME}
+description: [one-sentence activation trigger — describe when Claude should use this skill]
+version: 1.0.0
+---
+
+# [Skill Title]
+
+[What the skill does]
+
+## When to Use
+[bullet list of triggers]
+
+## Usage
+\`\`\`bash
+bash \"\${CLAUDE_PLUGIN_ROOT}/skills/${SKILL_NAME}/scripts/${SKILL_NAME}.sh\" [arguments]
+\`\`\`
+
+## Dependencies
+- lib/state.sh — [purpose]
+[add other libs as needed]
+
+=== FILE: scripts/${SKILL_NAME}.sh ===
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=\"\$(cd \"\$(dirname \"\${BASH_SOURCE[0]:-\$0}\")\" && pwd)\"
+PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/../../..\" && pwd)\"
+
+source \"\${PLUGIN_ROOT}/lib/state.sh\"
+[add other sources as needed]
+
+[implementation using while-loop argument parsing, following codebase conventions]
+
+=== FILE: commands/${SKILL_NAME}.md ===
+---
+description: [one-line command description]
+argument-hint: \"[argument hint]\"
+allowed-tools: [\"Read\", \"Write\", \"Bash\", \"Skill\"]
+---
+
+# DevSquad \$(echo "${SKILL_NAME}" | sed 's/-/ /g' | sed 's/\b./\u&/g')
+
+Arguments: \$ARGUMENTS
+
+Invoke the devsquad:${SKILL_NAME} skill and follow it exactly." \
+  0 \
+  120)
+
+if [[ $? -ne 0 ]]; then
+  echo "Error: Codex draft failed." >&2
+  echo "$DRAFT" >&2
+  exit 1
+fi
+
+echo "  Draft complete ($(echo "$DRAFT" | wc -l | tr -d ' ') lines)"
 
 # ---------------------------------------------------------------------------
 # Phase 3: Review — implemented in Plan 03
