@@ -25,8 +25,8 @@ Requirements for Phase 2 release. Each maps to roadmap phases.
 ### Code Generation
 
 - [x] **CGEN-01**: Skill receives description of desired command
-- [ ] **CGEN-02**: Skill uses Gemini to research DevSquad command patterns
-- [ ] **CGEN-03**: Skill uses Codex to draft command implementation
+- [x] **CGEN-02**: Skill uses Gemini to research DevSquad command patterns
+- [x] **CGEN-03**: Skill uses Codex to draft command implementation
 - [ ] **CGEN-04**: Skill presents draft for user review/iteration
 - [ ] **CGEN-05**: Skill generates similar skill for skill development
 
@@ -78,8 +78,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GHLT-04 | Phase 2 | Pending |
 | GHLT-05 | Phase 2 | Pending |
 | CGEN-01 | Phase 3 | Complete |
-| CGEN-02 | Phase 3 | Pending |
-| CGEN-03 | Phase 3 | Pending |
+| CGEN-02 | Phase 3 | Complete |
+| CGEN-03 | Phase 3 | Complete |
 | CGEN-04 | Phase 3 | Pending |
 | CGEN-05 | Phase 3 | Pending |
 | WFLO-01 | Phase 4 | Pending |

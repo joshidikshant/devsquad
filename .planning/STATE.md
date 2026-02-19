@@ -12,9 +12,9 @@
 
 **Active Milestone:** Phase 2: Git Health Check (Complete)
 **Current Phase:** 03
-**Current Plan:** 01 complete — Plan 02 next
-**Plan Status:** Plan 01 (Code Generation Scaffold) completed successfully
-**Progress:** [███░░░░░░░] 33%
+**Current Plan:** 02 complete — Plan 03 next
+**Plan Status:** Plan 02 (Gemini research + Codex draft pipeline) completed successfully
+**Progress:** [███████░░░] 67%
 
 ---
 
@@ -66,6 +66,9 @@
 11. **AHEAD check first in check-changes.sh (Phase 2, Plan 02):** Highest severity — unpushed commits mean work at risk of loss
 12. **BASH_SOURCE[0] for PLUGIN_ROOT resolution (Phase 3, Plan 01):** Portability when script runs via Bash tool where CLAUDE_PLUGIN_ROOT may be unset
 13. **While-loop + name derivation (Phase 3, Plan 01):** Lowercase+hyphen+40-char-truncate produces clean filesystem-safe skill names; while-loop consistent with Phase 2 decision
+14. **invoke_gemini_with_files for research phase (Phase 3, Plan 02):** Wrapper handles rate-limit, hook depth guard (DEVSQUAD_HOOK_DEPTH=1), and usage tracking — raw gemini CLI bypasses all these protections
+15. **line_limit=0 for invoke_codex (Phase 3, Plan 02):** Default 50-line limit truncates three-file output (80-120 lines); zero disables limit entirely
+16. **=== FILE: delimiter format (Phase 3, Plan 02):** Shell-parseable multi-file delimiter for Plan 03 to split DRAFT into SKILL.md, script, and command files
 
 ### Architecture Notes
 
@@ -82,11 +85,11 @@ None identified.
 
 ## Session Continuity
 
-**Last Action:** Completed Phase 3, Plan 01 (Code Generation Skill Scaffold)
-**Next Action:** Execute Phase 3, Plan 02 (Gemini research + Codex draft phases)
+**Last Action:** Completed Phase 3, Plan 02 (Gemini research + Codex draft pipeline)
+**Next Action:** Execute Phase 3, Plan 03 (review, write, and verify phases)
 **Files Written:** plugin/skills/code-generation/SKILL.md, plugin/skills/code-generation/scripts/generate-skill.sh, plugin/commands/generate.md
-**Last Session Timestamp:** 2026-02-19T07:52:00Z
-**Stopped At:** Completed 03-01-PLAN.md execution
+**Last Session Timestamp:** 2026-02-19T07:57:34Z
+**Stopped At:** Completed 03-02-PLAN.md execution
 
 **For Next Session:**
 - Phase 2 is fully complete — git-health check covers all 5 requirements (GHLT-01 through GHLT-05)
@@ -104,7 +107,7 @@ None identified.
 | Coverage Validation | 100% | 100% |
 | Phase 1 Plans Completed | 4/4 | 4/4 |
 | Phase 2 Plans Completed | 2/2 | 2/2 |
-| Phase 3 Plans Completed | 1/3 | 3/3 |
+| Phase 3 Plans Completed | 2/3 | 3/3 |
 | Phase 1, Plan 03 Duration | 3 minutes | < 5 min/plan |
 | Phase 2, Plan 01 Duration | ~2 minutes | < 5 min/plan |
 | Phase 2, Plan 02 Duration | ~3 minutes | < 5 min/plan |
@@ -128,3 +131,4 @@ None identified.
 - Phase 2 Plan 01 commits: 1c603f9, 8491d2d, 996a0d9, 7a3f546
 - Phase 2 Plan 02 commits: ba8fa77, e9aacc8, 5654f58
 - Phase 3 Plan 01 commits: ec3db00, 6444d48
+- Phase 3 Plan 02 commits: 08ffb9f
