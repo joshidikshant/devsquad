@@ -1,0 +1,39 @@
+{
+  "name": "feature-workflow",
+  "description": "End-to-end feature development: create branch, generate skill, validate, and clean up staging files.",
+  "test_command": "",
+  "steps": [
+    {
+      "id": "branch-create",
+      "skill": "git",
+      "args": "checkout -b feature/$FEATURE_NAME",
+      "destructive": false,
+      "checkpoint": false,
+      "commit_message": ""
+    },
+    {
+      "id": "generate-skill",
+      "skill": "bash",
+      "args": "plugin/skills/code-generation/scripts/generate-skill.sh \"$FEATURE_DESCRIPTION\" --name $FEATURE_NAME",
+      "destructive": false,
+      "checkpoint": true,
+      "commit_message": "feat($WORKFLOW_NAME): generate $FEATURE_NAME skill scaffold"
+    },
+    {
+      "id": "validate",
+      "skill": "bash",
+      "args": "plugin/skills/git-health/scripts/git-health.sh",
+      "destructive": false,
+      "checkpoint": false,
+      "commit_message": ""
+    },
+    {
+      "id": "cleanup-staging",
+      "skill": "bash",
+      "args": "rm -f .devsquad/staging/*.tmp 2>/dev/null || true",
+      "destructive": true,
+      "checkpoint": true,
+      "commit_message": "chore($WORKFLOW_NAME): cleanup staging files after $STEP_ID"
+    }
+  ]
+}
