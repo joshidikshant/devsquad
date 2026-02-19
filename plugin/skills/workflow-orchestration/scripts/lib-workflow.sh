@@ -93,13 +93,15 @@ workflow_validate() {
   echo "[1/2] Running git health check..."
   if [[ -x "$health_script" ]]; then
     local health_json
-    health_json=$("$health_script" --json 2>/dev/null || echo '{"status":"error"}')
-    local health_status
-    health_status=$(echo "$health_json" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
-    echo "      Git health: ${health_status}"
-    if [[ "$health_status" != "healthy" && "$health_status" != "ok" ]]; then
+    health_json=$("$health_script" --json 2>/dev/null || echo '{"total_issues":1}')
+    local total_issues
+    total_issues=$(echo "$health_json" | jq -r '.total_issues // 1' 2>/dev/null || echo "1")
+    if [[ "$total_issues" -gt 0 ]]; then
+      echo "      Git health: ${total_issues} issue(s) found"
       echo "      WARNING: Git health check reported issues."
       all_passed=false
+    else
+      echo "      Git health: healthy (0 issues)"
     fi
   else
     echo "      SKIP: git-health.sh not found or not executable."

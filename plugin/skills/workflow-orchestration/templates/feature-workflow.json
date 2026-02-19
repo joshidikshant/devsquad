@@ -14,7 +14,7 @@
     {
       "id": "generate-skill",
       "skill": "bash",
-      "args": "plugin/skills/code-generation/scripts/generate-skill.sh \"$FEATURE_DESCRIPTION\" --name $FEATURE_NAME",
+      "args": "$PLUGIN_ROOT/skills/code-generation/scripts/generate-skill.sh \"$FEATURE_DESCRIPTION\" --name $FEATURE_NAME",
       "destructive": false,
       "checkpoint": true,
       "commit_message": "feat($WORKFLOW_NAME): generate $FEATURE_NAME skill scaffold"
@@ -22,7 +22,7 @@
     {
       "id": "validate",
       "skill": "bash",
-      "args": "plugin/skills/git-health/scripts/git-health.sh",
+      "args": "$PLUGIN_ROOT/skills/git-health/scripts/git-health.sh",
       "destructive": false,
       "checkpoint": false,
       "commit_message": ""
