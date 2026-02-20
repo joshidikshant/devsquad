@@ -40,10 +40,13 @@ log_delegation() {
   echo "${timestamp} | delegation_suggested | ${tool_name} | ${agent} | ${mode}" >> "$log_file"
 }
 
-# Log advisory suggestion (when hook suggests delegation)
-log_suggestion() {
-  local tool_name="$1"
-  local agent="$2"
+# Log a compliance event to the compliance log
+# Usage: _log_compliance "event_type" "tool_name" "agent" "outcome"
+_log_compliance() {
+  local event_type="$1"
+  local tool_name="$2"
+  local agent="$3"
+  local outcome="$4"
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
   local log_dir="${project_dir}/.devsquad/logs"
   local log_file="${log_dir}/compliance.log"
@@ -51,23 +54,18 @@ log_suggestion() {
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   mkdir -p "$log_dir"
-  echo "${timestamp} | advisory_suggested | ${tool_name} | ${agent} | suggested" >> "$log_file"
+  echo "${timestamp} | ${event_type} | ${tool_name} | ${agent} | ${outcome}" >> "$log_file"
+}
+
+# Log advisory suggestion (when hook suggests delegation)
+log_suggestion() {
+  _log_compliance "advisory_suggested" "$1" "$2" "suggested"
 }
 
 # Log actual override (when user proceeds despite suggestion)
-# Currently: called from advisory mode in pre-tool-use.sh
 # TODO: Move to PostToolUse hook for accurate tracking once available
 log_override() {
-  local tool_name="$1"
-  local agent="$2"
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  local log_dir="${project_dir}/.devsquad/logs"
-  local log_file="${log_dir}/compliance.log"
-  local timestamp
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-  mkdir -p "$log_dir"
-  echo "${timestamp} | advisory_override | ${tool_name} | ${agent} | allowed" >> "$log_file"
+  _log_compliance "advisory_override" "$1" "$2" "allowed"
 }
 
 # Record delegation suggestion in session state for acceptance tracking
@@ -127,84 +125,45 @@ check_and_log_suggestion_outcome() {
 
 # Log that a delegation suggestion was accepted (user switched tools)
 log_suggestion_accepted() {
-  local tool_name="$1"
-  local agent="$2"
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  local log_file="${project_dir}/.devsquad/logs/compliance.log"
-  local timestamp
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  mkdir -p "$(dirname "$log_file")"
-  echo "${timestamp} | advisory_accepted | ${tool_name} | ${agent} | accepted" >> "$log_file"
+  _log_compliance "advisory_accepted" "$1" "$2" "accepted"
 }
 
 # Log that a delegation suggestion was declined (user continued with same tool)
 log_suggestion_declined() {
-  local tool_name="$1"
-  local agent="$2"
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  local log_file="${project_dir}/.devsquad/logs/compliance.log"
-  local timestamp
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  mkdir -p "$(dirname "$log_file")"
-  echo "${timestamp} | advisory_declined | ${tool_name} | ${agent} | declined" >> "$log_file"
+  _log_compliance "advisory_declined" "$1" "$2" "declined"
 }
 
-# Increment session-scoped read counter
+# Increment session-scoped read counter and echo new value
 increment_read_counter() {
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  local state_dir="${project_dir}/.devsquad"
-  local counter_file="${state_dir}/read_count"
-  local temp_file="${counter_file}.tmp.$$"
+  local counter_file="${CLAUDE_PROJECT_DIR:-.}/.devsquad/read_count"
+  mkdir -p "$(dirname "$counter_file")"
 
-  mkdir -p "$state_dir"
-
-  local current_count=0
-  if [[ -f "$counter_file" ]]; then
-    current_count=$(cat "$counter_file" 2>/dev/null || echo "0")
-  fi
-
+  local current_count
+  current_count=$(cat "$counter_file" 2>/dev/null || echo "0")
   local new_count=$((current_count + 1))
+
+  local temp_file="${counter_file}.tmp.$$"
   echo "$new_count" > "$temp_file"
   mv "$temp_file" "$counter_file"
-
   echo "$new_count"
 }
 
 # Get current read count
 get_read_count() {
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  local state_dir="${project_dir}/.devsquad"
-  local counter_file="${state_dir}/read_count"
-
-  if [[ -f "$counter_file" ]]; then
-    cat "$counter_file" 2>/dev/null || echo "0"
-  else
-    echo "0"
-  fi
+  cat "${CLAUDE_PROJECT_DIR:-.}/.devsquad/read_count" 2>/dev/null || echo "0"
 }
 
 # Check if agent CLI is available
 # Takes an agent name (e.g., "gemini-reader", "codex-drafter") and returns 0 if CLI exists, 1 if not
 check_agent_cli_available() {
   local agent="$1"
-  local cli_name=""
 
-  # Extract CLI name from agent name
-  if [[ "$agent" == gemini* ]]; then
-    cli_name="gemini"
-  elif [[ "$agent" == codex* ]]; then
-    cli_name="codex"
-  else
-    # Unknown agent type - assume unavailable
-    return 1
-  fi
-
-  # Check if CLI is available
-  if command -v "$cli_name" &>/dev/null; then
-    return 0
-  else
-    return 1
-  fi
+  # Extract CLI name from agent prefix
+  case "$agent" in
+    gemini*) command -v "gemini" &>/dev/null ;;
+    codex*)  command -v "codex" &>/dev/null ;;
+    *)       return 1 ;;
+  esac
 }
 
 # Detect if a bash command is test-related
@@ -231,31 +190,13 @@ is_test_command() {
 
 # Log strict mode degradation when CLI is missing
 log_degradation() {
-  local tool_name="$1"
-  local agent="$2"
-  local reason="$3"
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  local log_dir="${project_dir}/.devsquad/logs"
-  local log_file="${log_dir}/compliance.log"
-  local timestamp
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-  mkdir -p "$log_dir"
-  echo "${timestamp} | strict_degraded | ${tool_name} | ${agent} | ${reason}" >> "$log_file"
+  _log_compliance "strict_degraded" "$1" "$2" "$3"
 }
 
 # Estimate token savings for delegating a file read to Gemini
-# Uses file size heuristic: ~4 bytes per token for text files
-# Returns human-readable estimate (e.g., "~12K tokens")
+# Uses file size heuristic: ~4 bytes per token
 estimate_token_savings() {
   local file_path="$1"
-
-  # If file doesn't exist or path is generic, return generic estimate
-  if [[ ! -f "$file_path" ]]; then
-    echo "~5-20K tokens"
-    return
-  fi
-
   local file_size
   file_size=$(stat -f%z "$file_path" 2>/dev/null || stat -c%s "$file_path" 2>/dev/null || echo "0")
 
@@ -264,16 +205,11 @@ estimate_token_savings() {
     return
   fi
 
-  # Approximate: 4 bytes per token
   local estimated_tokens=$((file_size / 4))
-
-  # Format as human-readable
   if [[ "$estimated_tokens" -ge 1000000 ]]; then
-    local millions=$((estimated_tokens / 1000000))
-    echo "~${millions}M tokens"
+    echo "~$((estimated_tokens / 1000000))M tokens"
   elif [[ "$estimated_tokens" -ge 1000 ]]; then
-    local thousands=$((estimated_tokens / 1000))
-    echo "~${thousands}K tokens"
+    echo "~$((estimated_tokens / 1000))K tokens"
   else
     echo "~${estimated_tokens} tokens"
   fi
@@ -281,27 +217,16 @@ estimate_token_savings() {
 
 # Estimate cumulative savings for all reads above threshold
 estimate_session_savings() {
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  local read_count_file="${project_dir}/.devsquad/read_count"
   local threshold="${1:-3}"
-
-  if [[ ! -f "$read_count_file" ]]; then
-    echo "~5-20K tokens"
-    return
-  fi
-
   local count
-  count=$(cat "$read_count_file" 2>/dev/null || echo "0")
+  count=$(cat "${CLAUDE_PROJECT_DIR:-.}/.devsquad/read_count" 2>/dev/null || echo "0")
   local excess=$((count - threshold))
 
   if [[ "$excess" -le 0 ]]; then
     echo "~5-20K tokens"
-    return
+  else
+    echo "~$((excess * 8))K tokens"
   fi
-
-  # Rough estimate: 8K tokens per file on average
-  local estimated=$((excess * 8))
-  echo "~${estimated}K tokens"
 }
 
 # Get suggestion acceptance metrics from compliance log

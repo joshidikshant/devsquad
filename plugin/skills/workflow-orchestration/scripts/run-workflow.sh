@@ -98,15 +98,21 @@ STATE_DIR=$(init_state_dir)
 export STATE_DIR
 WORKFLOW_FAILED_STEPS=()
 
+# Helper: atomically update state.json with a jq filter
+_update_workflow_state() {
+  local state_file="${STATE_DIR}/state.json"
+  [[ -f "$state_file" ]] || return 0
+  command -v jq &>/dev/null || return 0
+  local current
+  current=$(cat "$state_file" 2>/dev/null || echo "{}")
+  echo "$current" | jq "$@" > "${state_file}.tmp.$$" && mv "${state_file}.tmp.$$" "$state_file"
+}
+
 # Write initial workflow state BEFORE executing any step (compaction-resilient)
-if command -v jq &>/dev/null && [[ -f "${STATE_DIR}/state.json" ]]; then
-  CURRENT=$(cat "${STATE_DIR}/state.json" 2>/dev/null || echo "{}")
-  UPDATED=$(echo "$CURRENT" | jq \
-    --arg name "$WORKFLOW_NAME" \
-    --arg file "$WORKFLOW_FILE" \
-    '. + {"workflow": {"name": $name, "file": $file, "status": "running", "current_step": "", "checkpoints": {}}}')
-  echo "$UPDATED" > "${STATE_DIR}/state.json.tmp.$$" && mv "${STATE_DIR}/state.json.tmp.$$" "${STATE_DIR}/state.json"
-fi
+_update_workflow_state \
+  --arg name "$WORKFLOW_NAME" \
+  --arg file "$WORKFLOW_FILE" \
+  '. + {"workflow": {"name": $name, "file": $file, "status": "running", "current_step": "", "checkpoints": {}}}'
 
 # ---------------------------------------------------------------------------
 # Execute steps
@@ -119,40 +125,27 @@ for i in $(seq 0 $((STEP_COUNT - 1))); do
   STEP_CHECKPOINT=$(jq -r ".steps[$i].checkpoint // false" "$WORKFLOW_FILE")
   STEP_COMMIT_MSG=$(jq -r ".steps[$i].commit_message // \"\"" "$WORKFLOW_FILE")
 
-  # Expand env vars in args and commit message safely (no eval — envsubst or perl fallback)
+  # Expand env vars in args and commit message safely (no eval)
   export WORKFLOW_NAME STEP_ID
-  if command -v envsubst &>/dev/null; then
-    STEP_ARGS=$(echo "$STEP_ARGS" | envsubst)
-    [[ -n "$STEP_COMMIT_MSG" ]] && STEP_COMMIT_MSG=$(echo "$STEP_COMMIT_MSG" | envsubst)
-  elif command -v perl &>/dev/null; then
-    # perl -pe replaces $VAR and ${VAR} from ENV — no shell execution, safe substitution
-    # Leaves undefined variables as-is (defined check prevents empty replacement)
-    STEP_ARGS=$(echo "$STEP_ARGS" | perl -pe 's/\$\{?(\w+)\}?/defined $ENV{$1} ? $ENV{$1} : $&/ge')
-    [[ -n "$STEP_COMMIT_MSG" ]] && STEP_COMMIT_MSG=$(echo "$STEP_COMMIT_MSG" | perl -pe 's/\$\{?(\w+)\}?/defined $ENV{$1} ? $ENV{$1} : $&/ge')
-  else
-    # Bash-native substitution for WORKFLOW_NAME and STEP_ID only (no eval)
-    STEP_ARGS="${STEP_ARGS//\$WORKFLOW_NAME/${WORKFLOW_NAME}}"
-    STEP_ARGS="${STEP_ARGS//\$STEP_ID/${STEP_ID}}"
-    STEP_ARGS="${STEP_ARGS//\$\{WORKFLOW_NAME\}/${WORKFLOW_NAME}}"
-    STEP_ARGS="${STEP_ARGS//\$\{STEP_ID\}/${STEP_ID}}"
-    if [[ -n "$STEP_COMMIT_MSG" ]]; then
-      STEP_COMMIT_MSG="${STEP_COMMIT_MSG//\$WORKFLOW_NAME/${WORKFLOW_NAME}}"
-      STEP_COMMIT_MSG="${STEP_COMMIT_MSG//\$STEP_ID/${STEP_ID}}"
-      STEP_COMMIT_MSG="${STEP_COMMIT_MSG//\$\{WORKFLOW_NAME\}/${WORKFLOW_NAME}}"
-      STEP_COMMIT_MSG="${STEP_COMMIT_MSG//\$\{STEP_ID\}/${STEP_ID}}"
+  _expand_vars() {
+    if command -v envsubst &>/dev/null; then echo "$1" | envsubst
+    elif command -v perl &>/dev/null; then echo "$1" | perl -pe 's/\$\{?(\w+)\}?/defined $ENV{$1} ? $ENV{$1} : $&/ge'
+    else
+      local s="$1"
+      s="${s//\$WORKFLOW_NAME/${WORKFLOW_NAME}}"; s="${s//\$\{WORKFLOW_NAME\}/${WORKFLOW_NAME}}"
+      s="${s//\$STEP_ID/${STEP_ID}}"; s="${s//\$\{STEP_ID\}/${STEP_ID}}"
+      echo "$s"
     fi
-  fi
+  }
+  STEP_ARGS=$(_expand_vars "$STEP_ARGS")
+  [[ -n "$STEP_COMMIT_MSG" ]] && STEP_COMMIT_MSG=$(_expand_vars "$STEP_COMMIT_MSG")
 
   STEP_NUM=$((i + 1))
   echo "[${STEP_NUM}/${STEP_COUNT}] Step: ${STEP_ID}"
   echo "        Skill: ${STEP_SKILL} ${STEP_ARGS}"
 
   # Update current_step in state before execution
-  if [[ -f "${STATE_DIR}/state.json" ]]; then
-    CURRENT=$(cat "${STATE_DIR}/state.json" 2>/dev/null || echo "{}")
-    echo "$CURRENT" | jq --arg s "$STEP_ID" '.workflow.current_step = $s' \
-      > "${STATE_DIR}/state.json.tmp.$$" && mv "${STATE_DIR}/state.json.tmp.$$" "${STATE_DIR}/state.json"
-  fi
+  _update_workflow_state --arg s "$STEP_ID" '.workflow.current_step = $s'
 
   # Permission gate for destructive steps
   if [[ "$STEP_DESTRUCTIVE" == "true" && "$SKIP_GATES" == "false" && "$DRY_RUN" == "false" ]]; then
@@ -202,11 +195,7 @@ done
 FINAL_STATUS="complete"
 [[ ${#WORKFLOW_FAILED_STEPS[@]} -gt 0 ]] && FINAL_STATUS="partial"
 
-if [[ -f "${STATE_DIR}/state.json" ]]; then
-  CURRENT=$(cat "${STATE_DIR}/state.json" 2>/dev/null || echo "{}")
-  echo "$CURRENT" | jq --arg s "$FINAL_STATUS" '.workflow.status = $s | .workflow.current_step = ""' \
-    > "${STATE_DIR}/state.json.tmp.$$" && mv "${STATE_DIR}/state.json.tmp.$$" "${STATE_DIR}/state.json"
-fi
+_update_workflow_state --arg s "$FINAL_STATUS" '.workflow.status = $s | .workflow.current_step = ""'
 
 # ---------------------------------------------------------------------------
 # Post-workflow validation (ORCH-04)

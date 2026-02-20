@@ -7,21 +7,6 @@ set -euo pipefail
 # - invoke_gemini(prompt, word_limit, timeout_secs): Execute Gemini CLI with auto word-bound appending, timeout, error handling
 # - invoke_gemini_with_files(files_arg, prompt, word_limit, timeout_secs): Convenience wrapper for @file patterns
 
-# Cache for state directory resolution
-_STATE_DIR_CACHE=""
-
-# Resolve state directory (cached)
-_resolve_state_dir() {
-  if [[ -n "$_STATE_DIR_CACHE" ]]; then
-    echo "$_STATE_DIR_CACHE"
-    return
-  fi
-
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  _STATE_DIR_CACHE="${project_dir}/.devsquad"
-  echo "$_STATE_DIR_CACHE"
-}
-
 # Expand @dir/ references to individual @file references
 # Usage: expand_dir_refs "@src/auth/ @src/models/user.ts @lib/"
 # Directories are expanded recursively for common extensions (.ts, .js, .sh, .py, .go, .rs, .md, .json)
@@ -87,30 +72,22 @@ invoke_gemini() {
   # Prevent hook recursion
   export DEVSQUAD_HOOK_DEPTH=1
 
-  # Source state library
+  # Source state and usage libraries
   local lib_dir
   lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  # shellcheck source=lib/state.sh
   source "${lib_dir}/state.sh"
-  # shellcheck source=lib/usage.sh
   source "${lib_dir}/usage.sh"
 
-  local state_dir
-  state_dir=$(_resolve_state_dir)
+  local state_dir="${CLAUDE_PROJECT_DIR:-.}/.devsquad"
 
   # Check rate limit first
-  local in_cooldown
-  in_cooldown=$(check_rate_limit "$state_dir" "gemini")
-  if [[ "$in_cooldown" == "true" ]]; then
-    local cooldown_file="${state_dir}/cooldown_gemini"
+  if [[ "$(check_rate_limit "$state_dir" "gemini")" == "true" ]]; then
     local cooldown_until
-    cooldown_until=$(cat "$cooldown_file" 2>/dev/null || echo "0")
+    cooldown_until=$(cat "${state_dir}/cooldown_gemini" 2>/dev/null || echo "0")
     local cooldown_date
-    if date -r "$cooldown_until" &>/dev/null; then
-      cooldown_date=$(date -r "$cooldown_until" +"%Y-%m-%d %H:%M:%S")
-    else
-      cooldown_date=$(date -d "@${cooldown_until}" +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "unknown")
-    fi
+    cooldown_date=$(date -r "$cooldown_until" +"%Y-%m-%d %H:%M:%S" 2>/dev/null \
+      || date -d "@${cooldown_until}" +"%Y-%m-%d %H:%M:%S" 2>/dev/null \
+      || echo "unknown")
     echo "RATE_LIMITED: Gemini is in cooldown until ${cooldown_date}. Use @codex-developer for code, @codex-tester for tests, or handle synthesis yourself." >&2
     return 1
   fi
@@ -130,68 +107,51 @@ invoke_gemini() {
   trap 'rm -f "$stderr_file"' EXIT
 
   # Determine timeout command (timeout on Linux, gtimeout on macOS)
-  local timeout_cmd="timeout"
-  if ! command -v timeout &>/dev/null && command -v gtimeout &>/dev/null; then
-    timeout_cmd="gtimeout"
+  local timeout_cmd=""
+  if command -v timeout &>/dev/null; then timeout_cmd="timeout"
+  elif command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout"
   fi
 
   # Invoke Gemini CLI
-  local stdout
-  local exit_code
-  if command -v "$timeout_cmd" &>/dev/null; then
-    stdout=$("$timeout_cmd" "${timeout_secs}s" gemini -p "$final_prompt" 2>"$stderr_file")
-    exit_code=$?
+  local stdout exit_code=0
+  if [[ -n "$timeout_cmd" ]]; then
+    stdout=$("$timeout_cmd" "${timeout_secs}s" gemini -p "$final_prompt" 2>"$stderr_file") || exit_code=$?
   else
-    # No timeout available, run directly
-    stdout=$(gemini -p "$final_prompt" 2>"$stderr_file")
-    exit_code=$?
+    stdout=$(gemini -p "$final_prompt" 2>"$stderr_file") || exit_code=$?
   fi
 
   local stderr_content
   stderr_content=$(cat "$stderr_file" 2>/dev/null)
 
-  # Handle exit codes
+  # Helper: log failure, record stats, and return 1
+  _gemini_fail() {
+    local msg="$1"
+    echo "$msg" >&2
+    update_agent_stats "$state_dir" "gemini" "false"
+    record_usage "gemini" "${#final_prompt}" "0"
+    return 1
+  }
+
+  # Handle exit codes (trap handles stderr_file cleanup)
   if [[ $exit_code -eq 0 ]]; then
-    # Success
     if [[ -z "$stdout" ]]; then
       echo "WARNING: Gemini returned empty response" >&2
     fi
     update_agent_stats "$state_dir" "gemini" "true"
     record_usage "gemini" "${#final_prompt}" "${#stdout}"
     echo "$stdout"
-    rm -f "$stderr_file"
     return 0
   elif [[ $exit_code -eq 124 ]]; then
-    # Timeout
-    update_agent_stats "$state_dir" "gemini" "false"
-    record_usage "gemini" "${#final_prompt}" "0"
-    echo "TIMEOUT: Gemini did not respond within ${timeout_secs}s. Try a simpler prompt, use @codex-developer for code, or @codex-tester for tests." >&2
-    rm -f "$stderr_file"
-    return 1
+    _gemini_fail "TIMEOUT: Gemini did not respond within ${timeout_secs}s. Try a simpler prompt, use @codex-developer for code, or @codex-tester for tests."
   elif echo "$stderr_content" | grep -iE 'rate|limit|429' &>/dev/null; then
-    # Rate limit hit
     record_rate_limit "$state_dir" "gemini"
-    update_agent_stats "$state_dir" "gemini" "false"
-    record_usage "gemini" "${#final_prompt}" "0"
-    echo "RATE_LIMITED: Gemini hit rate limit. 2-minute cooldown started. Use @codex-developer for code, @codex-tester for tests, or handle synthesis yourself." >&2
-    rm -f "$stderr_file"
-    return 1
+    _gemini_fail "RATE_LIMITED: Gemini hit rate limit. 2-minute cooldown started. Use @codex-developer for code, @codex-tester for tests, or handle synthesis yourself."
   elif echo "$stderr_content" | grep -iE 'auth|401|403' &>/dev/null; then
-    # Auth error
-    update_agent_stats "$state_dir" "gemini" "false"
-    record_usage "gemini" "${#final_prompt}" "0"
-    echo "AUTH_ERROR: Gemini CLI authentication failed. Run 'gemini auth' to re-authenticate." >&2
-    rm -f "$stderr_file"
-    return 1
+    _gemini_fail "AUTH_ERROR: Gemini CLI authentication failed. Run 'gemini auth' to re-authenticate."
   else
-    # Other error
-    update_agent_stats "$state_dir" "gemini" "false"
-    record_usage "gemini" "${#final_prompt}" "0"
     local stderr_snippet
     stderr_snippet=$(echo "$stderr_content" | head -c 200)
-    echo "CLI_ERROR: Gemini failed (exit $exit_code). stderr: ${stderr_snippet}" >&2
-    rm -f "$stderr_file"
-    return 1
+    _gemini_fail "CLI_ERROR: Gemini failed (exit $exit_code). stderr: ${stderr_snippet}"
   fi
 }
 
@@ -202,16 +162,6 @@ invoke_gemini_with_files() {
   local prompt="$2"
   local word_limit="${3:-}"
   local timeout_secs="${4:-60}"
-
-  # Resolve word_limit from config if not provided
-  if [[ -z "$word_limit" ]]; then
-    local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-    local config_file="${project_dir}/.devsquad/config.json"
-    if command -v jq &>/dev/null && [[ -f "$config_file" ]]; then
-      word_limit=$(jq -r '.preferences.gemini_word_limit // empty' "$config_file" 2>/dev/null)
-    fi
-    word_limit="${word_limit:-300}"
-  fi
 
   # Expand @dir/ references to individual @file references
   local expanded_files

@@ -17,6 +17,11 @@ description: |
   User: "Summarize the core/ module - what does it export?"
   Agent: Analyzes module with Gemini, returns purpose, exports, patterns, and concerns.
   </example>
+capabilities:
+  - Analyze large files and directories without consuming Claude's context
+  - Compare multiple files for inconsistencies or patterns
+  - Summarize module structure, exports, and architectural patterns
+  - Explore unfamiliar codebases at scale
 model: sonnet
 color: blue
 tools:

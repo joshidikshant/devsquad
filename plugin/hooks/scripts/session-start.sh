@@ -94,35 +94,26 @@ else
 fi
 
 # Build context
+RECOVERY_LINES=""
 if [[ "$COMPACTION_RECOVERY" == "true" ]]; then
-  # Compaction recovery - include restored state
-  CONTEXT="DevSquad is active. You are an Engineering Manager coordinating a squad of AI agents.
-
-Session recovered from compaction.
-
-Squad Status:
-- Gemini CLI: ${GEMINI_STATUS}
-- Codex CLI: ${CODEX_STATUS}
-${PLUGINS_INFO:+- ${PLUGINS_INFO}}
-${RECOVERED_AGENTS:+- ${RECOVERED_AGENTS}}
-${RECOVERED_STATS:+- ${RECOVERED_STATS}}
-
-Commands: /devsquad:setup (onboarding), /devsquad:status (health check), /devsquad:config (preferences)
-
-Delegation principle: Research and bulk reading to Gemini (1M context). Boilerplate drafts to Codex. You handle synthesis and final integration only."
-else
-  # Fresh session - original context
-  CONTEXT="DevSquad is active. You are an Engineering Manager coordinating a squad of AI agents.
-
-Squad Status:
-- Gemini CLI: ${GEMINI_STATUS}
-- Codex CLI: ${CODEX_STATUS}
-${PLUGINS_INFO:+- ${PLUGINS_INFO}}
-
-Commands: /devsquad:setup (onboarding), /devsquad:status (health check), /devsquad:config (preferences)
-
-Delegation principle: Research and bulk reading to Gemini (1M context). Boilerplate drafts to Codex. You handle synthesis and final integration only."
+  RECOVERY_LINES="
+Session recovered from compaction."
+  [[ -n "$RECOVERED_AGENTS" ]] && RECOVERY_LINES="${RECOVERY_LINES}
+- ${RECOVERED_AGENTS}"
+  [[ -n "$RECOVERED_STATS" ]] && RECOVERY_LINES="${RECOVERY_LINES}
+- ${RECOVERED_STATS}"
 fi
+
+CONTEXT="DevSquad is active. You are an Engineering Manager coordinating a squad of AI agents.
+${RECOVERY_LINES}
+Squad Status:
+- Gemini CLI: ${GEMINI_STATUS}
+- Codex CLI: ${CODEX_STATUS}
+${PLUGINS_INFO:+- ${PLUGINS_INFO}}
+
+Commands: /devsquad:setup (onboarding), /devsquad:status (health check), /devsquad:config (preferences)
+
+Delegation principle: Research and bulk reading to Gemini (1M context). Boilerplate drafts to Codex. You handle synthesis and final integration only."
 
 # Output hook response -- must be valid JSON on stdout with nothing else
 if [[ "$JQ_AVAIL" == "true" ]]; then

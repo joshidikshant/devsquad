@@ -58,97 +58,46 @@ claude_path=$(detect_cli_path "claude")
 
 # --- Version detection (with timeout, graceful failure) ---
 get_version() {
-  local cli_name="$1"
-  local version=""
-  # Try gtimeout (macOS coreutils), then timeout (Linux), then skip
   local timeout_cmd=""
-  if command -v gtimeout &>/dev/null; then
-    timeout_cmd="gtimeout 5"
-  elif command -v timeout &>/dev/null; then
-    timeout_cmd="timeout 5"
+  if command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout 5"
+  elif command -v timeout &>/dev/null; then timeout_cmd="timeout 5"
   fi
-
-  if [[ -n "$timeout_cmd" ]]; then
-    version=$($timeout_cmd "$cli_name" --version 2>/dev/null | head -1 || true)
-  else
-    # No timeout available -- try directly but don't hang
-    version=$("$cli_name" --version 2>/dev/null | head -1 || true)
-  fi
-  echo "$version"
+  $timeout_cmd "$1" --version 2>/dev/null | head -1 || true
 }
 
-gemini_version=""
-codex_version=""
-claude_version=""
-
-if [[ "$gemini_avail" == "true" ]]; then
-  gemini_version=$(get_version "gemini")
-fi
-if [[ "$codex_avail" == "true" ]]; then
-  codex_version=$(get_version "codex")
-fi
-if [[ "$claude_avail" == "true" ]]; then
-  claude_version=$(get_version "claude")
-fi
+gemini_version="" codex_version="" claude_version=""
+[[ "$gemini_avail" == "true" ]] && gemini_version=$(get_version "gemini")
+[[ "$codex_avail" == "true" ]] && codex_version=$(get_version "codex")
+[[ "$claude_avail" == "true" ]] && claude_version=$(get_version "claude")
 
 # --- Check dependencies ---
 jq_avail=$(check_jq)
 
 # --- Build summary ---
-available_agents=()
-missing_agents=()
+available_agents=""
+missing_agents=""
 
-if [[ "$gemini_avail" == "true" ]]; then
-  available_agents+=("gemini")
-else
-  missing_agents+=("gemini")
-fi
-if [[ "$codex_avail" == "true" ]]; then
-  available_agents+=("codex")
-else
-  missing_agents+=("codex")
-fi
-if [[ "$claude_avail" == "true" ]]; then
-  available_agents+=("claude")
-else
-  missing_agents+=("claude")
-fi
+for cli_name in gemini codex claude; do
+  avail_var="${cli_name}_avail"
+  if [[ "${!avail_var}" == "true" ]]; then
+    available_agents="${available_agents:+${available_agents}, }\"${cli_name}\""
+  else
+    missing_agents="${missing_agents:+${missing_agents}, }\"${cli_name}\""
+  fi
+done
 
-# can_delegate: true if at least one external CLI (gemini or codex) is available
 can_delegate="false"
 if [[ "$gemini_avail" == "true" || "$codex_avail" == "true" ]]; then
   can_delegate="true"
 fi
 
-# degraded: true if any CLI is missing
 degraded="false"
-if [[ ${#missing_agents[@]} -gt 0 ]]; then
+if [[ -n "$missing_agents" ]]; then
   degraded="true"
 fi
 
-# --- Format JSON arrays ---
-format_json_array() {
-  local arr=("$@")
-  if [[ ${#arr[@]} -eq 0 ]]; then
-    echo "[]"
-    return
-  fi
-  local result="["
-  local first=true
-  for item in "${arr[@]}"; do
-    if [[ "$first" == "true" ]]; then
-      first=false
-    else
-      result+=", "
-    fi
-    result+="\"$item\""
-  done
-  result+="]"
-  echo "$result"
-}
-
-available_json=$(format_json_array "${available_agents[@]+"${available_agents[@]}"}")
-missing_json=$(format_json_array "${missing_agents[@]+"${missing_agents[@]}"}")
+available_json="[${available_agents}]"
+missing_json="[${missing_agents}]"
 
 # --- Timestamp ---
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

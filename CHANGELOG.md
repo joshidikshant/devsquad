@@ -2,6 +2,32 @@
 
 All notable changes to DevSquad are documented here.
 
+## [2.1.0] — 2026-02-20
+
+### Added
+- **Model selection for Gemini and Codex**: Wrappers now read `gemini_model` and `codex_model` from `.devsquad/config.json` and pass `-m <model>` to both CLIs. Defaults to `gemini-3-pro` and `gpt-5.3-codex`. Configurable per-project via `/devsquad:config gemini_model=<name>`
+
+### Fixed
+- **`hooks.json` format**: Removed non-standard `"hooks"` wrapper key and `"description"` field — event names are now top-level keys matching the Claude Code plugin spec
+- **Command frontmatter**: Added missing `name:` field to all 6 commands that lacked it (`setup`, `status`, `config`, `workflow`, `generate`, `git-health`)
+- **`update-config.sh`**: Fixed undefined `$jq_path` variable; consolidated broken nested-key fallback into a single jq path expression
+- **`pre-tool-use.sh`**: Removed invalid `local` keyword used outside a function
+
+### Improved (code simplification — net -353 lines)
+- **`gemini-wrapper.sh`**: Removed duplicated `_resolve_state_dir()` (already in `state.sh`); simplified cooldown date formatting to chained `||` fallback
+- **`codex-wrapper.sh`**: Removed duplicated `_resolve_state_dir()`; replaced disk-based temp files with variable capture for stdout; removed defensive `if [[ -f state.sh ]]` check
+- **`cli-detect.sh`**: `detect_cli()` simplified from 6 lines to 1; `detect_all_clis()` replaced with a loop
+- **`state.sh`**: `update_agent_stats()` merged two sequential jq calls into one; `check_rate_limit()` reduced from 15 lines to a single compound conditional
+- **`enforcement.sh`**: `increment_read_counter()`, `get_read_count()`, `estimate_token_savings()` all condensed
+- **`routing.sh`**: Removed 5 redundant `local resolved` declarations; changed `synthesis|*` to `*`
+- **`usage.sh`**: Replaced awkward global-variable inner-function pattern with a for-loop using `eval`
+- **`session-start.sh`**: Deduplicated 90% shared context string between fresh-session and compaction-recovery paths into a single template
+- **`stop.sh`**: Merged if/else grep pattern, inlined one-use constant
+- **`pre-compact.sh`**: Removed dead `CONFIG_ESCAPED`/`STATE_ESCAPED` variables that were computed but never used
+- **`detect-environment.sh`**: Replaced bash arrays with string concatenation for bash 3 compatibility
+- **`run-workflow.sh`**: Extracted `_update_workflow_state()` and `_expand_vars()` helpers, eliminating 3 copy-paste blocks each
+- **Agent frontmatter**: Added `capabilities:` list to all 6 agent definitions for better auto-discovery alignment
+
 ## [2.0.0] — 2026-02-19
 
 ### Added

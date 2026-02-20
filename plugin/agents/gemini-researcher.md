@@ -17,6 +17,11 @@ description: |
   User: "Summarize the OAuth 2.0 authorization code flow"
   Agent: Requests summary from Gemini with focus on security and implementation details.
   </example>
+capabilities:
+  - Research technology topics and best practices
+  - Compare tools, libraries, and architectural approaches
+  - Summarize documentation and external resources
+  - Answer knowledge questions using Gemini's 1M context
 model: sonnet
 color: cyan
 tools:

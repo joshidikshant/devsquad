@@ -84,13 +84,13 @@ if [[ -f "${delegation_dir}/compliance.log" ]]; then
   overrides=$(grep -c 'advisory_override' "${delegation_dir}/compliance.log" 2>/dev/null | tr -d ' \n' || echo "0")
 fi
 
-# Sanitize numeric values (remove any whitespace/newlines)
-suggestions_made=$(echo "$suggestions_made" | tr -d ' \n')
-overrides=$(echo "$overrides" | tr -d ' \n')
-
-# Calculate compliance rate (use bc for floating point precision)
+# Calculate compliance rate
 compliance_rate=100
-if [[ $suggestions_made -gt 0 ]] && [[ $overrides =~ ^[0-9]+$ ]]; then
+suggestions_made="${suggestions_made//[^0-9]/}"
+overrides="${overrides//[^0-9]/}"
+suggestions_made="${suggestions_made:-0}"
+overrides="${overrides:-0}"
+if [[ "$suggestions_made" -gt 0 ]]; then
   compliance_rate=$(echo "scale=1; 100 - ($overrides * 100 / $suggestions_made)" | bc)
 fi
 
@@ -122,14 +122,8 @@ else
 fi
 
 # Check squad availability
-gemini_available_str="❌ not available"
-codex_available_str="❌ not available"
-if command -v gemini &>/dev/null; then
-  gemini_available_str="✅ available"
-fi
-if command -v codex &>/dev/null; then
-  codex_available_str="✅ available"
-fi
+gemini_available_str=$( command -v gemini &>/dev/null && echo "available" || echo "not available" )
+codex_available_str=$( command -v codex &>/dev/null && echo "available" || echo "not available" )
 
 # Format numbers with commas (simple approach for readability)
 format_number() {

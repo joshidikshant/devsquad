@@ -8,9 +8,7 @@ init_state_dir() {
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
   local state_dir="${project_dir}/.devsquad"
 
-  mkdir -p "${state_dir}"
-  mkdir -p "${state_dir}/usage"
-  mkdir -p "${state_dir}/logs"
+  mkdir -p "${state_dir}/usage" "${state_dir}/logs"
 
   echo "${state_dir}"
 }
@@ -121,18 +119,16 @@ update_agent_stats() {
   local state_file="${state_dir}/state.json"
 
   if command -v jq &>/dev/null; then
-    local current
+    local current calls_key="${agent_name}_calls" errors_key="${agent_name}_errors"
     current=$(read_state "$state_file")
-    local calls_key="${agent_name}_calls"
-    local errors_key="${agent_name}_errors"
 
-    # Increment call count
     local updated
-    updated=$(echo "$current" | jq --arg k "$calls_key" '.stats[$k] = (.stats[$k] // 0) + 1')
-
-    # If not successful, increment error count
     if [[ "$success" == "false" ]]; then
-      updated=$(echo "$updated" | jq --arg k "$errors_key" '.stats[$k] = (.stats[$k] // 0) + 1')
+      updated=$(echo "$current" | jq --arg ck "$calls_key" --arg ek "$errors_key" \
+        '.stats[$ck] = (.stats[$ck] // 0) + 1 | .stats[$ek] = (.stats[$ek] // 0) + 1')
+    else
+      updated=$(echo "$current" | jq --arg ck "$calls_key" \
+        '.stats[$ck] = (.stats[$ck] // 0) + 1')
     fi
 
     write_state "$state_file" "$updated"
@@ -159,17 +155,7 @@ check_rate_limit() {
   local agent_name="$2"
   local cooldown_file="${state_dir}/cooldown_${agent_name}"
 
-  if [[ ! -f "$cooldown_file" ]]; then
-    echo "false"
-    return
-  fi
-
-  local cooldown_until
-  cooldown_until=$(cat "$cooldown_file" 2>/dev/null || echo "0")
-  local current_epoch
-  current_epoch=$(date +%s)
-
-  if [[ "$current_epoch" -lt "$cooldown_until" ]]; then
+  if [[ -f "$cooldown_file" ]] && [[ "$(date +%s)" -lt "$(cat "$cooldown_file" 2>/dev/null || echo 0)" ]]; then
     echo "true"
   else
     echo "false"

@@ -83,6 +83,7 @@ After installing, restart Claude Code and run `/devsquad:setup` to complete onbo
 | `/devsquad:setup` | Run onboarding — detect environment, set preferences, generate config |
 | `/devsquad:config` | View or edit delegation preferences (e.g., `enforcement_mode=strict`) |
 | `/devsquad:status` | Show squad health, token usage, delegation stats, and budget zone |
+| `/devsquad:capacity` | Report current CLI usage percentages for capacity-aware delegation |
 | `/devsquad:git-health` | Scan repo for broken symlinks, orphaned branches, uncommitted changes |
 | `/devsquad:generate <description>` | Generate a new DevSquad skill — Gemini research → Codex draft → review → write |
 | `/devsquad:workflow` | Run a multi-step workflow from a JSON definition file |
@@ -156,9 +157,13 @@ devsquad/
 │   │   ├── gemini-researcher.md
 │   │   └── gemini-tester.md
 │   ├── commands/             # Slash commands
+│   │   ├── capacity.md       # /devsquad:capacity
 │   │   ├── config.md         # /devsquad:config
+│   │   ├── generate.md       # /devsquad:generate
+│   │   ├── git-health.md     # /devsquad:git-health
 │   │   ├── setup.md          # /devsquad:setup
-│   │   └── status.md         # /devsquad:status
+│   │   ├── status.md         # /devsquad:status
+│   │   └── workflow.md       # /devsquad:workflow
 │   ├── hooks/                # Runtime enforcement
 │   │   ├── hooks.json        # Hook registration
 │   │   └── scripts/
@@ -200,11 +205,19 @@ Configuration is stored in `.devsquad/config.json` (created on first run):
     "synthesis": "self"
   },
   "preferences": {
+    "gemini_model": "gemini-3-pro",
+    "codex_model": "gpt-5.3-codex",
     "gemini_word_limit": 300,
     "codex_line_limit": 50,
     "auto_suggest": true
   }
 }
+```
+
+To change the model used by a CLI, run:
+```bash
+/devsquad:config gemini_model=gemini-3-flash-preview
+/devsquad:config codex_model=o3
 ```
 
 ## Known Limitations

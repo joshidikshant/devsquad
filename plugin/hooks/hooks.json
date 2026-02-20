@@ -1,50 +1,47 @@
 {
-  "description": "DevSquad session management and delegation enforcement",
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-compact.sh",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-tool-use.sh",
-            "timeout": 15
-          }
-        ],
-        "matcher": "Read|WebSearch"
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop.sh",
-            "timeout": 15
-          }
-        ]
-      }
-    ]
-  }
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
+          "timeout": 15
+        }
+      ]
+    }
+  ],
+  "PreCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-compact.sh",
+          "timeout": 15
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "Read|WebSearch",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-tool-use.sh",
+          "timeout": 15
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop.sh",
+          "timeout": 15
+        }
+      ]
+    }
+  ]
 }

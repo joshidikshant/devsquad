@@ -65,10 +65,6 @@ if command -v jq &>/dev/null; then
     }')
 else
   # Build JSON manually (jq-optional fallback)
-  # Escape JSON strings properly
-  CONFIG_ESCAPED=$(echo "$CURRENT_CONFIG" | sed 's/"/\\"/g' | tr -d '\n')
-  STATE_ESCAPED=$(echo "$CURRENT_STATE" | sed 's/"/\\"/g' | tr -d '\n')
-
   SNAPSHOT="{
   \"timestamp\": \"${TIMESTAMP}\",
   \"snapshot_version\": 1,

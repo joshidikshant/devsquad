@@ -1,6 +1,6 @@
 {
   "name": "devsquad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Engineering Manager that coordinates AI coding agents through enforced delegation",
   "author": {
     "name": "Dikshant Joshi",
@@ -9,5 +9,12 @@
   "repository": "https://github.com/joshidikshant/devsquad",
   "homepage": "https://github.com/joshidikshant/devsquad#readme",
   "license": "MIT",
-  "keywords": ["delegation", "orchestration", "gemini", "codex", "multi-agent", "token-management"]
+  "keywords": [
+    "delegation",
+    "orchestration",
+    "gemini",
+    "codex",
+    "multi-agent",
+    "token-management"
+  ]
 }

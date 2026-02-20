@@ -90,7 +90,7 @@ case "$TOOL_NAME" in
     ;;
   Bash)
     # Detect test-related commands in Bash tool_input.command
-    local bash_command=""
+    bash_command=""
     if command -v jq &>/dev/null; then
       bash_command=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
     else

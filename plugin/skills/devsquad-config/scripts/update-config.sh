@@ -47,21 +47,20 @@ if [[ ! -f "$config_file" ]]; then
   exit 1
 fi
 
-# Validate key exists in config (schema-driven approach)
-if ! jq -e ".${key}" "$config_file" >/dev/null 2>&1; then
-  # Try nested key (e.g., preferences.gemini_word_limit or default_routes.research)
-  nested_key=$(echo "$key" | sed 's/\./"]["/'g)
-  if ! jq -e ".[\"${nested_key}\"]" "$config_file" >/dev/null 2>&1; then
-    echo "Error: Unknown config key: ${key}"
-    echo "Valid keys can be found by running: /devsquad:config"
-    exit 1
-  fi
+# Build jq path expression from dotted key (e.g., "preferences.gemini_word_limit" -> ".preferences.gemini_word_limit")
+jq_path=".${key}"
+
+# Validate key exists in config
+if ! jq -e "$jq_path" "$config_file" >/dev/null 2>&1; then
+  echo "Error: Unknown config key: ${key}"
+  echo "Valid keys can be found by running: /devsquad:config"
+  exit 1
 fi
 
 # Determine value type from existing config
-value_type=$(jq -r ".${key} // .[\"$(echo "$key" | sed 's/\./"]["/'g)\"] | type" "$config_file")
+value_type=$(jq -r "$jq_path | type" "$config_file")
 
-# Validate value based on type
+# Validate value based on type and key-specific constraints
 case "$value_type" in
   number)
     if ! [[ "$value" =~ ^[0-9]+$ ]]; then
@@ -76,7 +75,6 @@ case "$value_type" in
     fi
     ;;
   string)
-    # Additional validation for specific keys with constrained values
     case "$key" in
       enforcement_mode)
         if [[ "$value" != "advisory" && "$value" != "strict" ]]; then
@@ -97,18 +95,12 @@ esac
 # Update config atomically using jq
 temp_file="${config_file}.tmp.$$"
 
-if [[ "$value_type" == "number" ]]; then
-  # Update as number (no quotes)
-  jq "${jq_path} = ${value}" "$config_file" > "$temp_file"
-elif [[ "$value_type" == "boolean" ]]; then
-  # Update as boolean (no quotes)
-  jq "${jq_path} = ${value}" "$config_file" > "$temp_file"
+if [[ "$value_type" == "number" || "$value_type" == "boolean" ]]; then
+  jq "$jq_path = ${value}" "$config_file" > "$temp_file"
 else
-  # Update as string (with quotes)
-  jq "${jq_path} = \"${value}\"" "$config_file" > "$temp_file"
+  jq "$jq_path = \"${value}\"" "$config_file" > "$temp_file"
 fi
 
-# Atomic move
 mv "$temp_file" "$config_file"
 
 echo "Updated ${key} to ${value}"

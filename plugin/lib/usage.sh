@@ -121,11 +121,6 @@ calculate_zone() {
   local input_tokens="${1:-0}"
   local output_tokens="${2:-0}"
 
-  # Zone based on daily output token volume
-  # These thresholds reflect typical daily usage intensity:
-  # - green: light usage day (<100K output tokens)
-  # - yellow: moderate-heavy usage (100K-200K output tokens)
-  # - red: very heavy usage (>200K output tokens)
   if [[ $output_tokens -lt 100000 ]]; then
     echo "green"
   elif [[ $output_tokens -lt 200000 ]]; then
@@ -157,33 +152,23 @@ get_usage_summary() {
     local zone
     zone=$(calculate_zone "$input_tokens" "$output_tokens")
 
-    # Count Gemini invocations and sum chars/tokens
-    local gemini_count=0
-    local gemini_total=0
-    local gemini_input=0
-    if [[ -f "${usage_dir}/gemini.json" ]]; then
-      gemini_count=$(jq 'length' "${usage_dir}/gemini.json" 2>/dev/null || echo "0")
-      gemini_total=$(jq '[.[].response_chars] | add // 0' "${usage_dir}/gemini.json" 2>/dev/null || echo "0")
-      gemini_input=$(jq '[.[].prompt_chars] | add // 0 | . / 4 | floor' "${usage_dir}/gemini.json" 2>/dev/null || echo "0")
-    elif [[ -f "${usage_dir}/gemini.jsonl" ]]; then
-      gemini_count=$(wc -l < "${usage_dir}/gemini.jsonl" 2>/dev/null | tr -d ' ' || echo "0")
-      gemini_total=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/response_chars/){print $(i+1)}}}' "${usage_dir}/gemini.jsonl" 2>/dev/null | awk '{s+=$1}END{print s+0}')
-      gemini_input=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/prompt_chars/){print $(i+1)}}}' "${usage_dir}/gemini.jsonl" 2>/dev/null | awk '{s+=$1}END{print int(s/4)}')
-    fi
+    # Read agent usage stats from JSON or JSONL files
+    local gemini_count=0 gemini_total=0 gemini_input=0
+    local codex_count=0 codex_total=0 codex_input=0
 
-    # Count Codex invocations and sum chars/tokens
-    local codex_count=0
-    local codex_total=0
-    local codex_input=0
-    if [[ -f "${usage_dir}/codex.json" ]]; then
-      codex_count=$(jq 'length' "${usage_dir}/codex.json" 2>/dev/null || echo "0")
-      codex_total=$(jq '[.[].response_chars] | add // 0' "${usage_dir}/codex.json" 2>/dev/null || echo "0")
-      codex_input=$(jq '[.[].prompt_chars] | add // 0 | . / 4 | floor' "${usage_dir}/codex.json" 2>/dev/null || echo "0")
-    elif [[ -f "${usage_dir}/codex.jsonl" ]]; then
-      codex_count=$(wc -l < "${usage_dir}/codex.jsonl" 2>/dev/null | tr -d ' ' || echo "0")
-      codex_total=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/response_chars/){print $(i+1)}}}' "${usage_dir}/codex.jsonl" 2>/dev/null | awk '{s+=$1}END{print s+0}')
-      codex_input=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/prompt_chars/){print $(i+1)}}}' "${usage_dir}/codex.jsonl" 2>/dev/null | awk '{s+=$1}END{print int(s/4)}')
-    fi
+    for _agent in gemini codex; do
+      local _count=0 _total=0 _input=0
+      if [[ -f "${usage_dir}/${_agent}.json" ]]; then
+        _count=$(jq 'length' "${usage_dir}/${_agent}.json" 2>/dev/null || echo "0")
+        _total=$(jq '[.[].response_chars] | add // 0' "${usage_dir}/${_agent}.json" 2>/dev/null || echo "0")
+        _input=$(jq '[.[].prompt_chars] | add // 0 | . / 4 | floor' "${usage_dir}/${_agent}.json" 2>/dev/null || echo "0")
+      elif [[ -f "${usage_dir}/${_agent}.jsonl" ]]; then
+        _count=$(wc -l < "${usage_dir}/${_agent}.jsonl" 2>/dev/null | tr -d ' ' || echo "0")
+        _total=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/response_chars/){print $(i+1)}}}' "${usage_dir}/${_agent}.jsonl" 2>/dev/null | awk '{s+=$1}END{print s+0}')
+        _input=$(awk -F'[,:}]' '{for(i=1;i<=NF;i++){if($i~/prompt_chars/){print $(i+1)}}}' "${usage_dir}/${_agent}.jsonl" 2>/dev/null | awk '{s+=$1}END{print int(s/4)}')
+      fi
+      eval "${_agent}_count=\$_count; ${_agent}_total=\$_total; ${_agent}_input=\$_input"
+    done
 
     # Build JSON summary
     cat <<USAGE_JSON
@@ -281,18 +266,13 @@ read_capacity_cache() {
   fi
 
   # Check staleness (older than CAPACITY_STALE_MINUTES)
-  local file_age_seconds
-  if [[ "$(uname)" == "Darwin" ]]; then
-    file_age_seconds=$(( $(date +%s) - $(stat -f%m "$cache_file") ))
-  else
-    file_age_seconds=$(( $(date +%s) - $(stat -c%Y "$cache_file") ))
-  fi
+  local file_mtime
+  file_mtime=$(stat -f%m "$cache_file" 2>/dev/null || stat -c%Y "$cache_file" 2>/dev/null || echo "0")
+  local file_age_seconds=$(( $(date +%s) - file_mtime ))
   local stale_threshold=$(( CAPACITY_STALE_MINUTES * 60 ))
 
   local is_stale="false"
-  if [[ $file_age_seconds -gt $stale_threshold ]]; then
-    is_stale="true"
-  fi
+  [[ $file_age_seconds -gt $stale_threshold ]] && is_stale="true"
 
   if command -v jq &>/dev/null; then
     jq --argjson stale "$is_stale" --argjson age "$file_age_seconds" \

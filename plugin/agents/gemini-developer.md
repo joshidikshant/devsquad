@@ -17,6 +17,11 @@ description: |
   User: "Generate CRUD endpoints for the products model"
   Agent: References @src/models/product.ts @src/routes/ for patterns, generates endpoints, saves files.
   </example>
+capabilities:
+  - Generate code with full codebase awareness via 1M context
+  - Implement features following existing project patterns
+  - Refactor code across multiple files
+  - Write boilerplate grounded in real codebase context
 model: sonnet
 color: green
 tools:

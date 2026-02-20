@@ -54,9 +54,10 @@ route_task() {
   fi
 
   # Step 3: Resolve config value + category to agent name, with hardcoded fallbacks
+  local resolved
   case "$category" in
     research)
-      local resolved="${config_agent:-gemini}"
+      resolved="${config_agent:-gemini}"
       if [[ "$resolved" == "gemini" ]]; then
         agent="gemini-researcher"
         command="@gemini-researcher \"${task_desc}. Under 500 words.\""
@@ -66,7 +67,7 @@ route_task() {
       fi
       ;;
     reading)
-      local resolved="${config_agent:-gemini}"
+      resolved="${config_agent:-gemini}"
       if [[ "$resolved" == "gemini" ]]; then
         agent="gemini-reader"
         command="@gemini-reader \"Analyze and summarize: ${task_desc}\""
@@ -76,7 +77,7 @@ route_task() {
       fi
       ;;
     testing)
-      local resolved="${config_agent:-codex}"
+      resolved="${config_agent:-codex}"
       if [[ "$resolved" == "codex" ]]; then
         agent="codex-tester"
         command="@codex-tester \"${task_desc}\""
@@ -90,7 +91,7 @@ route_task() {
       fi
       ;;
     development)
-      local resolved="${config_agent:-gemini}"
+      resolved="${config_agent:-gemini}"
       if [[ "$resolved" == "gemini" ]]; then
         agent="gemini-developer"
         command="@gemini-developer \"${task_desc}\""
@@ -104,7 +105,7 @@ route_task() {
       fi
       ;;
     code_generation)
-      local resolved="${config_agent:-codex}"
+      resolved="${config_agent:-codex}"
       if [[ "$resolved" == "codex" ]]; then
         agent="codex-developer"
         command="@codex-developer \"${task_desc}. Under 50 lines.\""
@@ -117,8 +118,7 @@ route_task() {
         agent="self"; command=""; reason="Code generation routed to self per config."
       fi
       ;;
-    synthesis|*)
-      local resolved="${config_agent:-self}"
+    *)
       agent="self"
       command=""
       reason="Synthesis and integration tasks require Claude's judgment -- handle directly."

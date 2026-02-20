@@ -17,6 +17,11 @@ description: |
   User: "Find untested edge cases in the validation logic"
   Agent: Passes validators and existing tests to Gemini, receives list of edge cases needing coverage.
   </example>
+capabilities:
+  - Analyze source and existing tests for coverage gaps
+  - Generate comprehensive tests with full codebase context
+  - Design integration test strategies
+  - Identify untested edge cases in complex business logic
 model: sonnet
 color: yellow
 tools:
