@@ -1,6 +1,7 @@
 ---
 name: capacity
 description: Report current CLI usage percentages for capacity-aware delegation
+allowed-tools: ["Bash", "Skill", "AskUserQuestion"]
 ---
 
 # DevSquad Capacity Report

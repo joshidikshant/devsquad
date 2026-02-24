@@ -4,7 +4,6 @@ description: Run DevSquad onboarding - detect environment, set preferences, gene
 argument-hint: Optional: [--reset] to start fresh
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Skill"]
 ---
-name: setup
 
 # DevSquad Setup
 

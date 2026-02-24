@@ -23,7 +23,7 @@
   ],
   "PreToolUse": [
     {
-      "matcher": "Read|WebSearch",
+      "matcher": "Read|WebSearch|Bash",
       "hooks": [
         {
           "type": "command",

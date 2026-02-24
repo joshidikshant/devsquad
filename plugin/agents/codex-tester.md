@@ -23,11 +23,6 @@ description: |
   assistant: "I'll use the codex-tester agent to draft the test infrastructure."
   <commentary>Test fixtures and mocks are boilerplate that Codex handles efficiently.</commentary>
   </example>
-capabilities:
-  - Generate unit tests for well-defined functions and modules
-  - Create test fixtures, mocks, and scaffolding
-  - Write edge case and error condition tests
-  - Draft tests matching existing framework and style conventions
 model: inherit
 color: red
 tools:
@@ -37,6 +32,13 @@ tools:
   - Glob
   - Grep
 ---
+
+## Capabilities
+
+- Generate unit tests for well-defined functions and modules
+- Create test fixtures, mocks, and scaffolding
+- Write edge case and error condition tests
+- Draft tests matching existing framework and style conventions
 
 # Codex Tester Agent
 

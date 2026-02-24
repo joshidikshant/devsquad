@@ -19,8 +19,8 @@ Use this skill when the user:
 ## Invocation
 
 ```bash
-bash plugin/skills/workflow-orchestration/scripts/run-workflow.sh \
-  --workflow plugin/skills/workflow-orchestration/templates/feature-workflow.json \
+bash "${CLAUDE_PLUGIN_ROOT}/skills/workflow-orchestration/scripts/run-workflow.sh" \
+  --workflow "${CLAUDE_PLUGIN_ROOT}/skills/workflow-orchestration/templates/feature-workflow.json" \
   [--dry-run] \
   [--skip-gates]
 ```
