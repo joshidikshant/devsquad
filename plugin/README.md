@@ -22,7 +22,7 @@ DevSquad transforms Claude into an Engineering Manager that preserves your 200K 
 ### Option 1: Claude Code Plugin Directory
 ```bash
 # Copy to your plugins directory
-cp -r production/plugin ~/.claude/plugins/devsquad
+cp -r plugin ~/.claude/plugins/devsquad
 
 # Restart Claude Code
 ```
@@ -31,7 +31,7 @@ cp -r production/plugin ~/.claude/plugins/devsquad
 ```bash
 # In your project directory
 mkdir -p .claude-plugin
-cp -r production/plugin/.claude-plugin/* .claude-plugin/
+cp -r plugin/.claude-plugin/* .claude-plugin/
 ```
 
 ## Prerequisites
@@ -85,6 +85,10 @@ Shows:
 | `/devsquad:setup` | Initial onboarding and configuration |
 | `/devsquad:status` | View squad health and token usage |
 | `/devsquad:config` | View or edit delegation preferences |
+| `/devsquad:capacity` | Report CLI usage percentages for capacity-aware delegation |
+| `/devsquad:generate` | Generate a new DevSquad skill from a natural language description |
+| `/devsquad:git-health` | Scan repo for health issues (broken symlinks, orphaned branches, uncommitted changes) |
+| `/devsquad:workflow` | Run a multi-step workflow from a JSON definition file |
 
 ## Agents
 
@@ -195,7 +199,7 @@ rm -rf .devsquad/
 
 ### Project Structure
 ```
-production/plugin/
+plugin/
 ├── .claude-plugin/
 │   └── plugin.json          # Plugin manifest
 ├── commands/                 # Slash commands
@@ -247,7 +251,13 @@ Dikshant Joshi
 
 ## Version History
 
-### v0.1.0 (Current)
+### v0.2.0 (Current)
+- Model config and plugin structure fixes
+- Code simplification across hooks and lib scripts
+- Additional commands: capacity, generate, git-health, workflow
+- Workflow orchestration skill with permission gates and auto-commits
+
+### v0.1.0
 - Initial release
 - Bug fixes:
   - Fixed integer division in compliance calculation

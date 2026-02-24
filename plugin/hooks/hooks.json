@@ -1,6 +1,7 @@
 {
   "SessionStart": [
     {
+      "matcher": "",
       "hooks": [
         {
           "type": "command",
@@ -12,6 +13,7 @@
   ],
   "PreCompact": [
     {
+      "matcher": "",
       "hooks": [
         {
           "type": "command",
@@ -35,6 +37,7 @@
   ],
   "Stop": [
     {
+      "matcher": "",
       "hooks": [
         {
           "type": "command",

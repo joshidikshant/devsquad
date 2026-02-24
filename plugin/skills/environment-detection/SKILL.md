@@ -1,7 +1,7 @@
 ---
 name: environment-detection
 description: This skill should be used when the user asks to "detect environment", "check what tools are available", "run setup", "scan for plugins", or when DevSquad needs to know which AI CLIs and plugins are installed. Provides environment scanning, CLI detection, and plugin discovery.
-version: 0.1.0
+version: 1.0.0
 ---
 
 # Environment Detection Skill
@@ -118,7 +118,7 @@ When specific tools are missing, apply these degradation strategies:
 - Research and reading tasks that would normally be delegated to Gemini stay with Claude. This increases Claude's token consumption since Gemini has a 1M context window versus Claude's 200K.
 - Codebase exploration tasks can be redirected to subagents (using Haiku model) if available, which provides partial mitigation.
 - Web search capability is lost entirely since DevSquad routes all web searches through Gemini.
-- Suggest the user install Gemini CLI: `npm install -g @anthropic/gemini-cli` or check Gemini documentation for installation instructions.
+- Suggest the user install Gemini CLI: `npm install -g @google/gemini-cli` or check Gemini documentation for installation instructions.
 
 **No Codex installed:**
 - Code generation and boilerplate tasks stay with Claude instead of being delegated to Codex.

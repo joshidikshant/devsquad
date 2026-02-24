@@ -1,7 +1,7 @@
 ---
 name: onboarding
 description: This skill should be used when the user runs "/devsquad:setup", asks to "configure devsquad", "set up delegation", "change enforcement mode", or "update agent preferences". Guides through environment detection, preference capture, and config generation.
-version: 0.1.0
+version: 1.0.0
 ---
 
 # DevSquad Onboarding
