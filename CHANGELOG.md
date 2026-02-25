@@ -2,7 +2,9 @@
 
 All notable changes to DevSquad are documented here.
 
-## [0.2.0] — 2026-02-20
+> **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
+
+## [0.4.0] — 2026-02-20
 
 ### Added
 - **Model selection for Gemini and Codex**: Wrappers now read `gemini_model` and `codex_model` from `.devsquad/config.json` and pass `-m <model>` to both CLIs. Defaults to `gemini-3-pro` and `gpt-5.3-codex`. Configurable per-project via `/devsquad:config gemini_model=<name>`
@@ -28,7 +30,7 @@ All notable changes to DevSquad are documented here.
 - **`run-workflow.sh`**: Extracted `_update_workflow_state()` and `_expand_vars()` helpers, eliminating 3 copy-paste blocks each
 - **Agent frontmatter**: Added `capabilities:` list to all 6 agent definitions for better auto-discovery alignment
 
-## [2.0.0] — 2026-02-19
+## [0.3.0] — 2026-02-19
 
 ### Added
 - **Delegation Advisor**: Hook fires when Claude reads 3+ files in a session — suggests Gemini delegation with estimated token savings (per-file and cumulative)
@@ -43,7 +45,7 @@ All notable changes to DevSquad are documented here.
 - `workflow_validate` now reads `total_issues` (integer) from `git-health --json` instead of non-existent `.status` field — post-workflow validation no longer always reports failure
 - `feature-workflow.json` step paths use `$PLUGIN_ROOT`-absolute references instead of CWD-relative paths — workflow runs correctly from any invocation directory
 
-## [1.1.0] — 2026-02-12
+## [0.2.0] — 2026-02-12
 
 ### Fixed
 - **Control-plane truthfulness**: Config values (`default_routes`, `gemini_word_limit`, `codex_line_limit`) now control runtime behavior
@@ -60,7 +62,7 @@ All notable changes to DevSquad are documented here.
 - **Failure telemetry**: Failed invocations now logged with input size for ROI tracking
 - **Codex tester routing**: Bash test commands intercepted and routed to codex-tester
 
-## [1.0.0] — 2026-02-11
+## [0.1.0] — 2026-02-11
 
 ### Added
 - **Plugin skeleton**: `.claude-plugin/plugin.json` manifest, portable architecture with `${CLAUDE_PLUGIN_ROOT}`

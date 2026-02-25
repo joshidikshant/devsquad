@@ -23,6 +23,11 @@ description: |
   assistant: "I'll use the codex-developer agent to generate the handler."
   <commentary>Well-defined implementation tasks with clear patterns fit Codex.</commentary>
   </example>
+capabilities:
+  - Draft boilerplate and standard implementation patterns quickly
+  - Generate utility functions, middleware, and CRUD endpoints
+  - Produce self-contained prototypes without codebase context
+  - Save generated code and validate syntax
 model: inherit
 color: magenta
 tools:

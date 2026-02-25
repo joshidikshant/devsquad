@@ -1,7 +1,7 @@
 ---
 name: status
 description: Show squad health, token usage, delegation stats, and budget zone
-argument-hint: Optional: [--json] for machine-readable output
+argument-hint: "Optional: [--json] for machine-readable output"
 allowed-tools: ["Read", "Bash", "Skill"]
 ---
 

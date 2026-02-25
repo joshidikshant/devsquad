@@ -1,7 +1,7 @@
 ---
 name: setup
 description: Run DevSquad onboarding - detect environment, set preferences, generate config
-argument-hint: Optional: [--reset] to start fresh
+argument-hint: "Optional: [--reset] to start fresh"
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Skill"]
 ---
 
