@@ -49,7 +49,7 @@ After 25+ sessions of Claude ignoring delegation rules, burning context, and req
 ## Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI)
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli) — `npm install -g @anthropic-ai/gemini-cli` (optional, graceful degradation)
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli) — `npm install -g @google/gemini-cli` (optional, graceful degradation)
 - [Codex CLI](https://github.com/openai/codex) — `npm install -g @openai/codex` (optional, graceful degradation)
 - `jq` — for JSON processing (`brew install jq` on macOS)
 

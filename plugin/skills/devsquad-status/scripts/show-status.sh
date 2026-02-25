@@ -11,8 +11,8 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 source "${PLUGIN_ROOT}/lib/state.sh"
 source "${PLUGIN_ROOT}/lib/usage.sh"
 
-# Initialize state directory
-init_state_dir
+# Initialize state directory (capture output to avoid polluting stdout / --json mode)
+STATE_DIR=$(init_state_dir)
 
 # Get usage summary JSON
 usage_json=$(get_usage_summary)

@@ -2,7 +2,7 @@
 
 All notable changes to DevSquad are documented here.
 
-## [2.1.0] — 2026-02-20
+## [0.2.0] — 2026-02-20
 
 ### Added
 - **Model selection for Gemini and Codex**: Wrappers now read `gemini_model` and `codex_model` from `.devsquad/config.json` and pass `-m <model>` to both CLIs. Defaults to `gemini-3-pro` and `gpt-5.3-codex`. Configurable per-project via `/devsquad:config gemini_model=<name>`

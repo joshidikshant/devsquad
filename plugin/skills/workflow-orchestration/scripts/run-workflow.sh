@@ -126,7 +126,9 @@ for i in $(seq 0 $((STEP_COUNT - 1))); do
   STEP_COMMIT_MSG=$(jq -r ".steps[$i].commit_message // \"\"" "$WORKFLOW_FILE")
 
   # Expand env vars in args and commit message safely (no eval)
-  export WORKFLOW_NAME STEP_ID
+  export WORKFLOW_NAME STEP_ID PLUGIN_ROOT
+  # Also export common template vars if present in environment
+  export FEATURE_NAME="${FEATURE_NAME:-}" FEATURE_DESCRIPTION="${FEATURE_DESCRIPTION:-}"
   _expand_vars() {
     if command -v envsubst &>/dev/null; then echo "$1" | envsubst
     elif command -v perl &>/dev/null; then echo "$1" | perl -pe 's/\$\{?(\w+)\}?/defined $ENV{$1} ? $ENV{$1} : $&/ge'
@@ -162,10 +164,13 @@ for i in $(seq 0 $((STEP_COUNT - 1))); do
     continue
   fi
 
-  # Execute step
-  STEP_EXIT=0
-  if ! ${STEP_SKILL} ${STEP_ARGS} 2>&1; then
-    STEP_EXIT=$?
+  # Execute step — capture exit code without using `!` (which resets $? to 0/1)
+  set +e
+  eval "${STEP_SKILL} ${STEP_ARGS}" 2>&1
+  STEP_EXIT=$?
+  set -e
+
+  if [[ "$STEP_EXIT" -ne 0 ]]; then
     echo "  ERROR: Step '${STEP_ID}' failed (exit ${STEP_EXIT})." >&2
     WORKFLOW_FAILED_STEPS+=("${STEP_ID}:failed")
 

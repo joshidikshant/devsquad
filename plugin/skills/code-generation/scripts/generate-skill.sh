@@ -139,6 +139,7 @@ source \"\${PLUGIN_ROOT}/lib/state.sh\"
 
 === FILE: commands/${SKILL_NAME}.md ===
 ---
+name: ${SKILL_NAME}
 description: [one-line command description]
 argument-hint: \"[argument hint]\"
 allowed-tools: [\"Read\", \"Write\", \"Bash\", \"Skill\"]
@@ -267,7 +268,8 @@ while true; do
   printf "Accept draft and write files? [y/N/e] (y=yes, n=abort, e=edit/feedback): "
   read -r REPLY </dev/tty
 
-  case "${REPLY,,}" in
+  REPLY_LOWER=$(printf '%s' "$REPLY" | tr '[:upper:]' '[:lower:]')
+  case "$REPLY_LOWER" in
     y|yes)
       echo ""
       echo "[4/4] Writing skill files..."
@@ -365,6 +367,7 @@ source \"\${PLUGIN_ROOT}/lib/state.sh\"
 
 === FILE: commands/${SKILL_NAME}.md ===
 ---
+name: ${SKILL_NAME}
 description: [one-line command description]
 argument-hint: \"[argument hint]\"
 allowed-tools: [\"Read\", \"Write\", \"Bash\", \"Skill\"]

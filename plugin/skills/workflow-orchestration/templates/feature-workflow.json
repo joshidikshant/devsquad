@@ -30,7 +30,7 @@
     {
       "id": "cleanup-staging",
       "skill": "bash",
-      "args": "rm -f .devsquad/staging/*.tmp 2>/dev/null || true",
+      "args": "-c \"rm -f .devsquad/staging/*.tmp 2>/dev/null || true\"",
       "destructive": true,
       "checkpoint": true,
       "commit_message": "chore($WORKFLOW_NAME): cleanup staging files after $STEP_ID"

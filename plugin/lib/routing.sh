@@ -62,6 +62,10 @@ route_task() {
         agent="gemini-researcher"
         command="@gemini-researcher \"${task_desc}. Under 500 words.\""
         reason="Research task benefits from Gemini's 1M context and web knowledge."
+      elif [[ "$resolved" == "codex" ]]; then
+        agent="codex-developer"
+        command="@codex-developer \"Research and summarize: ${task_desc}. Under 300 words.\""
+        reason="Research routed to Codex per config."
       else
         agent="self"; command=""; reason="Research routed to self per config."
       fi
