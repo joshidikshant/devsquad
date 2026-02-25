@@ -4,7 +4,7 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
-## [0.4.0] — 2026-02-20
+## [0.3.0] — 2026-02-25
 
 ### Added
 - **Model selection for Gemini and Codex**: Wrappers now read `gemini_model` and `codex_model` from `.devsquad/config.json` and pass `-m <model>` to both CLIs. Defaults to `gemini-3-pro` and `gpt-5.3-codex`. Configurable per-project via `/devsquad:config gemini_model=<name>`
@@ -30,7 +30,7 @@ All notable changes to DevSquad are documented here.
 - **`run-workflow.sh`**: Extracted `_update_workflow_state()` and `_expand_vars()` helpers, eliminating 3 copy-paste blocks each
 - **Agent frontmatter**: Added `capabilities:` list to all 6 agent definitions for better auto-discovery alignment
 
-## [0.3.0] — 2026-02-19
+## [0.2.1] — 2026-02-19
 
 ### Added
 - **Delegation Advisor**: Hook fires when Claude reads 3+ files in a session — suggests Gemini delegation with estimated token savings (per-file and cumulative)
