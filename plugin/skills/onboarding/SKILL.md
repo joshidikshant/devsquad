@@ -66,7 +66,31 @@ Present recommendation, ask for explicit consent, show preview before insertion.
 
 See `references/claude-md-logic.md` for evaluation rules and generation commands.
 
-### Step 5: Confirmation
+### Step 5: Verify Hook Registration
+
+Check that the 4 DevSquad hooks are registered in `~/.claude/settings.json`:
+
+```bash
+python3 -c "
+import json, os
+s = json.load(open(os.path.expanduser('~/.claude/settings.json')))
+hooks = s.get('hooks', {})
+for event in ['SessionStart', 'PreToolUse', 'PreCompact', 'Stop']:
+    entries = hooks.get(event, [])
+    found = any('devsquad' in str(h) for e in entries for h in e.get('hooks', []))
+    print(f'{event}: {\"OK\" if found else \"MISSING\"}')
+"
+```
+
+If any are MISSING, inform the user and instruct them to re-run the installer:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/joshidikshant/devsquad/main/install.sh)
+```
+
+Or add them manually by running `install.sh` from the cloned repo.
+
+### Step 6: Confirmation
 
 Display summary of configured settings:
 - Enforcement mode

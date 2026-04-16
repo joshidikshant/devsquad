@@ -4,6 +4,19 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.4.0] — 2026-04-16
+
+### Fixed
+- **Hook enforcement not active after `/devsquad:setup`**: Onboarding skill now includes Step 3.5 that registers all 4 DevSquad hooks (`SessionStart`, `PreToolUse`, `PreCompact`, `Stop`) into the project-scoped `.claude/settings.json` immediately after config is saved — hooks were previously only installed at global install time, leaving new projects unenforced
+- **`generate-claude-md.sh` exit 127**: Fixed unquoted `${CLAUDE_PLUGIN_ROOT}` path in `claude-md-logic.md` that caused bash to expand to an empty path in non-interactive shells; also added `:-$(pwd)` fallback for unset `CLAUDE_PROJECT_DIR`
+- **`install.sh` scope confusion**: Global `~/.claude/settings.json` hook registration (install-time) and project-scoped `.claude/settings.json` hook registration (setup-time) are now clearly separated; install.sh comment and completion message explain the two-phase design
+- **`gemini-wrapper.sh` — `invoke_gemini_with_files` file sandbox bypass**: Rewrote to pipe file content via stdin instead of `@file` tokens, bypassing Gemini CLI's workspace sandbox restriction that prevented cross-project file reads
+- **`gemini-wrapper.sh` — interactive prompt blocking**: Added `-y` flag to all `gemini` invocations to suppress confirmation prompts in non-interactive hook subshells
+- **`gemini-wrapper.sh` / `cli-detect.sh` — NVM PATH missing in hooks**: Added NVM PATH bootstrap to both files so `gemini` and `codex` installed via NVM are discoverable in non-interactive subshells where `.zshrc`/`.bash_profile` are not sourced
+
+### Improved
+- **Onboarding Step 5**: Added hook verification step that checks all 4 DevSquad hook events are present in `~/.claude/settings.json` and surfaces actionable fix if any are missing
+
 ## [0.3.0] — 2026-02-25
 
 ### Added

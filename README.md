@@ -72,7 +72,11 @@ claude plugin marketplace add https://github.com/joshidikshant/devsquad.git
 claude plugin install devsquad@devsquad-marketplace
 ```
 
-After installing, restart Claude Code and run `/devsquad:setup` to complete onboarding.
+After installing, restart Claude Code and run `/devsquad:setup` in each project where you want enforcement active.
+
+> **How hook registration works (two phases):**
+> 1. `install.sh` registers hooks into `~/.claude/settings.json` globally — these are the shared DevSquad hooks available in all sessions.
+> 2. `/devsquad:setup` registers project-scoped hooks into `.claude/settings.json` in your project directory — this is what actually activates enforcement for that project. **You must run `/devsquad:setup` in every project, not just once globally.**
 
 ## Usage
 

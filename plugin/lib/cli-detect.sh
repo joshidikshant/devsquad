@@ -3,6 +3,22 @@
 # Sourced by hooks and other scripts. Do not execute directly.
 set -euo pipefail
 
+# Load NVM if available so gemini/codex installed via NVM are on PATH
+# in non-interactive hook subshells where .zshrc/.bash_profile are not sourced.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck source=/dev/null
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" --no-use 2>/dev/null || true
+# Also add common nvm node bin paths directly as fallback
+if [ -d "$NVM_DIR/versions/node" ]; then
+  for _nvm_node_dir in "$NVM_DIR"/versions/node/*/bin; do
+    case ":${PATH}:" in
+      *":${_nvm_node_dir}:"*) ;;
+      *) export PATH="${_nvm_node_dir}:${PATH}" ;;
+    esac
+  done
+  unset _nvm_node_dir
+fi
+
 detect_cli() {
   command -v "$1" &>/dev/null && echo "true" || echo "false"
 }
