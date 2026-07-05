@@ -3,6 +3,7 @@
   "created": "",
   "updated": "",
   "enforcement_mode": "advisory",
+  "holdout_mode": false,
   "default_routes": {
     "research": "gemini",
     "reading": "gemini",

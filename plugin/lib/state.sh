@@ -73,6 +73,7 @@ ensure_config() {
     write_state "$config_file" '{
   "version": 1,
   "enforcement_mode": "advisory",
+  "holdout_mode": false,
   "default_routes": {
     "research": "gemini",
     "reading": "gemini",
