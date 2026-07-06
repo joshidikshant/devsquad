@@ -171,6 +171,41 @@ MODE=$(get_enforcement_mode)
 # Log the delegation suggestion
 log_delegation "$TOOL_NAME" "$AGENT" "$MODE"
 
+# === Holdout protocol (T3 / decision D1) ===
+# With holdout_mode=true in config, sessions split by session_id hash:
+#   even hash -> control: suppress the suggestion (logged identically above
+#                and in holdout.log, so both arms have the same records)
+#   odd hash  -> treatment: normal advisory/strict behavior
+# Compare arms with lib/holdout-report.sh; reconcile tokens with
+# scripts/holdout-reconcile.sh. Runs BEFORE the advisory back-off cap so
+# both arms' assignments are logged for every suggestion event.
+# When holdout_mode is absent or false, behavior is unchanged (L4).
+HOLDOUT_ENABLED="false"
+CONFIG_FILE="${PROJECT_DIR}/.devsquad/config.json"
+if [[ -f "$CONFIG_FILE" ]]; then
+  if command -v jq &>/dev/null; then
+    HOLDOUT_ENABLED=$(jq -r '.holdout_mode // false' "$CONFIG_FILE" 2>/dev/null)
+  elif grep -q '"holdout_mode"[[:space:]]*:[[:space:]]*true' "$CONFIG_FILE"; then
+    HOLDOUT_ENABLED="true"
+  fi
+fi
+
+if [[ "$HOLDOUT_ENABLED" == "true" ]]; then
+  ASSIGNMENT="treatment"
+  if [[ -n "${SESSION_ID:-}" ]]; then
+    SESSION_HASH=$(printf '%s' "$SESSION_ID" | cksum | cut -d' ' -f1)
+    if [[ $((SESSION_HASH % 2)) -eq 0 ]]; then
+      ASSIGNMENT="control"
+    fi
+  fi
+  HOLDOUT_LOG_DIR="${PROJECT_DIR}/.devsquad/logs"
+  mkdir -p "$HOLDOUT_LOG_DIR"
+  echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | ${SESSION_ID:-unknown} | ${ASSIGNMENT} | ${TOOL_NAME} | ${AGENT} | daily=${DAILY_ZONE} ctx=${CONTEXT_ZONE} | mode=${MODE}" >> "${HOLDOUT_LOG_DIR}/holdout.log"
+  if [[ "$ASSIGNMENT" == "control" ]]; then
+    exit 0
+  fi
+fi
+
 # Advisory back-off: after 3 shown suggestions this session, keep logging but
 # stop injecting repeats — the plugin must not spend context to save context.
 if [[ "$MODE" != "strict" ]]; then

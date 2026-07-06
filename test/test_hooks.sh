@@ -141,6 +141,24 @@ assert_empty "session B unaffected by session A count" "$OUT"
 OUT=$(run_hook "$RA")
 assert_contains "session A crosses its own threshold" "$OUT" "gemini-reader"
 
+# --- Group 8b: holdout protocol (D1) — arm assignment by session_id parity ---
+# cksum parities: "aaab" -> even (control), "aaaa" -> odd (treatment)
+fresh_env
+mkdir -p "$TEST_DIR/.devsquad"
+printf '%s' '{"enforcement_mode":"advisory","holdout_mode":true}' > "$TEST_DIR/.devsquad/config.json"
+OUT=$(run_hook '{"tool_name":"WebSearch","tool_input":{"query":"hq1"},"session_id":"aaab"}')
+assert_empty "holdout control arm suppressed" "$OUT"
+OUT=$(run_hook '{"tool_name":"WebSearch","tool_input":{"query":"hq2"},"session_id":"aaaa"}')
+assert_contains "holdout treatment arm normal" "$OUT" "gemini-researcher"
+HLOG="$TEST_DIR/.devsquad/logs/holdout.log"
+assert_contains "control logged" "$(cat "$HLOG" 2>/dev/null)" "| aaab | control |"
+assert_contains "treatment logged" "$(cat "$HLOG" 2>/dev/null)" "| aaaa | treatment |"
+
+# holdout_mode absent -> behavior unchanged (L4)
+fresh_env
+OUT=$(run_hook '{"tool_name":"WebSearch","tool_input":{"query":"hq3"},"session_id":"aaab"}')
+assert_contains "no holdout config -> suggestion shown" "$OUT" "gemini-researcher"
+
 # --- Group 8: state dir self-gitignore ---
 fresh_env
 init_state
