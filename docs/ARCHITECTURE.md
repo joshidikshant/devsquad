@@ -2,6 +2,63 @@
 
 One page for future maintainers (including future Claude sessions).
 
+## End-to-end flow (v0.8.0)
+
+```mermaid
+flowchart TB
+    U["👤 User task"] --> CL["Claude (session model)<br/>Engineering Manager — synthesis only"]
+    CL -->|"every Read / WebSearch / Bash / Task"| TASK
+
+    subgraph HOOK["PreToolUse hook — runs from source at HEAD"]
+        direction TB
+        TASK{"Task call?"} -->|yes| ACC["acceptance tracking<br/>accepted / declined / unresolved"]
+        TASK -->|no| SIG["signals<br/>context_zone (transcript-measured)<br/>daily_budget_zone (stats)"]
+        SIG --> TRIG{"trigger?<br/>reads > 20 (8 under context pressure)<br/>WebSearch always · Bash test cmds"}
+        TRIG -->|no| PASS["allow silently"]
+        TRIG -->|yes| HOLDQ{"D1 holdout<br/>session-id hash"}
+        HOLDQ -->|"even → CONTROL"| CTRL["suppress + log<br/>holdout.log"]
+        HOLDQ -->|"odd → TREATMENT"| CAPQ{"back-off cap<br/>≤ 3 shown per session"}
+        CAPQ -->|capped| CAPL["log advisory_capped, silent"]
+        CAPQ -->|show| MODEQ{"enforcement_mode"}
+        MODEQ -->|"advisory (default)"| SUG["inject delegation suggestion"]
+        MODEQ -->|"strict + CLI present"| DENY["deny tool call"]
+    end
+
+    SUG -.->|"Claude spawns agent"| GA
+
+    subgraph SHELL["agent shells — model: sonnet, export DEVSQUAD_AGENT, bash -c only"]
+        GA["gemini-reader · gemini-researcher<br/>gemini-tester · gemini-developer"]
+        CA["codex-developer · codex-tester"]
+        KA["grok-researcher · grok-developer"]
+    end
+
+    subgraph ADP["lib/adapter.sh — shared core (D4 contract, 38 conformance assertions)"]
+        CORE["cooldown gate → resolve CLI → resolve model<br/>(agent_models.&lt;agent&gt; &gt; preferences &gt; CLI default)<br/>→ bounded exec (timeout binary or portable watchdog)<br/>→ classify auth BEFORE rate ('migrate' lesson)<br/>→ telemetry + contract check"]
+    end
+
+    GA -->|"gemini-wrapper.sh"| CORE
+    CA -->|"codex-wrapper.sh"| CORE
+    KA -->|"grok-wrapper.sh"| CORE
+
+    CORE --> AGY["agy — Antigravity CLI<br/>Gemini 3.5 Flash · 3.1 Pro<br/>Claude Sonnet/Opus 4.6 · GPT-OSS 120B<br/>+ native --print-timeout"]
+    CORE --> CX["codex — GPT-5.x<br/>(exec -m model)"]
+    CORE --> GK["grok — Grok Build<br/>grok-composer-2.5-fast · grok-build<br/>~2.5 min/call → 240s fuse"]
+
+    subgraph ST[".devsquad/ state — self-gitignored, per project"]
+        L1["usage/*.json<br/>chars in/out per call"]
+        L2["logs/<br/>compliance · contracts · holdout · delegation"]
+        L3["per-session counters<br/>read_count.&lt;sid&gt; · suggest_count.&lt;sid&gt;"]
+    end
+
+    CORE --> ST
+    CTRL --> L2
+    ACC --> L2
+
+    ST --> REC["scripts/holdout-reconcile.sh<br/>joins arms × transcript tokens (2.7 chars/tok)<br/>D1 verdict at n ≥ 20 sessions:<br/>≥25% savings net of overhead · ≤1 extra failure"]
+    REC -->|PASS| V1["invest: strict mode<br/>+ contract enforcement"]
+    REC -->|FAIL| V2["reposition: honest<br/>capacity/budget manager"]
+```
+
 ## Layers
 
 ```
