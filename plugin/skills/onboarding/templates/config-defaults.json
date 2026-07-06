@@ -14,6 +14,7 @@
   "preferences": {
     "gemini_word_limit": 300,
     "codex_line_limit": 50,
+    "grok_word_limit": 300,
     "auto_suggest": true
   },
   "agent_models": {},

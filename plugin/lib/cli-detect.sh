@@ -3,6 +3,15 @@
 # Sourced by hooks and other scripts. Do not execute directly.
 set -euo pipefail
 
+# Ensure grok (installed to ~/.grok/bin) is on PATH in non-interactive
+# hook subshells where .zshrc is not sourced.
+if [ -d "$HOME/.grok/bin" ]; then
+  case ":${PATH}:" in
+    *":$HOME/.grok/bin:"*) ;;
+    *) export PATH="$HOME/.grok/bin:${PATH}" ;;
+  esac
+fi
+
 # Load NVM if available so gemini/codex installed via NVM are on PATH
 # in non-interactive hook subshells where .zshrc/.bash_profile are not sourced.
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
@@ -54,7 +63,7 @@ detect_all_clis() {
   local cli
   printf '{\n'
   local first=true
-  for cli in gemini codex claude; do
+  for cli in gemini codex grok claude; do
     if [[ "$first" == "true" ]]; then first=false; else printf ',\n'; fi
     printf '  "%s": {"available": %s, "path": "%s"}' "$cli" "$(detect_cli "$cli")" "$(detect_cli_path "$cli")"
   done

@@ -231,8 +231,9 @@ get_usage_summary() {
     # Read agent usage stats from JSON or JSONL files
     local gemini_count=0 gemini_total=0 gemini_input=0
     local codex_count=0 codex_total=0 codex_input=0
+    local grok_count=0 grok_total=0 grok_input=0
 
-    for _agent in gemini codex; do
+    for _agent in gemini codex grok; do
       local _count=0 _total=0 _input=0
       if [[ -f "${usage_dir}/${_agent}.json" ]]; then
         _count=$(jq 'length' "${usage_dir}/${_agent}.json" 2>/dev/null || echo "0")
@@ -266,6 +267,11 @@ get_usage_summary() {
     "invocations": ${codex_count},
     "input_tokens": ${codex_input},
     "total_response_chars": ${codex_total}
+  },
+  "grok": {
+    "invocations": ${grok_count},
+    "input_tokens": ${grok_input},
+    "total_response_chars": ${grok_total}
   }
 }
 USAGE_JSON

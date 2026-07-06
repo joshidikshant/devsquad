@@ -4,6 +4,19 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.6.0] — 2026-07-06
+
+### Added — Grok Build integration (3rd CLI; triggers the D4 wrapper contract)
+- **`lib/grok-wrapper.sh`**: `invoke_grok(prompt, word_limit, timeout)` with the shared wrapper contract — RATE_LIMITED/AUTH_ERROR/TIMEOUT/CLI_ERROR prefixes, auth-before-rate classification, cooldown, telemetry, contract logging, per-agent model resolution (`agent_models.<agent>` > `preferences.grok_model` > CLI default via `grok -m`). Catches Grok's exit-0 "Signing in with Grok..." banner as AUTH_ERROR (unauthenticated grok would otherwise record garbage as success)
+- **Agents**: `grok-researcher` (live web/X research) and `grok-developer` (drafts/prototypes), both `model: sonnet` shells
+- **Routing**: `grok` is now a valid `default_routes` target for research, development, code_generation, and testing (defaults unchanged — opt-in via config)
+- **Detection/status**: grok in `detect_all_clis`, SessionStart squad status, `/devsquad:status` activity + availability; `~/.grok/bin` PATH bootstrap for hook subshells; `grok_calls` in session stats; `preferences.grok_word_limit` (default 300)
+- **D4 conformance test** (`test/test_wrapper_contract.sh`): offline contract test over fake CLI binaries that all three wrappers must pass — success/auth/rate/telemetry/classification-order (the 'migrate' trap) plus the grok banner case
+
+### Notes
+- Grok has no native print-timeout flag (unlike agy) — on hosts without `timeout`/`gtimeout`, grok calls are bounded only by the CLI itself
+- Requires one-time `grok login`; unauthenticated state is detected and reported as AUTH_ERROR
+
 ## [0.5.0] — 2026-07-06
 
 ### Breaking / Migration

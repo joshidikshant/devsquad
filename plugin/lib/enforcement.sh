@@ -222,6 +222,7 @@ check_agent_cli_available() {
   case "$agent" in
     gemini*) command -v "agy" &>/dev/null || command -v "antigravity" &>/dev/null ;;
     codex*)  command -v "codex" &>/dev/null ;;
+    grok*)   command -v "grok" &>/dev/null ;;
     *)       return 1 ;;
   esac
 }

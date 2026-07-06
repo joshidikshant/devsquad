@@ -70,3 +70,24 @@ values (no error — hence exact-name validation in `/devsquad:config`), and
 one wrapper call hung past 3 minutes before `--print-timeout` was added to
 every invocation. Change one tier at a time; judge by contracts.log
 violation rate, acceptance rate, and holdout outcomes.
+
+---
+
+## #3 — 2026-07-06 — Grok added as a routing target (defaults unchanged)
+
+Grok Build CLI (`grok`, v0.2.11, ~/.grok/bin) joins the squad as the third
+external CLI — the D4 trigger, so the shared wrapper contract is now
+enforced by `test/test_wrapper_contract.sh` across all three wrappers.
+
+`default_routes` values now accept `grok`:
+- `research=grok` → grok-researcher (live web/X search — Grok's edge over
+  Gemini for current-events/sentiment; Gemini keeps the 1M-context edge for
+  codebase reading, which is why `reading` remains gemini|self only)
+- `development=grok` / `code_generation=grok` / `testing=grok` → grok-developer
+
+**Defaults are unchanged** (research/reading→gemini, code_generation/testing→
+codex): adding a third backend is capacity and capability optionality, not a
+default-routing change. Promote grok in a future dated entry only with
+evidence (contracts.log, acceptance, holdout). Grok model per agent:
+`agent_models.grok-researcher` etc.; global: `preferences.grok_model`
+(default model: grok-build; list with `grok models` after `grok login`).

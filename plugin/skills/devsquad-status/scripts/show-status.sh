@@ -34,6 +34,8 @@ if command -v jq &>/dev/null; then
   gemini_chars=$(echo "$usage_json" | jq -r '.gemini.total_response_chars // 0')
   codex_count=$(echo "$usage_json" | jq -r '.codex.invocations // 0')
   codex_chars=$(echo "$usage_json" | jq -r '.codex.total_response_chars // 0')
+  grok_count=$(echo "$usage_json" | jq -r '.grok.invocations // 0')
+  grok_chars=$(echo "$usage_json" | jq -r '.grok.total_response_chars // 0')
 else
   # Fallback: parse manually
   output_tokens=$(echo "$usage_json" | grep -o '"output_tokens":[[:space:]]*[0-9]*' | grep -o '[0-9]*$' || echo "0")
@@ -42,8 +44,10 @@ else
   zone=$(echo "$usage_json" | grep -o '"zone":[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/' || echo "unknown")
   gemini_count=$(echo "$usage_json" | grep -o '"invocations":[[:space:]]*[0-9]*' | head -1 | grep -o '[0-9]*$' || echo "0")
   gemini_chars=$(echo "$usage_json" | grep -o '"total_response_chars":[[:space:]]*[0-9]*' | head -1 | grep -o '[0-9]*$' || echo "0")
-  codex_count=$(echo "$usage_json" | grep -o '"invocations":[[:space:]]*[0-9]*' | tail -1 | grep -o '[0-9]*$' || echo "0")
-  codex_chars=$(echo "$usage_json" | grep -o '"total_response_chars":[[:space:]]*[0-9]*' | tail -1 | grep -o '[0-9]*$' || echo "0")
+  codex_count=$(echo "$usage_json" | grep -o '"invocations":[[:space:]]*[0-9]*' | sed -n '2p' | grep -o '[0-9]*$' || echo "0")
+  codex_chars=$(echo "$usage_json" | grep -o '"total_response_chars":[[:space:]]*[0-9]*' | sed -n '2p' | grep -o '[0-9]*$' || echo "0")
+  grok_count=$(echo "$usage_json" | grep -o '"invocations":[[:space:]]*[0-9]*' | tail -1 | grep -o '[0-9]*$' || echo "0")
+  grok_chars=$(echo "$usage_json" | grep -o '"total_response_chars":[[:space:]]*[0-9]*' | tail -1 | grep -o '[0-9]*$' || echo "0")
 fi
 
 # Calculate percentage of daily budget (200K limit for Red zone)
@@ -127,6 +131,7 @@ if command -v agy &>/dev/null || command -v antigravity &>/dev/null; then
   gemini_available_str="available"
 fi
 codex_available_str=$( command -v codex &>/dev/null && echo "available" || echo "not available" )
+grok_available_str=$( command -v grok &>/dev/null && echo "available" || echo "not available" )
 
 # Format numbers with commas (simple approach for readability)
 format_number() {
@@ -144,6 +149,7 @@ format_number() {
 output_formatted=$(format_number "$output_tokens")
 gemini_chars_formatted=$(format_number "$gemini_chars")
 codex_chars_formatted=$(format_number "$codex_chars")
+grok_chars_formatted=$(format_number "${grok_chars:-0}")
 
 # Read enforcement mode from config
 config_file="${project_dir}/.devsquad/config.json"
@@ -228,6 +234,7 @@ cat <<STATUS
   Claude:  ${output_formatted} output tokens | ${message_count} msgs | ${tool_call_count} tool calls
   Gemini:  ${gemini_count} invocations | ~${gemini_chars_formatted} chars
   Codex:   ${codex_count} invocations | ~${codex_chars_formatted} chars
+  Grok:    ${grok_count:-0} invocations | ~${grok_chars_formatted} chars
 
 💼 Engineering Manager
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -238,6 +245,7 @@ cat <<STATUS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Gemini CLI:  ${gemini_available_str}
   Codex CLI:   ${codex_available_str}
+  Grok CLI:    ${grok_available_str}
 
 🎯 ${recommendation}
 

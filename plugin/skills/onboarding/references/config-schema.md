@@ -76,5 +76,9 @@ Two layers, resolved by the wrappers as: per-agent > global > CLI default.
   name against that list, because **agy silently ignores unknown model names**
   (no error, silent fallback to the session default).
 - Set `DEVSQUAD_SKIP_MODEL_VALIDATION=1` to bypass validation (offline use).
+- Grok: `preferences.grok_model` / `agent_models.grok-*` (list models with
+  `grok models` after `grok login`; the grok CLI reports bad model names
+  itself, so only non-empty is enforced). `default_routes` also accepts
+  `grok` for research/development/code_generation/testing.
 - The Claude shell each agent runs in is separate from this: it is set by
   `model:` in the agent's frontmatter (currently `sonnet` for all six).

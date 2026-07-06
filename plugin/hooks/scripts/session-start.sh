@@ -19,6 +19,7 @@ source "${PLUGIN_ROOT}/lib/usage.sh"
 # Detect CLIs
 GEMINI_AVAIL=$(detect_cli "gemini")
 CODEX_AVAIL=$(detect_cli "codex")
+GROK_AVAIL=$(detect_cli "grok")
 CLAUDE_AVAIL=$(detect_cli "claude")
 JQ_AVAIL=$(check_jq)
 
@@ -103,6 +104,11 @@ if [[ "$CODEX_AVAIL" == "false" ]]; then
 else
   CODEX_STATUS="available"
 fi
+if [[ "$GROK_AVAIL" == "false" ]]; then
+  GROK_STATUS="NOT INSTALLED (see https://grok.com/build)"
+else
+  GROK_STATUS="available"
+fi
 
 # Build context
 RECOVERY_LINES=""
@@ -120,6 +126,7 @@ ${RECOVERY_LINES}
 Squad Status:
 - Gemini CLI: ${GEMINI_STATUS}
 - Codex CLI: ${CODEX_STATUS}
+- Grok CLI: ${GROK_STATUS}
 ${PLUGINS_INFO:+- ${PLUGINS_INFO}}
 
 Commands: /devsquad:setup (onboarding), /devsquad:status (health check), /devsquad:config (preferences)

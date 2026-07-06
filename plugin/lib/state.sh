@@ -93,6 +93,7 @@ ensure_config() {
   "preferences": {
     "gemini_word_limit": 300,
     "codex_line_limit": 50,
+    "grok_word_limit": 300,
     "auto_suggest": true
   },
   "agent_models": {}
@@ -117,6 +118,7 @@ init_session_state() {
   \"stats\": {
     \"gemini_calls\": 0,
     \"codex_calls\": 0,
+    \"grok_calls\": 0,
     \"self_calls\": 0
   }
 }"
@@ -148,7 +150,8 @@ update_agent_stats() {
   fi
 }
 
-# Record rate limit cooldown for an agent
+# Record rate limit cooldown for an agent. Creates the state dir if missing —
+# callers run under set -e and this may be the first state write of a session.
 record_rate_limit() {
   local state_dir="$1"
   local agent_name="$2"
@@ -157,6 +160,7 @@ record_rate_limit() {
   current_epoch=$(date +%s)
   local cooldown_until=$((current_epoch + 120))
 
+  mkdir -p "$state_dir" 2>/dev/null || true
   echo "$cooldown_until" > "$cooldown_file"
 }
 

@@ -26,9 +26,9 @@ resolve() { # $1=wrapper $2=fn $3=agent-or-empty
   bash -c "${export_line} source '$PLUGIN_ROOT/lib/$1'; $2" 2>/dev/null
 }
 
-# --- Group 1: gemini resolution precedence ---
+# --- Group 1: resolution precedence across all three wrappers ---
 T=$(mktemp -d); mkdir -p "$T/.devsquad"
-printf '%s' '{"preferences":{"gemini_model":"G-GLOBAL","codex_model":"C-GLOBAL"},"agent_models":{"gemini-reader":"G-READER","codex-tester":"C-TESTER"}}' > "$T/.devsquad/config.json"
+printf '%s' '{"preferences":{"gemini_model":"G-GLOBAL","codex_model":"C-GLOBAL","grok_model":"K-GLOBAL"},"agent_models":{"gemini-reader":"G-READER","codex-tester":"C-TESTER","grok-researcher":"K-RES"}}' > "$T/.devsquad/config.json"
 export CLAUDE_PROJECT_DIR="$T"
 
 assert_eq "agent override wins"        "$(resolve gemini-wrapper.sh _resolve_gemini_model gemini-reader)"     "G-READER"
@@ -36,6 +36,8 @@ assert_eq "no agent entry -> global"   "$(resolve gemini-wrapper.sh _resolve_gem
 assert_eq "no DEVSQUAD_AGENT -> global" "$(resolve gemini-wrapper.sh _resolve_gemini_model '')"               "G-GLOBAL"
 assert_eq "codex agent override"       "$(resolve codex-wrapper.sh _resolve_codex_model codex-tester)"        "C-TESTER"
 assert_eq "codex fallback to global"   "$(resolve codex-wrapper.sh _resolve_codex_model codex-developer)"     "C-GLOBAL"
+assert_eq "grok agent override"        "$(resolve grok-wrapper.sh _resolve_grok_model grok-researcher)"       "K-RES"
+assert_eq "grok fallback to global"    "$(resolve grok-wrapper.sh _resolve_grok_model grok-developer)"        "K-GLOBAL"
 
 # --- Group 2: no config -> empty (CLI default) ---
 T2=$(mktemp -d)

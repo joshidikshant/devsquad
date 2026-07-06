@@ -85,7 +85,7 @@ jq_path=$(printf '%s' "$key" | awk -F. '{ for (i = 1; i <= NF; i++) printf ".\"%
 #   be created on first set; configs are not migrated in place.
 if ! jq -e "${jq_path} != null" "$config_file" >/dev/null 2>&1; then
   case "$key" in
-    default_routes.development|holdout_mode|preferences.gemini_model|preferences.codex_model|agent_models.*)
+    default_routes.development|holdout_mode|preferences.gemini_model|preferences.codex_model|preferences.grok_model|agent_models.*)
       : ;; # known later-version key — allow creation below
     *)
       echo "Error: Unknown config key: ${key}"
@@ -121,13 +121,20 @@ case "$value_type" in
         fi
         ;;
       default_routes.*)
-        if [[ "$value" != "gemini" && "$value" != "codex" && "$value" != "self" ]]; then
-          echo "Error: Invalid value for ${key}: ${value}. Expected: gemini|codex|self"
+        if [[ "$value" != "gemini" && "$value" != "codex" && "$value" != "grok" && "$value" != "self" ]]; then
+          echo "Error: Invalid value for ${key}: ${value}. Expected: gemini|codex|grok|self"
           exit 1
         fi
         ;;
-      agent_models.*|preferences.gemini_model)
+      agent_models.gemini-*|preferences.gemini_model)
         _validate_model_name "$value" || exit 1
+        ;;
+      agent_models.*|preferences.grok_model|preferences.codex_model)
+        # grok/codex CLIs surface bad model names themselves; only reject empty
+        if [[ -z "$value" ]]; then
+          echo "Error: model name cannot be empty"
+          exit 1
+        fi
         ;;
     esac
     ;;
@@ -135,8 +142,8 @@ case "$value_type" in
     # Key is being created (known later-version key) — validate by key name
     case "$key" in
       default_routes.*)
-        if [[ "$value" != "gemini" && "$value" != "codex" && "$value" != "self" ]]; then
-          echo "Error: Invalid value for ${key}: ${value}. Expected: gemini|codex|self"
+        if [[ "$value" != "gemini" && "$value" != "codex" && "$value" != "grok" && "$value" != "self" ]]; then
+          echo "Error: Invalid value for ${key}: ${value}. Expected: gemini|codex|grok|self"
           exit 1
         fi
         ;;
@@ -146,8 +153,15 @@ case "$value_type" in
           exit 1
         fi
         ;;
-      agent_models.*|preferences.gemini_model)
+      agent_models.gemini-*|preferences.gemini_model)
         _validate_model_name "$value" || exit 1
+        ;;
+      agent_models.*|preferences.grok_model|preferences.codex_model)
+        # grok/codex CLIs surface bad model names themselves; only reject empty
+        if [[ -z "$value" ]]; then
+          echo "Error: model name cannot be empty"
+          exit 1
+        fi
         ;;
     esac
     ;;

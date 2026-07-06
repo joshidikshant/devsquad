@@ -64,6 +64,12 @@ assert_route "refactor the user service to async" "codex-developer"
 assert_route "write tests for the parser" "gemini-tester"
 assert_route "research graphql subscriptions" "codex-developer"
 
+# --- Group 2b: grok as a config route target ---
+make_env '{"default_routes":{"research":"grok","development":"grok","code_generation":"grok"}}'
+assert_route "research the latest npm supply chain attacks" "grok-researcher"
+assert_route "refactor the queue worker" "grok-developer"
+assert_route "generate a CRUD scaffold" "grok-developer"
+
 # --- Group 3: claude -> self normalization ---
 make_env '{"default_routes":{"reading":"claude"}}'
 assert_route "read the config loader" "self"

@@ -66,6 +66,10 @@ route_task() {
         agent="codex-developer"
         command="@codex-developer \"Research and summarize: ${task_desc}. Under 300 words.\""
         reason="Research routed to Codex per config."
+      elif [[ "$resolved" == "grok" ]]; then
+        agent="grok-researcher"
+        command="@grok-researcher \"${task_desc}. Under 500 words.\""
+        reason="Research via Grok's live web/X search per config."
       else
         agent="self"; command=""; reason="Research routed to self per config."
       fi
@@ -90,6 +94,10 @@ route_task() {
         agent="gemini-tester"
         command="@gemini-tester \"${task_desc}\""
         reason="Test generation with full codebase context via Gemini."
+      elif [[ "$resolved" == "grok" ]]; then
+        agent="grok-developer"
+        command="@grok-developer \"${task_desc}\""
+        reason="Test generation via Grok per config."
       else
         agent="self"; command=""; reason="Testing routed to self per config."
       fi
@@ -104,6 +112,10 @@ route_task() {
         agent="codex-developer"
         command="@codex-developer \"${task_desc}. Under 50 lines.\""
         reason="Code changes via Codex per config."
+      elif [[ "$resolved" == "grok" ]]; then
+        agent="grok-developer"
+        command="@grok-developer \"${task_desc}\""
+        reason="Code changes via Grok per config."
       else
         agent="self"; command=""; reason="Development routed to self per config."
       fi
@@ -118,6 +130,10 @@ route_task() {
         agent="gemini-developer"
         command="@gemini-developer \"${task_desc}\""
         reason="Code generation via Gemini per config."
+      elif [[ "$resolved" == "grok" ]]; then
+        agent="grok-developer"
+        command="@grok-developer \"${task_desc}\""
+        reason="Code generation via Grok per config."
       else
         agent="self"; command=""; reason="Code generation routed to self per config."
       fi
