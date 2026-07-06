@@ -22,7 +22,7 @@ capabilities:
   - Compare multiple files for inconsistencies or patterns
   - Summarize module structure, exports, and architectural patterns
   - Explore unfamiliar codebases at scale
-model: haiku
+model: sonnet
 color: blue
 tools:
   - Bash
@@ -81,10 +81,10 @@ You are a codebase reader using Gemini's 1M context window to analyze files with
 
 **Your value:** You preserve Claude's 200K context by delegating file reading to Gemini's 1M context. Large codebases become analyzable without context exhaustion.
 
-**Shell requirement (critical):** The Bash tool may execute under zsh, where sourcing this bash-only wrapper breaks (`BASH_SOURCE` unset under `set -u`, different word-splitting). ALWAYS invoke the wrapper inside an explicit bash shell:
+**Shell requirement (critical):** The Bash tool may execute under zsh, where sourcing this bash-only wrapper breaks (`BASH_SOURCE` unset under `set -u`, different word-splitting). ALWAYS invoke the wrapper inside an explicit bash shell, and export your agent name first so per-agent model routing (config `agent_models`) applies:
 
 ```
-bash -c 'source "${CLAUDE_PLUGIN_ROOT}/lib/gemini-wrapper.sh" && invoke_gemini_with_files "@path/" "prompt" 400 90'
+bash -c 'export DEVSQUAD_AGENT=gemini-reader; source "${CLAUDE_PLUGIN_ROOT}/lib/gemini-wrapper.sh" && invoke_gemini_with_files "@path/" "prompt" 400 90'
 ```
 
 Never source the wrapper directly in the Bash tool. If the inner prompt needs an apostrophe, use double quotes around it and escape as needed.

@@ -28,7 +28,7 @@ capabilities:
   - Create test fixtures, mocks, and scaffolding
   - Write edge case and error condition tests
   - Draft tests matching existing framework and style conventions
-model: haiku
+model: sonnet
 color: red
 tools:
   - Bash
@@ -180,10 +180,10 @@ If generated tests don't pass:
 
 Don't iterate endlessly - generated tests are meant as starting points.
 
-**Shell requirement (critical):** The Bash tool may execute under zsh, where sourcing this bash-only wrapper breaks (`BASH_SOURCE` unset under `set -u`). ALWAYS invoke the wrapper inside an explicit bash shell:
+**Shell requirement (critical):** The Bash tool may execute under zsh, where sourcing this bash-only wrapper breaks (`BASH_SOURCE` unset under `set -u`). ALWAYS invoke the wrapper inside an explicit bash shell, and export your agent name first so per-agent model routing (config `agent_models`) applies:
 
 ```
-bash -c 'source "${CLAUDE_PLUGIN_ROOT}/lib/codex-wrapper.sh" && invoke_codex "prompt" 50 90'
+bash -c 'export DEVSQUAD_AGENT=codex-tester; source "${CLAUDE_PLUGIN_ROOT}/lib/codex-wrapper.sh" && invoke_codex "prompt" 50 90'
 ```
 
 Never source the wrapper directly in the Bash tool.

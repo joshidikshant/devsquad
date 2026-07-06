@@ -28,7 +28,8 @@ All notable changes to DevSquad are documented here.
 - **EXIT traps** in wrappers guard `${stderr_file:-}` (successful calls could exit non-zero under `set -u`)
 - **`development` route** added to config defaults, `ensure_config`, and schema docs (existed only in routing code)
 - **Read thresholds reconciled** to 20 (green) / 8 (context pressure) — v0.3.0 shipped 40/20, unreleased 0.4.0 had 3/1 which fires on trivial work
-- **Agent shells downgraded to `model: haiku`** (all 6): they are thin CLI dispatchers; a live measurement showed a single sonnet-shell delegation consuming ~14.5K tokens of pure overhead
+- **Per-agent model routing**: new top-level `agent_models` config map — each agent exports `DEVSQUAD_AGENT` and the wrappers resolve per-agent > global > CLI default, passing `agy --model` / `codex exec -m`. Antigravity multiplexes Gemini 3.5 Flash / 3.1 Pro / Claude Sonnet 4.6 / Claude Opus 4.6 / GPT-OSS 120B (`agy models`). `/devsquad:config` validates model names against `agy models` because agy silently ignores unknown names. All agy calls now carry `--print-timeout <timeout>s` (native bound — hosts without timeout/gtimeout previously had NO timeout at all)
+- **Agent shells normalized to `model: sonnet`** (codex agents were `inherit`, i.e. billed at the session model)
 - `.devsquad/` state dirs are now self-gitignoring (no more untracked noise in every project)
 - Agent docs warn that wrappers must run via `bash -c` (Bash tool may execute under zsh, where sourcing bash-only libs breaks)
 

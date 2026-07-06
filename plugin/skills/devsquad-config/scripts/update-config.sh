@@ -47,8 +47,36 @@ if [[ ! -f "$config_file" ]]; then
   exit 1
 fi
 
-# Build jq path expression from dotted key (e.g., "preferences.gemini_word_limit" -> ".preferences.gemini_word_limit")
-jq_path=".${key}"
+# Validate a model name against `agy models` when possible. agy silently
+# ignores unknown --model values, so storing an unverified name would fail
+# silently at delegation time. Set DEVSQUAD_SKIP_MODEL_VALIDATION=1 to bypass
+# (tests, offline use).
+_validate_model_name() {
+  local value="$1"
+  if [[ -z "$value" ]]; then
+    echo "Error: model name cannot be empty"
+    return 1
+  fi
+  if [[ -n "${DEVSQUAD_SKIP_MODEL_VALIDATION:-}" ]] || ! command -v agy &>/dev/null; then
+    return 0
+  fi
+  local models
+  models=$(agy models 2>/dev/null || true)
+  if [[ -z "$models" ]]; then
+    return 0
+  fi
+  if ! printf '%s\n' "$models" | grep -qxF "$value"; then
+    echo "Error: '$value' is not an exact entry of 'agy models'. Valid models:"
+    printf '%s\n' "$models" | sed 's/^/  /'
+    echo "(agy silently ignores unknown models, so unverifiable names are refused)"
+    return 1
+  fi
+  return 0
+}
+
+# Build jq path expression from dotted key with quoted segments so
+# hyphenated keys work (e.g. agent_models.gemini-reader -> ."agent_models"."gemini-reader")
+jq_path=$(printf '%s' "$key" | awk -F. '{ for (i = 1; i <= NF; i++) printf ".\"%s\"", $i }')
 
 # Validate key exists in config. Two subtleties:
 # - `jq -e "$jq_path"` alone exits 1 for keys whose VALUE is false/null,
@@ -57,7 +85,7 @@ jq_path=".${key}"
 #   be created on first set; configs are not migrated in place.
 if ! jq -e "${jq_path} != null" "$config_file" >/dev/null 2>&1; then
   case "$key" in
-    default_routes.development|holdout_mode|preferences.gemini_model|preferences.codex_model)
+    default_routes.development|holdout_mode|preferences.gemini_model|preferences.codex_model|agent_models.*)
       : ;; # known later-version key — allow creation below
     *)
       echo "Error: Unknown config key: ${key}"
@@ -98,6 +126,9 @@ case "$value_type" in
           exit 1
         fi
         ;;
+      agent_models.*|preferences.gemini_model)
+        _validate_model_name "$value" || exit 1
+        ;;
     esac
     ;;
   null)
@@ -114,6 +145,9 @@ case "$value_type" in
           echo "Error: Invalid value for ${key}: ${value}. Expected: true|false"
           exit 1
         fi
+        ;;
+      agent_models.*|preferences.gemini_model)
+        _validate_model_name "$value" || exit 1
         ;;
     esac
     ;;

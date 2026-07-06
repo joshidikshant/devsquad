@@ -16,6 +16,7 @@
     "codex_line_limit": 50,
     "auto_suggest": true
   },
+  "agent_models": {},
   "environment": {
     "gemini_available": false,
     "codex_available": false,

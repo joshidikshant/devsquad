@@ -3,6 +3,25 @@
 # Sourced by agent system prompts. Do not execute directly.
 set -euo pipefail
 
+# Resolve the external model for this invocation:
+#   agent-specific (config agent_models.<DEVSQUAD_AGENT>) >
+#   global (preferences.codex_model) > none (codex default)
+_resolve_codex_model() {
+  local config_file="${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json"
+  if ! command -v jq &>/dev/null || [[ ! -f "$config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  local m=""
+  if [[ -n "${DEVSQUAD_AGENT:-}" ]]; then
+    m=$(jq -r --arg a "$DEVSQUAD_AGENT" '.agent_models[$a] // empty' "$config_file" 2>/dev/null)
+  fi
+  if [[ -z "$m" ]]; then
+    m=$(jq -r '.preferences.codex_model // empty' "$config_file" 2>/dev/null)
+  fi
+  echo "$m"
+}
+
 # Main invocation function for Codex CLI
 # Usage: invoke_codex "prompt" [line_limit] [timeout_secs]
 # Returns 0 on success (stdout contains response), 1 on failure.
@@ -66,12 +85,10 @@ invoke_codex() {
   # Prevent recursive hook firing
   export DEVSQUAD_HOOK_DEPTH=1
 
-  # Optional model override from config (preferences.codex_model),
+  # Model: per-agent (agent_models.<DEVSQUAD_AGENT>) > global > codex default,
   # e.g. gpt-5.3-codex — passed as `codex exec -m <model>`
-  local model_override=""
-  if command -v jq &>/dev/null && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" ]]; then
-    model_override=$(jq -r '.preferences.codex_model // empty' "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" 2>/dev/null)
-  fi
+  local model_override
+  model_override=$(_resolve_codex_model)
   local codex_args=(exec)
   if [[ -n "$model_override" ]]; then
     codex_args+=(-m "$model_override")

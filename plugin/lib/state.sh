@@ -94,7 +94,8 @@ ensure_config() {
     "gemini_word_limit": 300,
     "codex_line_limit": 50,
     "auto_suggest": true
-  }
+  },
+  "agent_models": {}
 }'
   fi
 }

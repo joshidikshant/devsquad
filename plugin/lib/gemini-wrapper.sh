@@ -21,6 +21,29 @@ fi
 # - invoke_gemini(prompt, word_limit, timeout_secs): Execute Gemini CLI with auto word-bound appending, timeout, error handling
 # - invoke_gemini_with_files(files_arg, prompt, word_limit, timeout_secs): Convenience wrapper for @file patterns
 
+# Resolve the external model for this invocation:
+#   agent-specific (config agent_models.<DEVSQUAD_AGENT>) >
+#   global (preferences.gemini_model) >
+#   none (Antigravity session default)
+# Antigravity multiplexes Gemini/Claude/GPT-OSS models — see `agy models`.
+# NOTE: agy silently ignores unknown --model values (no error), which is why
+# update-config validates names against `agy models` at set time.
+_resolve_gemini_model() {
+  local config_file="${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json"
+  if ! command -v jq &>/dev/null || [[ ! -f "$config_file" ]]; then
+    echo ""
+    return 0
+  fi
+  local m=""
+  if [[ -n "${DEVSQUAD_AGENT:-}" ]]; then
+    m=$(jq -r --arg a "$DEVSQUAD_AGENT" '.agent_models[$a] // empty' "$config_file" 2>/dev/null)
+  fi
+  if [[ -z "$m" ]]; then
+    m=$(jq -r '.preferences.gemini_model // empty' "$config_file" 2>/dev/null)
+  fi
+  echo "$m"
+}
+
 # Expand @dir/ references to individual @file references
 # Usage: expand_dir_refs "@src/auth/ @src/models/user.ts @lib/"
 # Directories are expanded recursively for common extensions (.ts, .js, .sh, .py, .go, .rs, .md, .json)
@@ -143,13 +166,13 @@ invoke_gemini() {
     record_usage "gemini" "${#final_prompt}" "0"
     return 1
   fi
-  local cli_args=("--dangerously-skip-permissions" "-p" "$final_prompt" "--output-format" "text")
+  # --print-timeout: agy-native bound (default 5m). Critical on hosts without
+  # a timeout/gtimeout binary, where the wrapper's own timeout arg is inert.
+  local cli_args=("--dangerously-skip-permissions" "-p" "$final_prompt" "--output-format" "text" "--print-timeout" "${timeout_secs}s")
 
-  # Optional model override from config (preferences.gemini_model)
-  local model_override=""
-  if command -v jq &>/dev/null && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" ]]; then
-    model_override=$(jq -r '.preferences.gemini_model // empty' "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" 2>/dev/null)
-  fi
+  # Model: per-agent (agent_models.<DEVSQUAD_AGENT>) > global > CLI default
+  local model_override
+  model_override=$(_resolve_gemini_model)
   if [[ -n "$model_override" ]]; then
     cli_args+=("--model" "$model_override")
   fi
@@ -279,11 +302,11 @@ invoke_gemini_with_files() {
     record_usage "gemini" "$(( ${#file_content} + ${#final_prompt} ))" "0" || true
     return 1
   fi
-  local cli_args=("--dangerously-skip-permissions" "-p" "$final_prompt" "--output-format" "text")
-  local model_override=""
-  if command -v jq &>/dev/null && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" ]]; then
-    model_override=$(jq -r '.preferences.gemini_model // empty' "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" 2>/dev/null)
-  fi
+  # --print-timeout: agy-native bound (default 5m). Critical on hosts without
+  # a timeout/gtimeout binary, where the wrapper's own timeout arg is inert.
+  local cli_args=("--dangerously-skip-permissions" "-p" "$final_prompt" "--output-format" "text" "--print-timeout" "${timeout_secs}s")
+  local model_override
+  model_override=$(_resolve_gemini_model)
   if [[ -n "$model_override" ]]; then
     cli_args+=("--model" "$model_override")
   fi
