@@ -1,25 +1,44 @@
 #!/usr/bin/env bash
-# lib/codex-wrapper.sh -- Codex CLI wrapper for DevSquad agents
+# lib/codex-wrapper.sh -- Codex CLI adapter configuration.
 # Sourced by agent system prompts. Do not execute directly.
+# Shared invocation core lives in lib/adapter.sh (D4 contract).
 set -euo pipefail
 
-# Resolve the external model for this invocation:
-#   agent-specific (config agent_models.<DEVSQUAD_AGENT>) >
-#   global (preferences.codex_model) > none (codex default)
+_CODEX_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${_CODEX_LIB_DIR}/adapter.sh"
+
+# Model: agent-specific (agent_models.<DEVSQUAD_AGENT>) > preferences.codex_model
+# > codex default (e.g. gpt-5.3-codex via `codex exec -m`)
 _resolve_codex_model() {
-  local config_file="${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json"
-  if ! command -v jq &>/dev/null || [[ ! -f "$config_file" ]]; then
-    echo ""
-    return 0
-  fi
-  local m=""
-  if [[ -n "${DEVSQUAD_AGENT:-}" ]]; then
-    m=$(jq -r --arg a "$DEVSQUAD_AGENT" '.agent_models[$a] // empty' "$config_file" 2>/dev/null)
-  fi
-  if [[ -z "$m" ]]; then
-    m=$(jq -r '.preferences.codex_model // empty' "$config_file" 2>/dev/null)
-  fi
-  echo "$m"
+  _adapter_resolve_model "codex_model"
+}
+
+_codex_configure_adapter() {
+  ADAPTER_AGENT="codex"
+  ADAPTER_PREF_MODEL_KEY="codex_model"
+  ADAPTER_AUTH_HINT="Run 'codex auth' to re-authenticate."
+  ADAPTER_FALLBACK="Fallback: Use @gemini-developer for code, @gemini-tester for tests."
+  ADAPTER_MISSING_MSG="Codex CLI not installed. Install: npm i -g @openai/codex"
+  ADAPTER_EXTRA_AUTH_RE=""
+  ADAPTER_STDIN_FILE=""
+  ADAPTER_EXTRA_CHARS_IN=0
+
+  _adapter_resolve_cli() {
+    if command -v codex &>/dev/null; then
+      echo "codex"
+    else
+      echo ""
+    fi
+  }
+
+  _adapter_build_args() {
+    ADAPTER_ARGS=("exec")
+    if [[ -n "$2" ]]; then
+      ADAPTER_ARGS+=("-m" "$2")
+    fi
+    ADAPTER_ARGS+=("$1")
+  }
 }
 
 # Main invocation function for Codex CLI
@@ -28,117 +47,28 @@ _resolve_codex_model() {
 # Error prefixes: RATE_LIMITED, AUTH_ERROR, TIMEOUT, CLI_ERROR
 invoke_codex() {
   local prompt="$1"
-  local caller_limit="$2"
+  local caller_limit="${2:-}"
   local timeout_secs="${3:-90}"
 
-  # Resolve line_limit: caller override > config > hardcoded default
+  # Resolve line_limit: caller override > config > 50; append bound if absent
   local line_limit=""
   if [[ -n "$caller_limit" ]]; then
     line_limit="$caller_limit"
   else
-    local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-    local config_file="${project_dir}/.devsquad/config.json"
+    local config_file="${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json"
     if command -v jq &>/dev/null && [[ -f "$config_file" ]]; then
       line_limit=$(jq -r '.preferences.codex_line_limit // empty' "$config_file" 2>/dev/null)
     fi
     line_limit="${line_limit:-50}"
   fi
 
-  local STATE_DIR="${CLAUDE_PROJECT_DIR:-.}/.devsquad"
-
-  # Source state and usage libraries
-  local SCRIPT_DIR
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  source "${SCRIPT_DIR}/state.sh"
-  source "${SCRIPT_DIR}/usage.sh"
-
-  # Check rate limit cooldown
-  local in_cooldown
-  in_cooldown=$(check_rate_limit "$STATE_DIR" "codex")
-  if [[ "$in_cooldown" == "true" ]]; then
-    echo "RATE_LIMITED: Codex is in cooldown. Fallback: Use @gemini-developer for code, @gemini-tester for tests." >&2
-    update_agent_stats "$STATE_DIR" "codex" "false"
-    record_usage "codex" "${#prompt}" "0"
-    return 1
-  fi
-
-  # Auto-append line bound if not already present
   local final_prompt="$prompt"
-  if [[ "$line_limit" -gt 0 ]]; then
-    # Check if prompt already has line limit language (case-insensitive)
+  if [[ "$line_limit" -gt 0 ]] 2>/dev/null; then
     if ! echo "$prompt" | grep -qiE "(under|max(imum)?|limit(ed to)?) [0-9]+ lines?"; then
       final_prompt="${prompt}. Under ${line_limit} lines."
     fi
   fi
 
-  # Determine timeout command (GNU timeout or macOS gtimeout)
-  local TIMEOUT_CMD=""
-  if command -v timeout &>/dev/null; then TIMEOUT_CMD="timeout"
-  elif command -v gtimeout &>/dev/null; then TIMEOUT_CMD="gtimeout"
-  fi
-
-  # Set up temp file for stderr (stdout captured in variable)
-  local stderr_file
-  stderr_file=$(mktemp)
-  trap "rm -f '$stderr_file'" EXIT
-
-  # Prevent recursive hook firing
-  export DEVSQUAD_HOOK_DEPTH=1
-
-  # Model: per-agent (agent_models.<DEVSQUAD_AGENT>) > global > codex default,
-  # e.g. gpt-5.3-codex — passed as `codex exec -m <model>`
-  local model_override
-  model_override=$(_resolve_codex_model)
-  local codex_args=(exec)
-  if [[ -n "$model_override" ]]; then
-    codex_args+=(-m "$model_override")
-  fi
-  codex_args+=("$final_prompt")
-
-  # Invoke Codex CLI with timeout
-  local stdout_content="" exit_code=0
-  if [[ -n "$TIMEOUT_CMD" ]]; then
-    stdout_content=$("$TIMEOUT_CMD" "${timeout_secs}s" codex "${codex_args[@]}" 2>"$stderr_file") || exit_code=$?
-  else
-    stdout_content=$(codex "${codex_args[@]}" 2>"$stderr_file") || exit_code=$?
-  fi
-
-  local stderr_content
-  stderr_content=$(cat "$stderr_file" 2>/dev/null)
-
-  # Helper: log failure, record stats, and return 1
-  _codex_fail() {
-    local msg="$1"
-    echo "$msg" >&2
-    update_agent_stats "$STATE_DIR" "codex" "false"
-    record_usage "codex" "${#final_prompt}" "0"
-    return 1
-  }
-
-  # Handle exit codes and errors
-  if [[ $exit_code -eq 0 ]]; then
-    # Success case
-    if [[ -z "$stdout_content" ]]; then
-      echo "WARNING: Codex returned empty response" >&2
-    else
-      echo "$stdout_content"
-    fi
-    update_agent_stats "$STATE_DIR" "codex" "true"
-    record_usage "codex" "${#final_prompt}" "${#stdout_content}"
-    log_contract_check "codex" "$final_prompt" "$stdout_content" || true
-    return 0
-  elif [[ $exit_code -eq 124 ]]; then
-    _codex_fail "TIMEOUT: Codex did not respond within ${timeout_secs}s. Try a simpler prompt or use @gemini-developer for code, @gemini-tester for tests."
-  elif echo "$stderr_content" | grep -qiE 'auth|401|403|unauthorized'; then
-    # Auth before rate: a permanent auth failure misread as a rate limit
-    # steers agents into infinite retry (see gemini-wrapper.sh)
-    _codex_fail "AUTH_ERROR: Codex CLI authentication failed. Run 'codex auth' to re-authenticate."
-  elif echo "$stderr_content" | grep -qiE '429|rate.?limit|quota|too many requests'; then
-    record_rate_limit "$STATE_DIR" "codex"
-    _codex_fail "RATE_LIMITED: Codex API rate limit hit. Cooldown for 2 minutes. Fallback: Use @gemini-developer for code, @gemini-tester for tests."
-  else
-    local stderr_preview
-    stderr_preview=$(echo "$stderr_content" | head -c 200)
-    _codex_fail "CLI_ERROR: Codex failed (exit $exit_code). stderr: ${stderr_preview}. Fallback: Use @gemini-developer for code, @gemini-tester for tests."
-  fi
+  _codex_configure_adapter
+  _adapter_invoke "$final_prompt" "$timeout_secs"
 }

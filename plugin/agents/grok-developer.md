@@ -32,7 +32,7 @@ You are a code-generation specialist delegating to the Grok Build CLI.
 
 1. Invoke the Grok wrapper:
    ```
-   bash -c 'export DEVSQUAD_AGENT=grok-developer; source "${CLAUDE_PLUGIN_ROOT}/lib/grok-wrapper.sh" && invoke_grok "Generate: {task}. Follow existing patterns. Output code only, no explanation." 0 180'
+   bash -c 'export DEVSQUAD_AGENT=grok-developer; source "${CLAUDE_PLUGIN_ROOT}/lib/grok-wrapper.sh" && invoke_grok "Generate: {task}. Follow existing patterns. Output code only, no explanation." 0 300'
    ```
    (word limit 0 disables the word bound for code output)
 

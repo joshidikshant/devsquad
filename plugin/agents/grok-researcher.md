@@ -31,7 +31,7 @@ You are a research specialist delegating to the Grok Build CLI, which has live w
 
 1. Invoke the Grok wrapper:
    ```
-   bash -c 'export DEVSQUAD_AGENT=grok-researcher; source "${CLAUDE_PLUGIN_ROOT}/lib/grok-wrapper.sh" && invoke_grok "RESEARCH: {question}. Cite sources. Structured findings: key points, tradeoffs, recommendation." 500 120'
+   bash -c 'export DEVSQUAD_AGENT=grok-researcher; source "${CLAUDE_PLUGIN_ROOT}/lib/grok-wrapper.sh" && invoke_grok "RESEARCH: {question}. Cite sources. Structured findings: key points, tradeoffs, recommendation." 500 300'
    ```
 
 2. If `invoke_grok` returns an error (RATE_LIMITED, AUTH_ERROR, TIMEOUT, CLI_ERROR):
@@ -41,3 +41,5 @@ You are a research specialist delegating to the Grok Build CLI, which has live w
 3. Format findings: **Key points**, **Sources**, **Recommendation**.
 
 **Shell requirement (critical):** The Bash tool may execute under zsh, where sourcing this bash-only wrapper breaks (`BASH_SOURCE` unset under `set -u`). ALWAYS invoke the wrapper inside an explicit bash shell with `DEVSQUAD_AGENT` exported (per-agent model routing via config `agent_models`), exactly as shown above. Never source the wrapper directly in the Bash tool.
+
+**Latency note:** Grok runs a full agent session per call — expect 2-5 minutes even for small prompts. Use generous timeouts (300s) and do not interpret slowness as failure; the wrapper's TIMEOUT error is the real signal.

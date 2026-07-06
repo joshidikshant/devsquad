@@ -4,6 +4,21 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.7.0] — 2026-07-06
+
+### Changed — structure: shared adapter core (D4 extraction)
+- **`lib/adapter.sh`**: the single shared invocation core — cooldown gate, CLI/model resolution, bounded execution (timeout binary or portable watchdog for ALL CLIs), auth-before-rate classification, telemetry, contract logging. The three wrappers collapse to thin per-CLI configuration (~80 lines each); adding a 4th CLI is now one thin wrapper + a contract-test entry (recipe in docs/ARCHITECTURE.md)
+- Wrapper public APIs unchanged (`invoke_gemini`, `invoke_gemini_with_files`, `invoke_codex`, `invoke_grok`, `_resolve_*_model`) — verified by the unchanged 95-assertion suite
+- Watchdog generalized: gemini/codex calls are now also bounded on hosts without timeout/gtimeout (previously grok-only)
+- Dead code removed: `expand_dir_refs` (no callers; agent docs claimed it ran "automatically")
+
+### Added
+- **docs/ARCHITECTURE.md**: layers, wrapper contract, add-a-CLI recipe, deployment modes (including the versioned-cache-path trap that froze production at 0.3.0), state-file map
+- docs/audits/: historical audit reports move out of the repo root
+
+### Fixed
+- `install.sh` registers the PreToolUse hook with the `Task` matcher (acceptance tracking needs it) and documents why hook commands must never point at versioned cache dirs
+
 ## [0.6.0] — 2026-07-06
 
 ### Added — Grok Build integration (3rd CLI; triggers the D4 wrapper contract)

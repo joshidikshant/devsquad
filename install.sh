@@ -41,7 +41,11 @@ echo "[3/4] Enabling plugin..."
 claude plugin enable "$PLUGIN" 2>/dev/null || true
 
 # Step 4: Register hooks into ~/.claude/settings.json (global)
-# The plugin system does not auto-register hooks.json entries — this must be done explicitly.
+# Hooks point at the MARKETPLACE CLONE (a git checkout that `claude plugin
+# marketplace update` refreshes) — never at a versioned cache dir, which
+# freezes hooks at install-time and silently drops every later fix.
+# Developers hacking on DevSquad itself can point these commands at their
+# source checkout instead to run hooks-at-HEAD (see docs/ARCHITECTURE.md).
 # Note: per-project hook registration happens during /devsquad:setup (onboarding skill Step 3.5).
 echo "[4/4] Registering hooks into global settings.json..."
 
@@ -81,7 +85,7 @@ def already_registered(entries, script_name):
 
 new_hooks = [
     ("SessionStart", "", "session-start.sh", 15),
-    ("PreToolUse",   "Read|WebSearch|Bash", "pre-tool-use.sh", 15),
+    ("PreToolUse",   "Read|WebSearch|Bash|Task", "pre-tool-use.sh", 15),
     ("PreCompact",   "", "pre-compact.sh", 15),
     ("Stop",         "", "stop.sh", 15),
 ]
