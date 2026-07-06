@@ -50,11 +50,21 @@ fi
 # Build jq path expression from dotted key (e.g., "preferences.gemini_word_limit" -> ".preferences.gemini_word_limit")
 jq_path=".${key}"
 
-# Validate key exists in config
-if ! jq -e "$jq_path" "$config_file" >/dev/null 2>&1; then
-  echo "Error: Unknown config key: ${key}"
-  echo "Valid keys can be found by running: /devsquad:config"
-  exit 1
+# Validate key exists in config. Two subtleties:
+# - `jq -e "$jq_path"` alone exits 1 for keys whose VALUE is false/null,
+#   so present boolean keys would read as "unknown" — compare to null instead.
+# - Known keys introduced after a config was created (schema additions) may
+#   be created on first set; configs are not migrated in place.
+if ! jq -e "${jq_path} != null" "$config_file" >/dev/null 2>&1; then
+  case "$key" in
+    default_routes.development|holdout_mode|preferences.gemini_model|preferences.codex_model)
+      : ;; # known later-version key — allow creation below
+    *)
+      echo "Error: Unknown config key: ${key}"
+      echo "Valid keys can be found by running: /devsquad:config"
+      exit 1
+      ;;
+  esac
 fi
 
 # Determine value type from existing config
@@ -90,12 +100,32 @@ case "$value_type" in
         ;;
     esac
     ;;
+  null)
+    # Key is being created (known later-version key) — validate by key name
+    case "$key" in
+      default_routes.*)
+        if [[ "$value" != "gemini" && "$value" != "codex" && "$value" != "self" ]]; then
+          echo "Error: Invalid value for ${key}: ${value}. Expected: gemini|codex|self"
+          exit 1
+        fi
+        ;;
+      holdout_mode)
+        if [[ "$value" != "true" && "$value" != "false" ]]; then
+          echo "Error: Invalid value for ${key}: ${value}. Expected: true|false"
+          exit 1
+        fi
+        ;;
+    esac
+    ;;
 esac
 
 # Update config atomically using jq
 temp_file="${config_file}.tmp.$$"
 
 if [[ "$value_type" == "number" || "$value_type" == "boolean" ]]; then
+  jq "$jq_path = ${value}" "$config_file" > "$temp_file"
+elif [[ "$value_type" == "null" && ( "$value" == "true" || "$value" == "false" ) ]]; then
+  # Created boolean key must be stored as a boolean, not the string "true"
   jq "$jq_path = ${value}" "$config_file" > "$temp_file"
 else
   jq "$jq_path = \"${value}\"" "$config_file" > "$temp_file"

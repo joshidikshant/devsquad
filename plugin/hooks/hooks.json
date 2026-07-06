@@ -25,7 +25,7 @@
   ],
   "PreToolUse": [
     {
-      "matcher": "Read|WebSearch|Bash",
+      "matcher": "Read|WebSearch|Bash|Task",
       "hooks": [
         {
           "type": "command",

@@ -29,7 +29,28 @@ if [[ -z "$TOOL_NAME" ]]; then
   exit 0
 fi
 
-# Check if previous suggestion was accepted or declined
+# Parse transcript path for context-occupancy measurement (may be empty)
+if command -v jq &>/dev/null; then
+  TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+  SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
+else
+  TRANSCRIPT_PATH=$(echo "$INPUT" | grep -o '"transcript_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+  SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+fi
+
+# Resolve outcome of any pending suggestion. Task calls exist in the matcher
+# only for acceptance tracking: accepted iff the invoked subagent matches the
+# suggested agent. No delegation logic applies to Task itself.
+if [[ "$TOOL_NAME" == "Task" ]]; then
+  SUBAGENT_TYPE=""
+  if command -v jq &>/dev/null; then
+    SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
+  else
+    SUBAGENT_TYPE=$(echo "$INPUT" | grep -o '"subagent_type"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+  fi
+  check_and_log_suggestion_outcome "$TOOL_NAME" "$SUBAGENT_TYPE"
+  exit 0
+fi
 check_and_log_suggestion_outcome "$TOOL_NAME"
 
 SHOULD_DELEGATE=false
@@ -48,31 +69,45 @@ else
   OUTPUT_TOKENS=$(echo "$CLAUDE_STATS" | grep -o '"output_tokens":[0-9]*' | grep -o '[0-9]*$' || echo "0")
 fi
 
-CURRENT_ZONE=$(calculate_zone "$INPUT_TOKENS" "$OUTPUT_TOKENS")
+# Two distinct signals (F2 fix — they were previously conflated as "zone"):
+# - daily_budget_zone: output-token volume today across all projects (budget)
+# - context_zone: this session's actual context occupancy, measured from the
+#   transcript's last usage record (the thing the README claims to protect)
+DAILY_ZONE=$(calculate_zone "$INPUT_TOKENS" "$OUTPUT_TOKENS")
+CONTEXT_ZONE=$(calculate_context_zone "${TRANSCRIPT_PATH:-}")
 
-# Update session zone in state
+# Update session zones in state
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 STATE_FILE="${PROJECT_DIR}/.devsquad/state.json"
 if command -v jq &>/dev/null; then
-  update_state_key "$STATE_FILE" "session.zone" "\"${CURRENT_ZONE}\""
+  update_state_key "$STATE_FILE" "session.daily_budget_zone" "\"${DAILY_ZONE}\""
+  update_state_key "$STATE_FILE" "session.context_zone" "\"${CONTEXT_ZONE}\""
 fi
 
-# Zone-adjusted threshold: green=3, yellow/red=1
-READ_THRESHOLD=3
-if [[ "$CURRENT_ZONE" == "yellow" ]] || [[ "$CURRENT_ZONE" == "red" ]]; then
-  READ_THRESHOLD=1
+# Threshold escalates only on measured context pressure. Daily output volume
+# no longer tightens the threshold: a fresh session after a heavy day starts
+# with an empty context window and gets the normal threshold.
+# Values reconciled 2026-07-06: v0.3.0 shipped 40/20, unreleased 0.4.0 had 3/1
+# (fires on trivial work — Edit requires Read, real sessions read dozens of
+# files). 20/8 sits between, with the 3-suggestion back-off as the noise cap.
+READ_THRESHOLD=20
+if [[ "$CONTEXT_ZONE" == "yellow" ]] || [[ "$CONTEXT_ZONE" == "red" ]]; then
+  READ_THRESHOLD=8
 fi
 
 case "$TOOL_NAME" in
   Read)
     # IMPORTANT: Read tool's file_path is always a single string (one call = one file).
     # Track session-scoped counter across multiple Read calls.
-    NEW_COUNT=$(increment_read_counter)
+    NEW_COUNT=$(increment_read_counter "${SESSION_ID:-}")
     if [[ "$NEW_COUNT" -gt "$READ_THRESHOLD" ]]; then
       SHOULD_DELEGATE=true
       ZONE_PREFIX=""
-      if [[ "$CURRENT_ZONE" == "red" ]]; then
-        ZONE_PREFIX="RED ZONE (heavy daily token usage). "
+      if [[ "$DAILY_ZONE" == "red" ]]; then
+        ZONE_PREFIX="DAILY BUDGET RED (heavy output volume today, all projects). "
+      fi
+      if [[ "$CONTEXT_ZONE" == "yellow" ]] || [[ "$CONTEXT_ZONE" == "red" ]]; then
+        ZONE_PREFIX="${ZONE_PREFIX}CONTEXT ${CONTEXT_ZONE} (this session's context window is filling). "
       fi
       # Extract file_path for helpful command and savings estimation
       if command -v jq &>/dev/null; then
@@ -82,8 +117,8 @@ case "$TOOL_NAME" in
       fi
       # Estimate context savings
       FILE_SAVINGS=$(estimate_token_savings "$FILE_PATH")
-      SESSION_SAVINGS=$(estimate_session_savings "$READ_THRESHOLD")
-      REASON="${ZONE_PREFIX}You have read ${NEW_COUNT} files this session (threshold: ${READ_THRESHOLD}). Delegate bulk reading to @gemini-reader with 1M context to preserve your context window.\n\nEstimated savings: ${FILE_SAVINGS} for this file (${SESSION_SAVINGS} total this session)."
+      SESSION_SAVINGS=$(estimate_session_savings "$READ_THRESHOLD" "$NEW_COUNT")
+      REASON="${ZONE_PREFIX}You have read ${NEW_COUNT} files this session (threshold: ${READ_THRESHOLD}). Delegate bulk reading to @gemini-reader with 1M context to preserve your context window.\n\nEstimated savings (heuristic, not reconciled against measured usage): ${FILE_SAVINGS} for this file (${SESSION_SAVINGS} total this session)."
       AGENT="gemini-reader"
       COMMAND="@gemini-reader \"Analyze and summarize: ${FILE_PATH}\""
     fi
@@ -107,8 +142,11 @@ case "$TOOL_NAME" in
   WebSearch)
     SHOULD_DELEGATE=true
     ZONE_PREFIX=""
-    if [[ "$CURRENT_ZONE" == "red" ]]; then
-      ZONE_PREFIX="RED ZONE (heavy daily token usage). "
+    if [[ "$DAILY_ZONE" == "red" ]]; then
+      ZONE_PREFIX="DAILY BUDGET RED (heavy output volume today, all projects). "
+    fi
+    if [[ "$CONTEXT_ZONE" == "yellow" ]] || [[ "$CONTEXT_ZONE" == "red" ]]; then
+      ZONE_PREFIX="${ZONE_PREFIX}CONTEXT ${CONTEXT_ZONE} (this session's context window is filling). "
     fi
     REASON="${ZONE_PREFIX}WebSearch consumes Claude's context. Delegate web research to @gemini-researcher with 1M context."
     AGENT="gemini-researcher"
@@ -132,6 +170,17 @@ MODE=$(get_enforcement_mode)
 
 # Log the delegation suggestion
 log_delegation "$TOOL_NAME" "$AGENT" "$MODE"
+
+# Advisory back-off: after 3 shown suggestions this session, keep logging but
+# stop injecting repeats — the plugin must not spend context to save context.
+if [[ "$MODE" != "strict" ]]; then
+  SHOWN=$(get_suggestion_display_count "${SESSION_ID:-}")
+  if [[ "$SHOWN" -ge 3 ]]; then
+    _log_compliance "advisory_capped" "$TOOL_NAME" "$AGENT" "suppressed"
+    exit 0
+  fi
+  increment_suggestion_display_count "${SESSION_ID:-}"
+fi
 
 # Apply enforcement mode
 if command -v jq &>/dev/null; then

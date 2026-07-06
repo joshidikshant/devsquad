@@ -103,6 +103,9 @@ invoke_gemini() {
       || date -d "@${cooldown_until}" +"%Y-%m-%d %H:%M:%S" 2>/dev/null \
       || echo "unknown")
     echo "RATE_LIMITED: Gemini is in cooldown until ${cooldown_date}. Use @codex-developer for code, @codex-tester for tests, or handle synthesis yourself." >&2
+    # Record the blocked attempt (parity with codex-wrapper's cooldown path)
+    update_agent_stats "$state_dir" "gemini" "false"
+    record_usage "gemini" "${#prompt}" "0"
     return 1
   fi
 
@@ -118,7 +121,7 @@ invoke_gemini() {
   # Set up temp file for stderr
   local stderr_file
   stderr_file=$(mktemp)
-  trap 'rm -f "$stderr_file"' EXIT
+  trap 'rm -f "${stderr_file:-}"' EXIT
 
   # Determine timeout command (timeout on Linux, gtimeout on macOS)
   local timeout_cmd=""
@@ -126,12 +129,37 @@ invoke_gemini() {
   elif command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout"
   fi
 
-  # Invoke Gemini CLI
+  # Resolve CLI — Antigravity (agy) only. The open-source Gemini CLI was
+  # decommissioned by Google on 2026-06-18 and no longer serves requests,
+  # so falling back to it would route work into guaranteed failure.
+  local cli_cmd=""
+  if command -v agy &>/dev/null; then
+    cli_cmd="agy"
+  elif command -v antigravity &>/dev/null; then
+    cli_cmd="antigravity"
+  else
+    echo "CLI_ERROR: Antigravity CLI not installed (legacy Gemini CLI is decommissioned). Install: brew install --cask antigravity-cli" >&2
+    update_agent_stats "$state_dir" "gemini" "false"
+    record_usage "gemini" "${#final_prompt}" "0"
+    return 1
+  fi
+  local cli_args=("--dangerously-skip-permissions" "-p" "$final_prompt" "--output-format" "text")
+
+  # Optional model override from config (preferences.gemini_model)
+  local model_override=""
+  if command -v jq &>/dev/null && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" ]]; then
+    model_override=$(jq -r '.preferences.gemini_model // empty' "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" 2>/dev/null)
+  fi
+  if [[ -n "$model_override" ]]; then
+    cli_args+=("--model" "$model_override")
+  fi
+
+  # Invoke Antigravity CLI
   local stdout exit_code=0
   if [[ -n "$timeout_cmd" ]]; then
-    stdout=$("$timeout_cmd" "${timeout_secs}s" gemini -y -p "$final_prompt" -o text 2>"$stderr_file") || exit_code=$?
+    stdout=$("$timeout_cmd" "${timeout_secs}s" "$cli_cmd" "${cli_args[@]}" 2>"$stderr_file") || exit_code=$?
   else
-    stdout=$(gemini -y -p "$final_prompt" -o text 2>"$stderr_file") || exit_code=$?
+    stdout=$("$cli_cmd" "${cli_args[@]}" 2>"$stderr_file") || exit_code=$?
   fi
 
 
@@ -150,23 +178,27 @@ invoke_gemini() {
   # Handle exit codes (trap handles stderr_file cleanup)
   if [[ $exit_code -eq 0 ]]; then
     if [[ -z "$stdout" ]]; then
-      echo "WARNING: Gemini returned empty response" >&2
+      echo "WARNING: Gemini/Antigravity returned empty response" >&2
     fi
     update_agent_stats "$state_dir" "gemini" "true"
     record_usage "gemini" "${#final_prompt}" "${#stdout}"
+    log_contract_check "gemini" "$final_prompt" "$stdout" || true
     echo "$stdout"
     return 0
   elif [[ $exit_code -eq 124 ]]; then
-    _gemini_fail "TIMEOUT: Gemini did not respond within ${timeout_secs}s. Try a simpler prompt, use @codex-developer for code, or @codex-tester for tests."
-  elif echo "$stderr_content" | grep -iE 'rate|limit|429' &>/dev/null; then
+    _gemini_fail "TIMEOUT: Antigravity did not respond within ${timeout_secs}s. Try a simpler prompt, use @codex-developer for code, or @codex-tester for tests."
+  # Auth is checked BEFORE rate: a permanent auth failure misread as a rate
+  # limit steers agents into infinite retry (Google's Gemini-CLI decommission
+  # notice contained 'migrate', which the old 'rate|limit|429' regex matched)
+  elif echo "$stderr_content" | grep -iE 'auth|401|403|ineligible|unauthorized' &>/dev/null; then
+    _gemini_fail "AUTH_ERROR: Antigravity CLI authentication failed. Open Antigravity and sign in, then retry."
+  elif echo "$stderr_content" | grep -iE '429|rate.?limit|quota|resource.?exhausted|too many requests' &>/dev/null; then
     record_rate_limit "$state_dir" "gemini"
-    _gemini_fail "RATE_LIMITED: Gemini hit rate limit. 2-minute cooldown started. Use @codex-developer for code, @codex-tester for tests, or handle synthesis yourself."
-  elif echo "$stderr_content" | grep -iE 'auth|401|403' &>/dev/null; then
-    _gemini_fail "AUTH_ERROR: Gemini CLI authentication failed. Run 'gemini auth' to re-authenticate."
+    _gemini_fail "RATE_LIMITED: Antigravity hit a rate limit. 2-minute cooldown started. Use @codex-developer for code, @codex-tester for tests, or handle synthesis yourself."
   else
     local stderr_snippet
     stderr_snippet=$(echo "$stderr_content" | head -c 200)
-    _gemini_fail "CLI_ERROR: Gemini failed (exit $exit_code). stderr: ${stderr_snippet}"
+    _gemini_fail "CLI_ERROR: Gemini/Antigravity failed (exit $exit_code). stderr: ${stderr_snippet}"
   fi
 }
 
@@ -179,16 +211,20 @@ invoke_gemini_with_files() {
   local word_limit="${3:-}"
   local timeout_secs="${4:-90}"
 
-  # Build stdin content by concatenating file/dir contents
+  # Build stdin content by concatenating file/dir contents.
+  # Use a real newline, NOT literal \n + printf %b: %b would also expand
+  # backslash escapes INSIDE file contents (regexes, string literals),
+  # corrupting the code Gemini is asked to analyze.
+  local nl=$'\n'
   local file_content=""
   for token in $files_arg; do
     if [[ "$token" == @* ]]; then
       local path="${token#@}"
       if [[ -f "$path" ]]; then
-        file_content+="=== ${path} ===\n$(cat "$path")\n\n"
+        file_content+="=== ${path} ===${nl}$(cat "$path")${nl}${nl}"
       elif [[ -d "$path" ]]; then
         while IFS= read -r f; do
-          file_content+="=== ${f} ===\n$(cat "$f")\n\n"
+          file_content+="=== ${f} ===${nl}$(cat "$f")${nl}${nl}"
         done < <(find "$path" -type f \( \
           -name "*.ts" -o -name "*.js" -o -name "*.sh" -o -name "*.py" \
           -o -name "*.go" -o -name "*.rs" -o -name "*.md" -o -name "*.json" \
@@ -216,36 +252,76 @@ invoke_gemini_with_files() {
     fi
   fi
 
+  # Telemetry (F3 fix): this path previously bypassed usage recording entirely,
+  # making the flagship gemini-reader delegations invisible to /devsquad:status
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  source "${lib_dir}/state.sh"
+  source "${lib_dir}/usage.sh"
+  local state_dir="${CLAUDE_PROJECT_DIR:-.}/.devsquad"
+
   # Determine timeout command
   local timeout_cmd=""
   if command -v timeout &>/dev/null; then timeout_cmd="timeout"
   elif command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout"
   fi
 
-  # Pipe file content via stdin — bypasses Gemini sandbox file restrictions
-  # Pattern confirmed working: { cat file1; echo "---"; cat file2; } | gemini -y -p "prompt" -o text
+  # Pipe file content via stdin — bypasses sandbox file restrictions.
+  # Antigravity (agy) only; legacy Gemini CLI is decommissioned (see invoke_gemini).
+  local cli_cmd=""
+  if command -v agy &>/dev/null; then
+    cli_cmd="agy"
+  elif command -v antigravity &>/dev/null; then
+    cli_cmd="antigravity"
+  else
+    echo "CLI_ERROR: Antigravity CLI not installed (legacy Gemini CLI is decommissioned). Install: brew install --cask antigravity-cli" >&2
+    update_agent_stats "$state_dir" "gemini" "false" || true
+    record_usage "gemini" "$(( ${#file_content} + ${#final_prompt} ))" "0" || true
+    return 1
+  fi
+  local cli_args=("--dangerously-skip-permissions" "-p" "$final_prompt" "--output-format" "text")
+  local model_override=""
+  if command -v jq &>/dev/null && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" ]]; then
+    model_override=$(jq -r '.preferences.gemini_model // empty' "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" 2>/dev/null)
+  fi
+  if [[ -n "$model_override" ]]; then
+    cli_args+=("--model" "$model_override")
+  fi
+
   local stderr_file
   stderr_file=$(mktemp)
-  trap 'rm -f "$stderr_file"' EXIT
+  trap 'rm -f "${stderr_file:-}"' EXIT
 
   local stdout exit_code=0
   if [[ -n "$file_content" ]]; then
     if [[ -n "$timeout_cmd" ]]; then
-      stdout=$(printf '%b' "$file_content" | "$timeout_cmd" "${timeout_secs}s" gemini -y -p "$final_prompt" -o text 2>"$stderr_file") || exit_code=$?
+      stdout=$(printf '%s' "$file_content" | "$timeout_cmd" "${timeout_secs}s" "$cli_cmd" "${cli_args[@]}" 2>"$stderr_file") || exit_code=$?
     else
-      stdout=$(printf '%b' "$file_content" | gemini -y -p "$final_prompt" -o text 2>"$stderr_file") || exit_code=$?
+      stdout=$(printf '%s' "$file_content" | "$cli_cmd" "${cli_args[@]}" 2>"$stderr_file") || exit_code=$?
     fi
   else
-    # No files resolved — fall through to plain invoke
+    # No files resolved — fall through to plain invoke, which records its
+    # own telemetry (do not double-record here)
     stdout=$(invoke_gemini "$final_prompt" "$effective_limit" "$timeout_secs") || exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+      return 1
+    fi
+    echo "$stdout"
+    return 0
   fi
 
+  local chars_in=$(( ${#file_content} + ${#final_prompt} ))
   if [[ $exit_code -ne 0 ]]; then
     local stderr_snippet
     stderr_snippet=$(cat "$stderr_file" 2>/dev/null | head -c 200)
-    echo "CLI_ERROR: gemini file invocation failed (exit ${exit_code}). stderr: ${stderr_snippet}" >&2
+    echo "CLI_ERROR: gemini/antigravity file invocation failed (exit ${exit_code}). stderr: ${stderr_snippet}" >&2
+    update_agent_stats "$state_dir" "gemini" "false" || true
+    record_usage "gemini" "$chars_in" "0" || true
     return 1
   fi
 
+  update_agent_stats "$state_dir" "gemini" "true" || true
+  record_usage "gemini" "$chars_in" "${#stdout}" || true
+  log_contract_check "gemini" "$final_prompt" "$stdout" || true
   echo "$stdout"
 }

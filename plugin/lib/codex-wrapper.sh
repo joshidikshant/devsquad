@@ -66,12 +66,24 @@ invoke_codex() {
   # Prevent recursive hook firing
   export DEVSQUAD_HOOK_DEPTH=1
 
+  # Optional model override from config (preferences.codex_model),
+  # e.g. gpt-5.3-codex — passed as `codex exec -m <model>`
+  local model_override=""
+  if command -v jq &>/dev/null && [[ -f "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" ]]; then
+    model_override=$(jq -r '.preferences.codex_model // empty' "${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json" 2>/dev/null)
+  fi
+  local codex_args=(exec)
+  if [[ -n "$model_override" ]]; then
+    codex_args+=(-m "$model_override")
+  fi
+  codex_args+=("$final_prompt")
+
   # Invoke Codex CLI with timeout
   local stdout_content="" exit_code=0
   if [[ -n "$TIMEOUT_CMD" ]]; then
-    stdout_content=$("$TIMEOUT_CMD" "${timeout_secs}s" codex exec "$final_prompt" 2>"$stderr_file") || exit_code=$?
+    stdout_content=$("$TIMEOUT_CMD" "${timeout_secs}s" codex "${codex_args[@]}" 2>"$stderr_file") || exit_code=$?
   else
-    stdout_content=$(codex exec "$final_prompt" 2>"$stderr_file") || exit_code=$?
+    stdout_content=$(codex "${codex_args[@]}" 2>"$stderr_file") || exit_code=$?
   fi
 
   local stderr_content
@@ -96,14 +108,17 @@ invoke_codex() {
     fi
     update_agent_stats "$STATE_DIR" "codex" "true"
     record_usage "codex" "${#final_prompt}" "${#stdout_content}"
+    log_contract_check "codex" "$final_prompt" "$stdout_content" || true
     return 0
   elif [[ $exit_code -eq 124 ]]; then
     _codex_fail "TIMEOUT: Codex did not respond within ${timeout_secs}s. Try a simpler prompt or use @gemini-developer for code, @gemini-tester for tests."
-  elif echo "$stderr_content" | grep -qiE 'rate|limit|429'; then
+  elif echo "$stderr_content" | grep -qiE 'auth|401|403|unauthorized'; then
+    # Auth before rate: a permanent auth failure misread as a rate limit
+    # steers agents into infinite retry (see gemini-wrapper.sh)
+    _codex_fail "AUTH_ERROR: Codex CLI authentication failed. Run 'codex auth' to re-authenticate."
+  elif echo "$stderr_content" | grep -qiE '429|rate.?limit|quota|too many requests'; then
     record_rate_limit "$STATE_DIR" "codex"
     _codex_fail "RATE_LIMITED: Codex API rate limit hit. Cooldown for 2 minutes. Fallback: Use @gemini-developer for code, @gemini-tester for tests."
-  elif echo "$stderr_content" | grep -qiE 'auth|401|403|unauthorized'; then
-    _codex_fail "AUTH_ERROR: Codex CLI authentication failed. Run 'codex auth' to re-authenticate."
   else
     local stderr_preview
     stderr_preview=$(echo "$stderr_content" | head -c 200)

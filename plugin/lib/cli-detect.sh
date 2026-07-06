@@ -19,13 +19,35 @@ if [ -d "$NVM_DIR/versions/node" ]; then
   unset _nvm_node_dir
 fi
 
+# The "gemini" role is served by the Antigravity CLI (agy) only — Google
+# decommissioned the open-source Gemini CLI on 2026-06-18; a `gemini` binary
+# on PATH no longer implies a working service, so it must not count.
 detect_cli() {
-  command -v "$1" &>/dev/null && echo "true" || echo "false"
+  local cli_name="$1"
+  if [[ "$cli_name" == "gemini" ]]; then
+    if command -v agy &>/dev/null || command -v antigravity &>/dev/null; then
+      echo "true"
+    else
+      echo "false"
+    fi
+  else
+    command -v "$cli_name" &>/dev/null && echo "true" || echo "false"
+  fi
 }
 
 detect_cli_path() {
   local cli_name="$1"
-  command -v "$cli_name" 2>/dev/null || echo ""
+  if [[ "$cli_name" == "gemini" ]]; then
+    if command -v agy &>/dev/null; then
+      command -v agy
+    elif command -v antigravity &>/dev/null; then
+      command -v antigravity
+    else
+      echo ""
+    fi
+  else
+    command -v "$cli_name" 2>/dev/null || echo ""
+  fi
 }
 
 detect_all_clis() {

@@ -118,7 +118,7 @@ When specific tools are missing, apply these degradation strategies:
 - Research and reading tasks that would normally be delegated to Gemini stay with Claude. This increases Claude's token consumption since Gemini has a 1M context window versus Claude's 200K.
 - Codebase exploration tasks can be redirected to subagents (using Haiku model) if available, which provides partial mitigation.
 - Web search capability is lost entirely since DevSquad routes all web searches through Gemini.
-- Suggest the user install Gemini CLI: `npm install -g @google/gemini-cli` or check Gemini documentation for installation instructions.
+- Suggest the user install Antigravity CLI (see https://antigravity.google for installation instructions) or fall back to Gemini CLI.
 
 **No Codex installed:**
 - Code generation and boilerplate tasks stay with Claude instead of being delegated to Codex.

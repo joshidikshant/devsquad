@@ -10,6 +10,12 @@ init_state_dir() {
 
   mkdir -p "${state_dir}/usage" "${state_dir}/logs"
 
+  # Self-ignoring: runtime state must never pollute the host project's
+  # git status (previously left untracked noise in every project)
+  if [[ ! -f "${state_dir}/.gitignore" ]]; then
+    printf '*\n' > "${state_dir}/.gitignore"
+  fi
+
   echo "${state_dir}"
 }
 
@@ -23,12 +29,15 @@ read_state() {
   fi
 }
 
-# Write JSON to a state file atomically (write to temp, then rename)
+# Write JSON to a state file atomically (write to temp, then rename).
+# Creates the parent directory if missing — callers run under set -e and
+# must not die just because SessionStart has not initialized state yet.
 write_state() {
   local file_path="$1"
   local json_content="$2"
   local temp_file="${file_path}.tmp.$$"
 
+  mkdir -p "$(dirname "$file_path")" 2>/dev/null || true
   echo "$json_content" > "$temp_file"
   mv "$temp_file" "$file_path"
 }
@@ -76,6 +85,7 @@ ensure_config() {
   "default_routes": {
     "research": "gemini",
     "reading": "gemini",
+    "development": "gemini",
     "code_generation": "codex",
     "testing": "codex",
     "synthesis": "self"

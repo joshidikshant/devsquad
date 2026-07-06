@@ -86,9 +86,14 @@ record_suggestion() {
   fi
 }
 
-# Check if previous suggestion was accepted or declined based on next tool call
+# Resolve the outcome of a pending suggestion based on the next tool call.
+# Acceptance requires positive evidence: a Task call invoking the suggested
+# agent. Same-tool-again = declined. Anything else = unresolved (the previous
+# heuristic counted ANY different tool as accepted, inflating the rate).
+# Usage: check_and_log_suggestion_outcome current_tool [subagent_type]
 check_and_log_suggestion_outcome() {
   local current_tool="$1"
+  local subagent_type="${2:-}"
   local project_dir="${CLAUDE_PROJECT_DIR:-.}"
   local state_file="${project_dir}/.devsquad/state.json"
 
@@ -111,11 +116,18 @@ check_and_log_suggestion_outcome() {
     return
   fi
 
-  # Determine outcome: if user immediately reads again, they declined
-  if [[ "$current_tool" == "$suggested_tool" ]]; then
+  # Determine outcome
+  if [[ "$current_tool" == "Task" ]]; then
+    case "$subagent_type" in
+      "$suggested_agent"|*":${suggested_agent}")
+        log_suggestion_accepted "$suggested_tool" "$suggested_agent" ;;
+      *)
+        log_suggestion_unresolved "$suggested_tool" "$suggested_agent" ;;
+    esac
+  elif [[ "$current_tool" == "$suggested_tool" ]]; then
     log_suggestion_declined "$suggested_tool" "$suggested_agent"
   else
-    log_suggestion_accepted "$suggested_tool" "$suggested_agent"
+    log_suggestion_unresolved "$suggested_tool" "$suggested_agent"
   fi
 
   # Clear last_suggestion after logging outcome
@@ -133,13 +145,36 @@ log_suggestion_declined() {
   _log_compliance "advisory_declined" "$1" "$2" "declined"
 }
 
+# Log that a suggestion was neither clearly accepted nor declined
+log_suggestion_unresolved() {
+  _log_compliance "advisory_unresolved" "$1" "$2" "unresolved"
+}
+
+# Resolve a session-scoped counter file. Counters are per-session (via the
+# hook's session_id) so concurrent sessions in one project don't share or
+# clobber each other's counts; falls back to a legacy shared file when no
+# session id is available.
+_counter_file() {
+  local base="$1"
+  local sid
+  sid=$(printf '%s' "${2:-}" | tr -cd 'a-zA-Z0-9-')
+  local f="${CLAUDE_PROJECT_DIR:-.}/.devsquad/${base}"
+  if [[ -n "$sid" ]]; then
+    f="${f}.${sid}"
+  fi
+  echo "$f"
+}
+
 # Increment session-scoped read counter and echo new value
+# Usage: increment_read_counter [session_id]
 increment_read_counter() {
-  local counter_file="${CLAUDE_PROJECT_DIR:-.}/.devsquad/read_count"
+  local counter_file
+  counter_file=$(_counter_file "read_count" "${1:-}")
   mkdir -p "$(dirname "$counter_file")"
 
   local current_count
   current_count=$(cat "$counter_file" 2>/dev/null || echo "0")
+  [[ "$current_count" =~ ^[0-9]+$ ]] || current_count=0
   local new_count=$((current_count + 1))
 
   local temp_file="${counter_file}.tmp.$$"
@@ -149,8 +184,32 @@ increment_read_counter() {
 }
 
 # Get current read count
+# Usage: get_read_count [session_id]
 get_read_count() {
-  cat "${CLAUDE_PROJECT_DIR:-.}/.devsquad/read_count" 2>/dev/null || echo "0"
+  cat "$(_counter_file "read_count" "${1:-}")" 2>/dev/null || echo "0"
+}
+
+# Advisory back-off counters: how many suggestions were actually shown this
+# session. Once the cap is reached the hook logs but stops injecting repeat
+# suggestions — the plugin must not spend context to save context.
+# Usage: get_suggestion_display_count [session_id]
+get_suggestion_display_count() {
+  local c
+  c=$(cat "$(_counter_file "suggest_count" "${1:-}")" 2>/dev/null || echo "0")
+  [[ "$c" =~ ^[0-9]+$ ]] || c=0
+  echo "$c"
+}
+
+# Usage: increment_suggestion_display_count [session_id]
+increment_suggestion_display_count() {
+  local f
+  f=$(_counter_file "suggest_count" "${1:-}")
+  mkdir -p "$(dirname "$f")"
+  local c
+  c=$(cat "$f" 2>/dev/null || echo "0")
+  [[ "$c" =~ ^[0-9]+$ ]] || c=0
+  echo $((c + 1)) > "${f}.tmp.$$"
+  mv "${f}.tmp.$$" "$f"
 }
 
 # Check if agent CLI is available
@@ -158,9 +217,10 @@ get_read_count() {
 check_agent_cli_available() {
   local agent="$1"
 
-  # Extract CLI name from agent prefix
+  # Extract CLI name from agent prefix. gemini-role agents require the
+  # Antigravity CLI — the legacy gemini binary is decommissioned server-side.
   case "$agent" in
-    gemini*) command -v "gemini" &>/dev/null ;;
+    gemini*) command -v "agy" &>/dev/null || command -v "antigravity" &>/dev/null ;;
     codex*)  command -v "codex" &>/dev/null ;;
     *)       return 1 ;;
   esac
@@ -216,10 +276,14 @@ estimate_token_savings() {
 }
 
 # Estimate cumulative savings for all reads above threshold
+# Usage: estimate_session_savings threshold [current_count]
 estimate_session_savings() {
-  local threshold="${1:-3}"
-  local count
-  count=$(cat "${CLAUDE_PROJECT_DIR:-.}/.devsquad/read_count" 2>/dev/null || echo "0")
+  local threshold="${1:-20}"
+  local count="${2:-}"
+  if [[ -z "$count" ]]; then
+    count=$(cat "${CLAUDE_PROJECT_DIR:-.}/.devsquad/read_count" 2>/dev/null || echo "0")
+  fi
+  [[ "$count" =~ ^[0-9]+$ ]] || count=0
   local excess=$((count - threshold))
 
   if [[ "$excess" -le 0 ]]; then
@@ -235,20 +299,22 @@ get_suggestion_metrics() {
   local log_file="${project_dir}/.devsquad/logs/compliance.log"
 
   if [[ ! -f "$log_file" ]]; then
-    echo '{"suggested": 0, "accepted": 0, "declined": 0, "acceptance_rate": "N/A"}'
+    echo '{"suggested": 0, "accepted": 0, "declined": 0, "unresolved": 0, "acceptance_rate": "N/A"}'
     return
   fi
 
-  local suggested accepted declined
+  local suggested accepted declined unresolved
   suggested=$(grep -c "advisory_suggested" "$log_file" 2>/dev/null || echo "0")
   accepted=$(grep -c "advisory_accepted" "$log_file" 2>/dev/null || echo "0")
   declined=$(grep -c "advisory_declined" "$log_file" 2>/dev/null || echo "0")
+  unresolved=$(grep -c "advisory_unresolved" "$log_file" 2>/dev/null || echo "0")
 
+  # Rate counts only resolved outcomes; unresolved is reported, not imputed
   local rate="N/A"
   local total=$((accepted + declined))
   if [[ "$total" -gt 0 ]]; then
     rate="$((accepted * 100 / total))%"
   fi
 
-  echo "{\"suggested\": ${suggested}, \"accepted\": ${accepted}, \"declined\": ${declined}, \"acceptance_rate\": \"${rate}\"}"
+  echo "{\"suggested\": ${suggested}, \"accepted\": ${accepted}, \"declined\": ${declined}, \"unresolved\": ${unresolved}, \"acceptance_rate\": \"${rate}\"}"
 }

@@ -110,7 +110,9 @@ read_claude_stats() {
   fi
 }
 
-# Calculate budget zone based on daily output token volume
+# Calculate DAILY BUDGET zone based on daily output token volume.
+# This is a budget/volume signal, NOT a context-occupancy signal — see
+# calculate_context_zone for the latter. Callers should label it accordingly.
 # Usage: calculate_zone input_tokens output_tokens
 # Note: input_tokens is unused (not available in stats-cache.json)
 # Zone thresholds based on daily output volume:
@@ -128,6 +130,80 @@ calculate_zone() {
   else
     echo "red"
   fi
+}
+
+# Calculate CONTEXT-OCCUPANCY zone from the session transcript (JSONL).
+# The most recent assistant message's usage block gives current context size:
+#   input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+# This is the signal the README's "burning through 200K context" claim is
+# actually about. Reads only the tail of the transcript — safe inside the
+# 15s hook budget, no network.
+# Usage: calculate_context_zone transcript_path
+# Echoes: green (<120K), yellow (120-160K), red (>=160K), or unknown
+calculate_context_zone() {
+  local transcript="${1:-}"
+
+  if [[ -z "$transcript" ]] || [[ ! -f "$transcript" ]]; then
+    echo "unknown"
+    return
+  fi
+
+  local ctx=""
+  if command -v jq &>/dev/null; then
+    ctx=$(tail -n 40 "$transcript" 2>/dev/null | jq -r '
+      select(.message.usage.input_tokens? != null) | .message.usage |
+      (.input_tokens + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0))
+    ' 2>/dev/null | tail -1)
+  else
+    # Fallback: approximate with the last raw input_tokens + cache_read values
+    local in_tok cache_tok
+    in_tok=$(tail -n 40 "$transcript" 2>/dev/null | grep -o '"input_tokens":[0-9]*' | tail -1 | grep -o '[0-9]*$')
+    cache_tok=$(tail -n 40 "$transcript" 2>/dev/null | grep -o '"cache_read_input_tokens":[0-9]*' | tail -1 | grep -o '[0-9]*$')
+    ctx=$(( ${in_tok:-0} + ${cache_tok:-0} ))
+  fi
+
+  if ! [[ "$ctx" =~ ^[0-9]+$ ]] || [[ "$ctx" -eq 0 ]]; then
+    echo "unknown"
+  elif [[ "$ctx" -lt 120000 ]]; then
+    echo "green"
+  elif [[ "$ctx" -lt 160000 ]]; then
+    echo "yellow"
+  else
+    echo "red"
+  fi
+}
+
+# Contract validation logging (observe-only; enforcement gated on D1 verdict).
+# Parses "Under N words" / "Under N lines" from the prompt, measures the
+# response, and appends to .devsquad/logs/contracts.log. Never fails the
+# caller: every step is guarded because wrappers run under set -euo pipefail.
+# Usage: log_contract_check agent_name prompt response
+log_contract_check() {
+  local agent="$1"
+  local prompt="$2"
+  local response="$3"
+  local log_dir="${CLAUDE_PROJECT_DIR:-.}/.devsquad/logs"
+  local timestamp
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  local limit kind actual
+  limit=$(printf '%s' "$prompt" | grep -oiE 'under [0-9]+ words' | grep -oE '[0-9]+' | head -1 || true)
+  if [[ -n "$limit" ]]; then
+    kind="word_limit"
+    actual=$(printf '%s' "$response" | wc -w | tr -d ' ')
+  else
+    limit=$(printf '%s' "$prompt" | grep -oiE 'under [0-9]+ lines' | grep -oE '[0-9]+' | head -1 || true)
+    [[ -z "$limit" ]] && return 0
+    kind="line_limit"
+    actual=$(printf '%s' "$response" | wc -l | tr -d ' ')
+  fi
+
+  [[ "$actual" =~ ^[0-9]+$ ]] || return 0
+  local status="ok"
+  [[ "$actual" -gt "$limit" ]] && status="violation"
+  mkdir -p "$log_dir" 2>/dev/null || return 0
+  echo "${timestamp} | ${agent} | ${kind} | limit=${limit} | actual=${actual} | ${status}" >> "${log_dir}/contracts.log" 2>/dev/null || true
+  return 0
 }
 
 # Get comprehensive usage summary
@@ -178,6 +254,7 @@ get_usage_summary() {
     "output_tokens": ${output_tokens},
     "message_count": ${message_count},
     "tool_call_count": ${tool_call_count},
+    "daily_budget_zone": "${zone}",
     "zone": "${zone}"
   },
   "gemini": {

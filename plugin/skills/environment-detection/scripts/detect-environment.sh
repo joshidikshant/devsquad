@@ -66,9 +66,9 @@ get_version() {
 }
 
 gemini_version="" codex_version="" claude_version=""
-[[ "$gemini_avail" == "true" ]] && gemini_version=$(get_version "gemini")
-[[ "$codex_avail" == "true" ]] && codex_version=$(get_version "codex")
-[[ "$claude_avail" == "true" ]] && claude_version=$(get_version "claude")
+[[ "$gemini_avail" == "true" ]] && gemini_version=$(get_version "$gemini_path")
+[[ "$codex_avail" == "true" ]] && codex_version=$(get_version "$codex_path")
+[[ "$claude_avail" == "true" ]] && claude_version=$(get_version "$claude_path")
 
 # --- Check dependencies ---
 jq_avail=$(check_jq)

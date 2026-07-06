@@ -6,6 +6,7 @@
   "default_routes": {
     "research": "gemini",
     "reading": "gemini",
+    "development": "gemini",
     "code_generation": "codex",
     "testing": "codex",
     "synthesis": "claude"

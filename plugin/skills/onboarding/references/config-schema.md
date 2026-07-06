@@ -11,6 +11,7 @@
   "default_routes": {
     "research": "gemini|codex|claude",
     "reading": "gemini|codex|claude",
+    "development": "gemini|codex|claude",
     "code_generation": "codex|gemini|claude",
     "testing": "codex|gemini|claude",
     "synthesis": "claude"

@@ -2,9 +2,9 @@
 
 **An Engineering Manager for your AI coding agents.**
 
-DevSquad is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that turns Claude into an Engineering Manager, coordinating a squad of AI coding agents (Gemini, Codex) through **hook-enforced delegation** — not suggestions.
+DevSquad is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that turns Claude into an Engineering Manager, coordinating a squad of AI coding agents (Gemini, Codex) through **hook-based delegation** — advisory suggestions by default, with an opt-in strict mode that denies intercepted tool calls when a delegation target is installed.
 
-Instead of Claude doing everything itself and burning through its 200K context, DevSquad intercepts tool usage, routes work to the right agent, and tracks usage across all three tools.
+Instead of Claude doing everything itself and burning through its 200K context, DevSquad intercepts tool usage, routes work to the right agent, and tracks usage across all three tools. Delegation pressure is driven by two separate, honestly-named signals: **context occupancy** of the current session (measured from the transcript) and **daily output volume** (a budget signal). Token-savings figures shown in suggestions are heuristics, not measurements.
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -49,7 +49,7 @@ After 25+ sessions of Claude ignoring delegation rules, burning context, and req
 ## Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI)
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli) — `npm install -g @google/gemini-cli` (optional, graceful degradation)
+- [Antigravity CLI](https://antigravity.google) — Successor to Gemini CLI (install: see https://antigravity.google, falls back to deprecated `@google/gemini-cli`)
 - [Codex CLI](https://github.com/openai/codex) — `npm install -g @openai/codex` (optional, graceful degradation)
 - `jq` — for JSON processing (`brew install jq` on macOS)
 

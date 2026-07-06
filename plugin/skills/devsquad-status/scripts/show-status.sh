@@ -122,7 +122,10 @@ else
 fi
 
 # Check squad availability
-gemini_available_str=$( command -v gemini &>/dev/null && echo "available" || echo "not available" )
+gemini_available_str="not available"
+if command -v agy &>/dev/null || command -v antigravity &>/dev/null; then
+  gemini_available_str="available"
+fi
 codex_available_str=$( command -v codex &>/dev/null && echo "available" || echo "not available" )
 
 # Format numbers with commas (simple approach for readability)
@@ -161,9 +164,9 @@ if [[ "$enforcement_mode" == "strict" ]]; then
   if ! command -v jq &>/dev/null; then
     warnings+=("STRICT MODE DEGRADED: jq not installed. Strict enforcement requires jq to emit deny responses. Currently falling back to advisory mode. Install jq to restore full strict enforcement.")
   fi
-  # Check for gemini CLI
-  if ! command -v gemini &>/dev/null; then
-    warnings+=("STRICT MODE DEGRADED: gemini CLI not installed. Delegation to Gemini agents will fall back to advisory.")
+  # Check for gemini / antigravity CLI
+  if ! command -v agy &>/dev/null && ! command -v antigravity &>/dev/null && ! command -v gemini &>/dev/null; then
+    warnings+=("STRICT MODE DEGRADED: Gemini/Antigravity CLI not installed. Delegation to Gemini agents will fall back to advisory.")
   fi
   # Check for codex CLI
   if ! command -v codex &>/dev/null; then

@@ -4,6 +4,37 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.5.0] — 2026-07-06
+
+### Breaking / Migration
+- **Antigravity CLI is the only Gemini-role backend.** Google decommissioned the open-source Gemini CLI (stopped serving 2026-06-18). Wrappers, detection, status, and session-start now resolve `agy`/`antigravity` only and fail fast with `brew install --cask antigravity-cli` guidance; a legacy `gemini` binary on PATH no longer counts as available.
+
+### Added
+- **Model selection (real this time)**: `preferences.gemini_model` → `agy --model`, `preferences.codex_model` → `codex exec -m`; both keys creatable via `/devsquad:config` on configs from older templates
+- **Contract validation logging** (`log_contract_check`): word/line bounds parsed from prompts, measured against responses, logged to `.devsquad/logs/contracts.log` (observe-only; enforcement gated on the D1 holdout verdict)
+- **Context-occupancy zone** (`calculate_context_zone`): measured from the session transcript's last usage record; drives the read threshold instead of daily output volume (which was both the wrong proxy and a dead data source — stats-cache.json stopped updating 2026-06-16)
+- **Advisory back-off**: at most 3 suggestions injected per session, then log-only (`advisory_capped`)
+- **Per-session counters**: read/suggestion counters scoped by `session_id`; concurrent sessions no longer share or clobber counts
+- **Test suite**: `bash test/run.sh` — 40+ assertions over `route_task()` and the PreToolUse hook (keywords, config overrides, jq-less mode, acceptance outcomes, context zone, cap, session isolation)
+- **ROUTING-CHANGELOG.md**: routing table changes are now dated, human-edited entries (decision D2)
+
+### Fixed
+- **Error classification order**: auth checked before rate in both wrappers; rate regex tightened to `429|rate.?limit|quota|…` — Google's decommission notice ("mig**rate**") was being classified as RATE_LIMITED, converting a permanent failure into infinite retry
+- **`invoke_gemini_with_files` telemetry**: the flagship gemini-reader path now records usage/stats (was fully invisible to `/devsquad:status`)
+- **`printf %b` content corruption**: piped file content no longer has its backslash escapes expanded
+- **Acceptance tracking honesty**: `Task` added to the hook matcher; `accepted` only when the invoked subagent matches the suggestion; same-tool = declined; anything else = `unresolved` (previously ANY different tool counted as accepted)
+- **`update-config.sh`**: `jq -e` gate no longer rejects present-but-false boolean keys; known later-version keys are creatable with per-key validation and correct boolean typing
+- **`write_state`** creates the parent directory — hook and routing paths no longer crash before SessionStart has initialized state
+- **EXIT traps** in wrappers guard `${stderr_file:-}` (successful calls could exit non-zero under `set -u`)
+- **`development` route** added to config defaults, `ensure_config`, and schema docs (existed only in routing code)
+- **Read thresholds reconciled** to 20 (green) / 8 (context pressure) — v0.3.0 shipped 40/20, unreleased 0.4.0 had 3/1 which fires on trivial work
+- **Agent shells downgraded to `model: haiku`** (all 6): they are thin CLI dispatchers; a live measurement showed a single sonnet-shell delegation consuming ~14.5K tokens of pure overhead
+- `.devsquad/` state dirs are now self-gitignoring (no more untracked noise in every project)
+- Agent docs warn that wrappers must run via `bash -c` (Bash tool may execute under zsh, where sourcing bash-only libs breaks)
+
+### Honesty
+- README no longer claims "not suggestions" (default is advisory) and labels savings as unreconciled heuristics; measured Claude output ratio is ~2.7 chars/token, not the /4 the estimates assume
+
 ## [0.4.0] — 2026-04-16
 
 ### Fixed

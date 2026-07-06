@@ -28,7 +28,7 @@ capabilities:
   - Generate utility functions, middleware, and CRUD endpoints
   - Produce self-contained prototypes without codebase context
   - Save generated code and validate syntax
-model: inherit
+model: haiku
 color: magenta
 tools:
   - Bash
@@ -139,3 +139,11 @@ Codex generates drafts. They may need:
 - Security review for production code
 
 Always note when generated code is a draft requiring review.
+
+**Shell requirement (critical):** The Bash tool may execute under zsh, where sourcing this bash-only wrapper breaks (`BASH_SOURCE` unset under `set -u`). ALWAYS invoke the wrapper inside an explicit bash shell:
+
+```
+bash -c 'source "${CLAUDE_PLUGIN_ROOT}/lib/codex-wrapper.sh" && invoke_codex "prompt" 50 90'
+```
+
+Never source the wrapper directly in the Bash tool.

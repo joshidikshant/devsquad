@@ -27,8 +27,12 @@ STATE_DIR=$(init_state_dir)
 ensure_config "${STATE_DIR}"
 init_session_state "${STATE_DIR}"
 
-# Reset session-scoped read counter for enforcement hooks
-rm -f "${STATE_DIR}/read_count"
+# Reset legacy shared counters; per-session counters (read_count.<sid>,
+# suggest_count.<sid>) belong to their own sessions — only expire stale ones
+# so concurrent sessions are never clobbered by a new session starting.
+rm -f "${STATE_DIR}/read_count" "${STATE_DIR}/suggest_count"
+find "${STATE_DIR}" -maxdepth 1 -name "read_count.*" -mtime +1 -delete 2>/dev/null || true
+find "${STATE_DIR}" -maxdepth 1 -name "suggest_count.*" -mtime +1 -delete 2>/dev/null || true
 
 # Reset stop hook retry counter for new session
 rm -f "${STATE_DIR}/stop_retry_count"
@@ -83,9 +87,16 @@ fi
 
 # Build availability strings
 if [[ "$GEMINI_AVAIL" == "false" ]]; then
-  GEMINI_STATUS="NOT INSTALLED (install: npm i -g @google/gemini-cli)"
+  GEMINI_STATUS="NOT INSTALLED (install: brew install --cask antigravity-cli)"
+  if command -v gemini &>/dev/null; then
+    GEMINI_STATUS="${GEMINI_STATUS} — legacy gemini binary found but Google decommissioned its service June 2026"
+  fi
 else
-  GEMINI_STATUS="available"
+  if command -v agy &>/dev/null; then
+    GEMINI_STATUS="available (Antigravity CLI: agy)"
+  else
+    GEMINI_STATUS="available (Antigravity CLI)"
+  fi
 fi
 if [[ "$CODEX_AVAIL" == "false" ]]; then
   CODEX_STATUS="NOT INSTALLED (install: npm i -g @openai/codex)"

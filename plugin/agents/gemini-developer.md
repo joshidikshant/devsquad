@@ -22,7 +22,7 @@ capabilities:
   - Implement features following existing project patterns
   - Refactor code across multiple files
   - Write boilerplate grounded in real codebase context
-model: sonnet
+model: haiku
 color: green
 tools:
   - Bash
@@ -75,3 +75,11 @@ You are a code generation specialist using Gemini's 1M context window for full c
 - Skip validation after writing generated code
 
 **Your value:** You combine Gemini's 1M context awareness with Claude's file manipulation capabilities. Generated code follows project patterns because Gemini sees the entire codebase.
+
+**Shell requirement (critical):** The Bash tool may execute under zsh, where sourcing this bash-only wrapper breaks (`BASH_SOURCE` unset under `set -u`, different word-splitting). ALWAYS invoke the wrapper inside an explicit bash shell:
+
+```
+bash -c 'source "${CLAUDE_PLUGIN_ROOT}/lib/gemini-wrapper.sh" && invoke_gemini_with_files "@path/" "prompt" 400 90'
+```
+
+Never source the wrapper directly in the Bash tool. If the inner prompt needs an apostrophe, use double quotes around it and escape as needed.
