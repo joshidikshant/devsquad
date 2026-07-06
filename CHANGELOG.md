@@ -4,6 +4,13 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.8.0] — 2026-07-06
+
+### Added — D1 experiment live
+- **Holdout protocol merged** (from the `holdout-protocol` branch): `holdout_mode=true` splits sessions by session-id hash — even = control (suggestions suppressed, logged identically), odd = treatment (normal). Gate runs before the advisory back-off cap so both arms log every suggestion event to `logs/holdout.log`
+- **`scripts/holdout-reconcile.sh`**: joins holdout arm assignments with measured per-session Claude output tokens from Claude Code transcripts (grouped by message id), reports per-arm stats and the pre-registered D1 decision rule (>=25% mean savings net of overhead, <=1 extra failure, n>=20). Task failures supplied via `--failures C=N T=M` — hook-side logs cannot see outcomes
+- `lib/holdout-report.sh` (quick per-arm log summary) ships with the plugin; suite gains holdout assertions (arm parity, identical logging, no-config passthrough)
+
 ## [0.7.0] — 2026-07-06
 
 ### Changed — structure: shared adapter core (D4 extraction)
