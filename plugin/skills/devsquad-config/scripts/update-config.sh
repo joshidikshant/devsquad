@@ -57,6 +57,15 @@ _validate_model_name() {
     echo "Error: model name cannot be empty"
     return 1
   fi
+  # Tier pins resolve against the model catalog at invocation time — the
+  # churn-proof alternative to exact names; always valid
+  case "$value" in
+    tier:fast|tier:frontier) return 0 ;;
+    tier:*)
+      echo "Error: unknown tier '${value}'. Valid tiers: tier:fast, tier:frontier"
+      return 1
+      ;;
+  esac
   if [[ -n "${DEVSQUAD_SKIP_MODEL_VALIDATION:-}" ]] || ! command -v agy &>/dev/null; then
     return 0
   fi

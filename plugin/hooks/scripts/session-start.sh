@@ -15,6 +15,14 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${PLUGIN_ROOT}/lib/cli-detect.sh"
 source "${PLUGIN_ROOT}/lib/state.sh"
 source "${PLUGIN_ROOT}/lib/usage.sh"
+source "${PLUGIN_ROOT}/lib/model-catalog.sh"
+
+# Model catalog: hooks are read-only (no network). When stale (>24h), spawn a
+# DETACHED refresh so tier:pins track model churn without blocking the hook.
+CATALOG_NOTE=$(catalog_context_note 2>/dev/null || true)
+if catalog_is_stale; then
+  (nohup bash "${PLUGIN_ROOT}/lib/model-catalog.sh" refresh >/dev/null 2>&1 &)
+fi
 
 # Detect CLIs
 GEMINI_AVAIL=$(detect_cli "gemini")
@@ -127,6 +135,7 @@ Squad Status:
 - Gemini CLI: ${GEMINI_STATUS}
 - Codex CLI: ${CODEX_STATUS}
 - Grok CLI: ${GROK_STATUS}
+${CATALOG_NOTE:+- ${CATALOG_NOTE}}
 ${PLUGINS_INFO:+- ${PLUGINS_INFO}}
 
 Commands: /devsquad:setup (onboarding), /devsquad:status (health check), /devsquad:config (preferences)

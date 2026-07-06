@@ -60,5 +60,47 @@ else
 fi
 unset DEVSQUAD_SKIP_MODEL_VALIDATION
 
+# --- Group 4: tier resolution against a fixture catalog ---
+CATDIR=$(mktemp -d)
+export DEVSQUAD_CATALOG_DIR="$CATDIR"
+cat > "$CATDIR/models.json" <<'CATEOF'
+{"fetched_at":"2026-07-06T00:00:00Z",
+ "gemini":{"status":"ok","models":["Gemini 3.5 Flash (Medium)","Gemini 3.5 Flash (High)","Gemini 4.0 Flash (Medium)","Gemini 3.1 Pro (High)","Claude Opus 4.6 (Thinking)","GPT-OSS 120B (Medium)"]},
+ "grok":{"status":"ok","models":["grok-composer-2.5-fast","grok-build"]},
+ "codex":{"status":"unlistable","models":[]}}
+CATEOF
+
+CAT="$PLUGIN_ROOT/lib/model-catalog.sh"
+assert_eq "tier fast picks newest flash"      "$(bash "$CAT" resolve gemini fast)"     "Gemini 4.0 Flash (Medium)"
+assert_eq "tier frontier picks highest ver"   "$(bash "$CAT" resolve gemini frontier)" "Claude Opus 4.6 (Thinking)"
+assert_eq "grok fast"                         "$(bash "$CAT" resolve grok fast)"       "grok-composer-2.5-fast"
+assert_eq "grok frontier non-fast fallback"   "$(bash "$CAT" resolve grok frontier)"   "grok-build"
+
+# Adapter integration: tier pin in agent_models resolves through the catalog
+T4=$(mktemp -d); mkdir -p "$T4/.devsquad"
+printf '%s' '{"agent_models":{"gemini-reader":"tier:fast"}}' > "$T4/.devsquad/config.json"
+export CLAUDE_PROJECT_DIR="$T4"
+assert_eq "adapter resolves tier pin" "$(resolve gemini-wrapper.sh _resolve_gemini_model gemini-reader)" "Gemini 4.0 Flash (Medium)"
+
+# Missing catalog degrades to empty (CLI default), never fails
+export DEVSQUAD_CATALOG_DIR=$(mktemp -d)
+assert_eq "missing catalog -> CLI default" "$(resolve gemini-wrapper.sh _resolve_gemini_model gemini-reader)" ""
+export DEVSQUAD_CATALOG_DIR="$CATDIR"
+
+# update-config: tier values accepted, bogus tier rejected
+T5=$(mktemp -d); mkdir -p "$T5/.devsquad"
+cp "$PLUGIN_ROOT/skills/onboarding/templates/config-defaults.json" "$T5/.devsquad/config.json"
+export CLAUDE_PROJECT_DIR="$T5"
+if bash "$PLUGIN_ROOT/skills/devsquad-config/scripts/update-config.sh" 'agent_models.gemini-reader=tier:frontier' >/dev/null 2>&1; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "  FAIL: tier:frontier should be accepted"
+fi
+if bash "$PLUGIN_ROOT/skills/devsquad-config/scripts/update-config.sh" 'agent_models.gemini-reader=tier:banana' >/dev/null 2>&1; then
+  FAIL=$((FAIL + 1)); echo "  FAIL: tier:banana should be rejected"
+else
+  PASS=$((PASS + 1))
+fi
+
 echo "  models: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

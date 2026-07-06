@@ -84,7 +84,13 @@ Claude Code session
 Support libs: `state.sh` (state/config/cooldowns), `usage.sh` (usage records,
 zones, capacity, contract checks), `enforcement.sh` (mode, compliance logging,
 per-session counters), `routing.sh` (static keyword table — see
-ROUTING-CHANGELOG.md), `cli-detect.sh` (detection + PATH bootstraps).
+ROUTING-CHANGELOG.md), `cli-detect.sh` (detection + PATH bootstraps),
+`model-catalog.sh` (machine-local model catalog + tier resolution — the
+anti-churn layer: configs pin `tier:fast`/`tier:frontier` intent, the catalog
+maps intent to the best available model at invocation time; refreshed by a
+detached background job spawned from SessionStart when >24h stale, NEVER
+synchronously in a hook; drift is changelogged to `~/.devsquad/` and surfaced
+at session start).
 
 ## The wrapper contract
 

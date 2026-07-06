@@ -4,6 +4,15 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.9.0] — 2026-07-06
+
+### Added — model-churn autopilot (tier pins + live catalog)
+- **`lib/model-catalog.sh`**: machine-local catalog (`~/.devsquad/models.json`) built from the CLIs' own model listings (`agy models`, `grok models`); diffs are appended to `~/.devsquad/models-changelog.log` and staged as drift warnings
+- **Tier pins**: `agent_models` / `preferences.*_model` accept `tier:fast` and `tier:frontier` — resolved at invocation time against the catalog (newest fast-family model; highest-version pro/opus-family), so provider model rotation requires zero config edits. Missing/stale catalog degrades to the CLI default, never blocks
+- **Self-refreshing**: SessionStart spawns a detached catalog refresh when >24h stale (hooks stay network-free and within budget) and surfaces drift + catalog summary in the squad status
+- **`/devsquad:models`** command: refresh, list, show tier resolutions and pin drift
+- Suite grows to 110 assertions (tier ranking, adapter integration, degradation, tier validation)
+
 ## [0.8.0] — 2026-07-06
 
 ### Added — D1 experiment live

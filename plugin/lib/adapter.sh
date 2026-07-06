@@ -29,8 +29,16 @@
 #   ADAPTER_EXTRA_CHARS_IN  extra chars_in to record (piped content size)
 set -euo pipefail
 
+_ADAPTER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${_ADAPTER_LIB_DIR}/model-catalog.sh"
+
 # Resolve model: agent-specific (agent_models.<DEVSQUAD_AGENT>) >
-# global (.preferences.<pref_key>) > "" (CLI default)
+# global (.preferences.<pref_key>) > "" (CLI default).
+# Values may be exact model names OR tiers ("tier:fast" / "tier:frontier"),
+# which resolve against the machine-local model catalog at invocation time —
+# the anti-churn layer: when providers rotate models, tier pins follow the
+# catalog with zero config edits (see lib/model-catalog.sh).
 _adapter_resolve_model() {
   local pref_key="$1"
   local config_file="${CLAUDE_PROJECT_DIR:-.}/.devsquad/config.json"
@@ -44,6 +52,10 @@ _adapter_resolve_model() {
   fi
   if [[ -z "$m" ]]; then
     m=$(jq -r --arg k "$pref_key" '.preferences[$k] // empty' "$config_file" 2>/dev/null)
+  fi
+  if [[ "$m" == tier:* ]]; then
+    local cli_key="${pref_key%%_*}"
+    m=$(resolve_model_tier "$cli_key" "${m#tier:}" 2>/dev/null || echo "")
   fi
   echo "$m"
 }

@@ -80,5 +80,11 @@ Two layers, resolved by the wrappers as: per-agent > global > CLI default.
   `grok models` after `grok login`; the grok CLI reports bad model names
   itself, so only non-empty is enforced). `default_routes` also accepts
   `grok` for research/development/code_generation/testing.
+- **Tier pins (churn-proof, recommended)**: any model value may be
+  `tier:fast` or `tier:frontier` instead of an exact name. Tiers resolve at
+  invocation time against the machine-local catalog (`~/.devsquad/models.json`,
+  auto-refreshed in the background when >24h old; `/devsquad:models` to
+  inspect). When providers rotate models, tier pins follow automatically;
+  exact-name pins go stale and trigger drift warnings at session start.
 - The Claude shell each agent runs in is separate from this: it is set by
   `model:` in the agent's frontmatter (currently `sonnet` for all six).
