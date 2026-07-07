@@ -1,167 +1,130 @@
+<div align="center">
+
 # DevSquad
 
-**An Engineering Manager for your AI coding agents.**
+### Your AI coding agent ignores your rules. Hooks don't.
 
-DevSquad is a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin that turns Claude into an Engineering Manager, coordinating a squad of external AI coding CLIs — **Antigravity** (Gemini/Claude/GPT-OSS models), **Codex** (GPT), and **Grok Build** (xAI) — through **hook-based delegation**. Advisory suggestions by default; an opt-in strict mode denies intercepted tool calls when a delegation target is installed.
+**DevSquad turns Claude Code into an engineering manager that _physically intercepts_ tool calls and routes the grunt work to Gemini, Codex, and Grok — then runs a live A/B test on whether that even helps.**
 
-Instead of Claude doing everything itself and burning through its context window, DevSquad intercepts tool usage, suggests routing bulk work to the right CLI, and tracks usage across the whole squad. Delegation pressure is driven by two separate, honestly-named signals: **context occupancy** of the current session (measured from the transcript) and **daily output volume** (a budget signal). Token-savings figures shown in suggestions are heuristics, not measurements — and whether delegation actually pays is under live experiment (see [The D1 experiment](#the-d1-experiment)).
+[![tests](https://img.shields.io/badge/tests-177%20passing-brightgreen)](test/)
+[![bash](https://img.shields.io/badge/bash-3.2%2B-blue)](CONTRIBUTING.md)
+[![jq](https://img.shields.io/badge/jq-optional-blue)](CONTRIBUTING.md)
+[![license](https://img.shields.io/badge/license-MIT-black)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://docs.anthropic.com/en/docs/claude-code)
 
-> **A note on honesty.** This README describes what the code does, not an aspiration. The default is advisory (i.e. suggestions); strict mode degrades to advisory when a CLI is missing or `jq` is absent. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full picture and [CHANGELOG.md](CHANGELOG.md) for how it got here.
+⭐ **Star this if you've ever watched an agent burn 100K tokens re-reading files it didn't need.**
 
-## The squad
+</div>
 
-| Role | CLI | Best at |
-|------|-----|---------|
-| `gemini-*` | **Antigravity** (`agy`) | Bulk reading (1M context), research, code. Multiplexes Gemini 3.5 Flash / 3.1 Pro / Claude Sonnet & Opus 4.6 / GPT-OSS behind one CLI. |
-| `codex-*` | **Codex** (`codex`) | Scaffolding, test generation (GPT models). |
-| `grok-*` | **Grok Build** (`grok`) | Live web/X research (current events, sentiment), drafts. Full agent session per call (~2–5 min latency). |
-| synthesis | **Claude** (self) | Architecture, integration, final judgment — never delegated. |
+---
 
-> The open-source Gemini CLI was **decommissioned by Google on 2026-06-18**. DevSquad's `gemini` role is served by the Antigravity CLI only; a legacy `gemini` binary on PATH no longer counts as available.
+## The 30-second version
 
-## Why?
+You told Claude to delegate the boring stuff. It nodded. Then it read 40 files itself, blew through its context window, and you paid for every token.
 
-CLAUDE.md instructions are ignorable. Hooks are not. After many sessions of documentation-based delegation rules being ignored, DevSquad replaced them with **runtime hooks** that intercept tool calls at the source.
+`CLAUDE.md` instructions are **suggestions an agent can ignore.** A hook fires on the tool call itself — there's nothing to ignore.
 
-That premise is itself under test — DevSquad measures whether delegation nets positive rather than assuming it. See [The D1 experiment](#the-d1-experiment).
+```
+You: "Research this codebase and add tests"
 
-## Prerequisites
+        Claude tries to Read the 12th file…
+                    │
+          ┌─────────▼─────────┐
+          │   DevSquad hook   │   ← fires ON the tool call
+          └─────────┬─────────┘
+                    │  "You've read 20 files. Hand the bulk
+                    │   reading to Gemini's 1M context instead."
+                    ▼
+   Gemini reads · Codex scaffolds · Grok researches · Claude decides
+```
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI)
-- **Antigravity CLI** — `brew install --cask antigravity-cli` (provides `agy`; authenticates via the Antigravity IDE login)
-- **Codex CLI** — `npm install -g @openai/codex` (optional; graceful degradation)
-- **Grok Build CLI** — see https://grok.com/build (optional; run `grok login` once)
-- `jq` — for JSON processing (`brew install jq`)
+|                        | `CLAUDE.md` rules | **DevSquad** |
+| ---------------------- | :---------------: | :----------: |
+| Enforced at runtime?   |   ❌ ignorable    |   ✅ hooks    |
+| Routes to other CLIs?  |        ❌         | ✅ 3 of them |
+| Tracks what it saved?  |        ❌         |   ✅ logged   |
+| **Proves it helps?**   |        ❌         | ✅ live A/B test |
 
-All external CLIs are optional and degrade gracefully; DevSquad only suggests delegating to CLIs that are actually installed and authenticated.
+That last row is the point. Read on.
 
-## Installation
+## Wait — it A/B tests _itself_?
+
+Most "delegation" tools assert they save you money. DevSquad refuses to.
+
+It ships a **holdout experiment (D1)**: flip `holdout_mode=true` and half your sessions become a silent control group with delegation suppressed. A reconcile script then joins the two arms against real per-session token counts from your transcripts and answers one falsifiable question:
+
+> Does routed execution beat Claude-only on cost, at non-inferior quality — **net of the delegation overhead itself?**
+
+- **If yes** → the enforcement gets stronger.
+- **If no** → DevSquad gets honestly repositioned as a budget manager, and I say so in the README.
+
+The pre-registered bar (≥25% token savings, ≤1 extra failure, ≥20 sessions) is written down *before* the data comes in. A dev tool that's built to be proven wrong is a dev tool you can trust.
+
+## The war story (why it's built the way it is)
+
+I built the first version after watching Claude ignore my delegation rules for the twenty-fifth time.
+
+Then, mid-project, **Google decommissioned the open-source Gemini CLI out from under it** (June 2026) — and its replacement, Antigravity, _silently ignores unknown model names_ instead of erroring. The failure notice literally contained the word "mi**grate**", which an early error-classifier matched as a *rate limit* and dutifully retried forever.
+
+Every one of those scars is now a test. That's why DevSquad has:
+
+- **One adapter contract** all three CLIs pass — auth checked *before* rate limits, bounded execution even with no `timeout` binary, cooldowns, telemetry. (Add a 4th CLI = one thin file.)
+- **Tier pins that survive model churn** — pin `tier:fast`, not `gemini-3.5-flash`. A machine-local catalog resolves intent → today's best model at call time. When the provider ships a new model, you change nothing.
+- **177 offline tests**, written by an adversarial review that verified all 46 findings against the source and threw out 4 that were wrong.
+
+## Install
 
 ```bash
 git clone https://github.com/joshidikshant/devsquad.git
 cd devsquad && bash install.sh
 ```
 
-Or manually:
+Then restart Claude Code and run `/devsquad:setup` in a project. **It's advisory by default — it will never block you**, just nudge. Opt into strict mode when you trust it.
 
-```bash
-claude plugin marketplace add https://github.com/joshidikshant/devsquad.git
-claude plugin install devsquad@devsquad-marketplace
-```
+<details>
+<summary>Prerequisites (all optional except Claude Code — DevSquad degrades gracefully)</summary>
 
-After installing, restart Claude Code and run `/devsquad:setup` in each project where you want enforcement active.
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- **Antigravity CLI** — `brew install --cask antigravity-cli` (the `gemini` role; the legacy Gemini CLI is dead)
+- **Codex CLI** — `npm install -g @openai/codex`
+- **Grok Build CLI** — [grok.com/build](https://grok.com/build), then `grok login`
+- `jq` — recommended, but every path has a fallback without it
 
-> **Hook registration.** `install.sh` registers hooks into `~/.claude/settings.json` pointing at the **marketplace clone** — a git checkout that `claude plugin marketplace update` refreshes. Never point hook commands at a versioned cache dir; that freezes hooks at install-time and silently drops later fixes. After pulling a new release, run `claude plugin update devsquad@devsquad-marketplace`. Details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deployment-modes-the-drift-trap).
+</details>
 
-## Usage
+## The squad
 
-### Slash commands
+| Role | CLI | Its edge |
+| ---- | --- | -------- |
+| `gemini-*` | **Antigravity** (`agy`) | 1M-context bulk reading; multiplexes Gemini Flash/Pro, Claude Sonnet/Opus, GPT-OSS |
+| `codex-*` | **Codex** | Fast scaffolding & test generation |
+| `grok-*` | **Grok Build** | Live web/X research — current events, sentiment |
+| synthesis | **Claude** | Architecture & judgment. Never delegated. |
 
-| Command | Description |
-|---------|-------------|
-| `/devsquad:setup` | Onboarding — detect environment, set preferences, generate config |
-| `/devsquad:config` | View or edit delegation preferences (e.g. `enforcement_mode=strict`) |
-| `/devsquad:status` | Squad health, token usage, delegation stats, budget zone |
-| `/devsquad:models` | Live model catalog, tier resolutions, and model drift |
-| `/devsquad:capacity` | Report CLI usage percentages for capacity-aware delegation |
-| `/devsquad:git-health` | Scan repo for broken symlinks, orphaned branches, uncommitted changes |
-| `/devsquad:generate <desc>` | Generate a new DevSquad skill (Gemini research → Codex draft → review) |
-| `/devsquad:workflow` | Run a multi-step workflow from a JSON definition |
+## Commands
 
-### How it works
+`/devsquad:status` · `/devsquad:models` · `/devsquad:config` · `/devsquad:capacity` · `/devsquad:git-health` · `/devsquad:generate` · `/devsquad:workflow` · `/devsquad:setup`
 
-1. **Session starts** → `session-start` hook detects CLIs, initializes state, and refreshes the model catalog in the background if stale.
-2. **You work normally** → Claude handles requests as usual.
-3. **Hook intercepts** → `pre-tool-use` fires on Read / WebSearch / test-Bash / Task.
-4. **Signals + threshold** → After ~20 file reads in a session (8 under measured context pressure), Claude is advised to delegate bulk reading; WebSearch is always advised. At most 3 suggestions are injected per session (a back-off cap so the plugin never spends more context than it saves).
-5. **Agent executes** → A thin Claude subagent shell exports its name and calls the wrapper; the shared adapter invokes the external CLI with bounded execution, rate-limit cooldown, and auth-before-rate error classification.
-6. **Usage tracked** → Every invocation is recorded; response bounds ("Under 300 words") are checked into a contract log; acceptance is tracked precisely (a matching `Task` call = accepted; same tool again = declined; anything else = unresolved).
+## Under the hood
 
-### Model selection & tier pins (churn-proof)
-
-Antigravity and Grok rotate models frequently. Rather than pin exact names (which go stale — `agy` silently ignores unknown model names), pin **intent**:
-
-```bash
-/devsquad:config agent_models.gemini-reader=tier:fast       # newest flash-class model
-/devsquad:config agent_models.gemini-researcher=tier:frontier  # highest-version pro/opus
-```
-
-`tier:fast` / `tier:frontier` resolve at invocation time against a machine-local model catalog (`~/.devsquad/models.json`, auto-refreshed when >24h stale). When a provider ships a new model, tier pins follow it with zero config edits; exact-name pins still work and are validated at set time. `/devsquad:models` shows the catalog and what each tier currently resolves to. Per-agent models fall back to `preferences.<cli>_model`, then the CLI default.
-
-### Enforcement modes
-
-| Mode | Behavior |
-|------|----------|
-| `advisory` (default) | Suggests delegation; Claude may proceed anyway. |
-| `strict` | Denies the intercepted tool call, requiring delegation — with availability-safe fallback to advisory when the target CLI or `jq` is missing. |
-
-## The D1 experiment
-
-DevSquad's core claim — that delegation saves Claude tokens net of overhead — is **falsifiable and under test**, not assumed. With `holdout_mode=true`, sessions split by a session-id hash: half are **control** (suggestions suppressed, logged identically) and half **treatment** (normal behavior). `scripts/holdout-reconcile.sh` joins the arm assignments with measured per-session Claude token usage from transcripts and reports against the pre-registered rule: **≥25% mean savings net of subagent overhead, ≤1 additional task failure, over ≥20 sessions.**
-
-- PASS → invest in strict mode and contract enforcement.
-- FAIL → reposition DevSquad honestly as a capacity/budget manager.
-
-## Architecture
-
-See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the end-to-end flow diagram, the wrapper contract, the add-a-CLI recipe, and deployment modes. In brief:
+The full flow diagram, the wrapper contract, the add-a-CLI recipe, and the deployment model live in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Decisions are in **[docs/adr/](docs/adr/)**; routing changes are dated in **[ROUTING-CHANGELOG.md](ROUTING-CHANGELOG.md)**; and the honest list of what's still rough is in **[docs/MAINTAINABILITY-BACKLOG.md](docs/MAINTAINABILITY-BACKLOG.md)** — because a tool that hides its backlog is hiding something.
 
 ```
-Claude session
-  ├─ hooks/             SessionStart · PreToolUse · PreCompact · Stop
-  ├─ agents/            thin Claude shells (one per CLI × role)
-  ├─ lib/*-wrapper.sh   per-CLI configuration (thin)
-  └─ lib/adapter.sh     shared invocation core — cooldown, model/tier
-                        resolution, bounded exec, error classification,
-                        telemetry, contract logging (one path, all CLIs)
+hooks → routing → 8 agent shells → one adapter core → 3 CLIs → telemetry → D1 verdict
 ```
 
-Supporting libs: `state.sh`, `usage.sh`, `enforcement.sh`, `routing.sh` (static keyword table — see [ROUTING-CHANGELOG.md](ROUTING-CHANGELOG.md)), `cli-detect.sh`, `model-catalog.sh`.
+## Contributing
 
-## Configuration
+`bash test/run.sh` is the contract — offline, no real CLIs, bash-3, jq-optional. See **[CONTRIBUTING.md](CONTRIBUTING.md)**. Adding a CLI is a documented recipe, not an archaeology dig.
 
-Stored in `.devsquad/config.json` (per project, self-gitignored, created on first run):
+---
 
-```json
-{
-  "enforcement_mode": "advisory",
-  "holdout_mode": false,
-  "default_routes": {
-    "research": "gemini",
-    "reading": "gemini",
-    "development": "gemini",
-    "code_generation": "codex",
-    "testing": "codex",
-    "synthesis": "self"
-  },
-  "preferences": {
-    "gemini_word_limit": 300,
-    "codex_line_limit": 50,
-    "grok_word_limit": 300,
-    "auto_suggest": true
-  },
-  "agent_models": {}
-}
-```
+<div align="center">
 
-`default_routes` accept `gemini | codex | grok | self`. `agent_models` maps an agent to a model name or a `tier:fast` / `tier:frontier` pin.
+**Built by [Dikshant Joshi](https://github.com/joshidikshant)** — AdTech advisor & AI builder.
 
-## Tests
+If DevSquad saved you a context window (or just made you think differently about enforcing agent behavior), **⭐ star it** — it's the signal that tells me to keep building in the open.
 
-```bash
-bash test/run.sh
-```
+MIT
 
-No network, no real CLIs (wrappers are exercised against fake binaries), bash-3 compatible, jq-less paths covered. Suite spans routing, hook behavior, model/tier resolution, and the cross-CLI wrapper contract (`test/test_wrapper_contract.sh` — the D4 conformance suite every wrapper must pass).
-
-## Known limitations
-
-- Routing is a static keyword table (lexical cues). An offline benchmark shows an LLM classifier would route real tasks better, but volume doesn't yet justify it — recorded as evidence in [ROUTING-CHANGELOG.md](ROUTING-CHANGELOG.md), not implemented.
-- Strict mode requires `jq` and degrades to advisory without it.
-- The daily-budget zone reads Claude Code's stats cache, which is a global daily signal, not per-session context — the context zone (transcript-measured) is the one that drives thresholds.
-- Grok runs a full agent session per call (~2–5 min latency); use generous timeouts.
-- Codex models can't be listed programmatically, so tier pins don't apply to `codex-*` agents (use `preferences.codex_model`).
-
-## License
-
-MIT © [Dikshant Joshi](https://github.com/joshidikshant)
+</div>
