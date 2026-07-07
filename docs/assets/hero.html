@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DevSquad — the rescue</title>
+
+<!--
+=====================================================================================
+ DEVSQUAD HERO  ·  "THE RESCUE"  ·  Signal over Noise / "The Instrument"
+=====================================================================================
+
+ CONCEPT — a 5.4s seamless loop with a story arc: panic -> intervention -> relief.
+ The README's headline ("Your AI agent ignores your rules. Hooks don't.") made kinetic.
+ --------------------------------------------------------------------------------
+   BEAT 1  COLD OPEN / PANIC   (phase 0.00 - 0.19)
+     A lone CLAUDE hub. A CONTEXT METER (radial gauge, instrument-style) climbs toward
+     a redline, readout ticking CTX 61K -> 128K in phosphor then AMBER. Noise particles
+     scatter and accumulate around the hub. The screen feels like it is degrading.
+   BEAT 2  THE HOOK FIRES / INTERVENTION   (phase 0.19 - 0.28)
+     A horizontal SCANLINE sweeps the full width and SNAPS at the hub. A single hard
+     frame-tick (micro screen-shake) lands on the snap. The three spokes flash into
+     existence. This is the money moment — a mechanism engaging.
+   BEAT 3  DISPATCH / THE SQUAD ACTIVATES   (phase 0.28 - 0.62)
+     Work scatters outward from the hub to GEMINI, CODEX, GROK. Each agent has its OWN
+     motion personality (see below) — playful, syncopated, alive.
+   BEAT 4  SIGNAL RETURNS / RELIEF   (phase 0.62 - 0.88)
+     Clean, aligned phosphor particles stream BACK to the hub. The meter DRAINS toward
+     zero. Noise resolves into signal — the rescue worked.
+   BEAT 5  RESOLVE   (phase 0.88 - 1.00)
+     The DEVSQUAD wordmark holds, calm restored, meter near idle. The loop wraps: the
+     meter re-climbs into the next cold open with no visible seam (the noise field and
+     meter are both continuous across phase 1.0 == 0.0).
+
+ PER-AGENT MOTION PERSONALITY (Beat 3 dispatch)
+ --------------------------------------------------------------------------------
+   GEMINI / READ   one big, slow swell — a single fat pulse of points (1M context).
+   CODEX  / DRAFT  rapid staccato bursts — short trains fired in quick stabs.
+   GROK   / CHECK  a sweeping radar arc — points ride a rotating scan out and back.
+
+ WHY THREE.JS (not GSAP-only): hundreds of independently-routed point-sprites, a noise
+ cloud, three distinct dispatch behaviours and a draining meter are a GPU particle
+ problem. ONE ShaderMaterial routes every point from a single normalised phase uniform,
+ so the whole story is a pure function of phase -> a headless capture is frame-exact and
+ loops with no seam. GSAP supplies the easing vocabulary + reduced-motion contract; the
+ meter arc + readout + wordmark are DOM/SVG over the canvas (crisp Geist Mono, no atlas).
+
+ SKILLS THIS WAS BUILT FROM
+ --------------------------------------------------------------------------------
+   threejs-fundamentals · threejs-shaders · threejs-materials  (scene/shader/material API)
+   instrument-webgl-motion  (repo bridge: renderer gate, gl_PointCoord/pointUV rule,
+                             exact motion tokens, WebGL2-ships-today ruling)
+   gsap-core / gsap-timeline (easing vocabulary + reduced-motion contract)
+   dikshantjoshi-design     (Night Bench palette, mono type, motion = measurement)
+
+ RENDERER GATE (instrument-webgl-motion rule 1 + 3, adapted for a standalone file)
+ --------------------------------------------------------------------------------
+ The repo routes every scene through initGraphicsContext (WebGPU -> WebGL2 -> "none"),
+ which lives in @signal-noise/ui/motion and is not importable from a standalone HTML
+ file. This file reproduces its BEHAVIOUR, honouring the ruling that "WebGL2 ships
+ today; WebGPU/TSL is the production-port target" — WebGL2 is the floor. We use the
+ classic THREE.WebGLRenderer form the skill sanctions for "simple, non-TSL point
+ fields": it acquires a WebGL2 context by default, needs no three/webgpu bundle, and —
+ because there is no cross-backend TSL material — the gl_PointCoord/pointUV break
+ (rule 2) cannot occur. Per rule 2 option (A) "drop the disc": sprite meaning is carried
+ by BRIGHTNESS via a varying, not a pointUV disc. Tier "none" / context loss -> the
+ designed static still (the resolved calm state).
+
+ THE AMBER EXCEPTION (brand rule interpreted)
+ --------------------------------------------------------------------------------
+ Night Bench is ONE accent (phosphor #00E5A0). Status colours are sanctioned ONLY on an
+ instrument in a genuine measurement state. The context meter redlining IS that state:
+ it warms phosphor -> amber (#F5A623) as CTX crosses ~85K, exactly like a real gauge in
+ the red. Amber appears NOWHERE else — not on a spoke, node, particle, or the wordmark.
+ This is the sanctioned instrument use, not decoration.
+
+ CRITICAL: LABELS RENDER AT FIRST PAINT, DETERMINISTICALLY (the old bug, fixed)
+ --------------------------------------------------------------------------------
+ The prior version scaled label positions by stage.getBoundingClientRect(), which
+ returns 0 before layout settles in headless Chrome, collapsing labels to (0,0). This
+ version removes that dependency ENTIRELY: #stage is a FIXED 1280x640 px box (never
+ scaled), so a node's stage-pixel coordinate IS its CSS-pixel coordinate. Labels are
+ positioned in the static HTML below with literal px values computed from the same NODES
+ constants the WebGL uses (no measurement, no rAF race). They are correct on the very
+ first frame, in headless, and in the ?capture=1 seek path. JS never repositions them.
+
+ HOW TO CAPTURE TO GIF / MP4  (headless Chrome, frame-exact + seamless)
+ --------------------------------------------------------------------------------
+ Append ?capture=1 to freeze the clock and drive it from window.__seek(t01), t01 in
+ [0,1) across one loop. In capture mode ALL chrome (labels, meter, readout, wordmark)
+ is pinned at final visible opacity for EVERY seeked frame (the one-time entrance
+ transition is skipped), so no early frame is blank. Node + puppeteer:
+
+   // capture.mjs  ·  npm i puppeteer  ·  needs ffmpeg on PATH
+   import puppeteer from "puppeteer";
+   import { mkdirSync } from "node:fs";
+   const FRAMES = 162, W = 1280, H = 640;                 // 162 frames @ 30fps = 5.4s
+   mkdirSync("frames", { recursive: true });
+   const b = await puppeteer.launch({ headless: "new",
+     args: ["--use-gl=angle","--use-angle=metal","--enable-webgl","--ignore-gpu-blocklist"] });
+   const p = await b.newPage();
+   await p.setViewport({ width: W, height: H, deviceScaleFactor: 2 });
+   await p.goto("file://" + process.cwd() + "/hero.html?capture=1", { waitUntil: "networkidle0" });
+   await p.waitForFunction("window.__ready === true");
+   for (let i = 0; i < FRAMES; i++) {
+     await p.evaluate((t) => window.__seek(t), i / FRAMES);   // t in [0,1)
+     await p.screenshot({ path: `frames/f${String(i).padStart(4,"0")}.png` });
+   }
+   await b.close();
+
+ Then encode (frame FRAMES == frame 0, so the GIF loops seamlessly):
+   # square social crop (640x640, centre) as a looping GIF:
+   ffmpeg -y -framerate 30 -i frames/f%04d.png -vf \
+     "crop=1280:1280:320:0,scale=640:640:flags=lanczos,split[a][b];[a]palettegen=stats_mode=single[p];[b][p]paletteuse=new=1" \
+     -loop 0 devsquad-hero-square.gif
+   # full 1280x640 GitHub social card as MP4:
+   ffmpeg -y -framerate 30 -i frames/f%04d.png -c:v libx264 -pix_fmt yuv420p \
+     -vf "scale=1280:640" devsquad-hero.mp4
+ (Without ?capture=1 the scene free-runs on the same loop for live viewing.)
+
+ VENDORING THREE.JS FOR OFFLINE CAPTURE
+ --------------------------------------------------------------------------------
+ The import map points at ./three.module.js, which is already co-located next to this
+ file (a pinned r172 build). For a CDN-served preview instead, repoint the "three"
+ entry to https://unpkg.com/three@0.172.0/build/three.module.js. No other change.
+=====================================================================================
+-->
+
+<style>
+  /* ---- Brand token layer (Night Bench). Single source consumed by CSS + JS. ---- */
+  :root {
+    --bg:         #0A0D0C;
+    --fg:         #E9EFEA;
+    --muted:      #9DACA3;
+    --subtle:     #75857B;
+    --faint:      #38423D;
+    --border-1:   #1E2622;
+    --border-2:   #2C3630;
+    --accent:     #00E5A0;
+    --accent-dim: #0D2A1F;
+    /* status: the SANCTIONED instrument-redline colour, meter only */
+    --warn:       #F5A623;
+
+    /* motion tokens (packages/tokens, via instrument-webgl-motion) */
+    --ease-instrument: cubic-bezier(0.6, 0, 0.1, 1);
+    --dur-fast: 120ms;
+    --dur-normal: 240ms;
+    --dur-entrance: 360ms;
+    --dur-slow: 480ms;
+  }
+
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("GeistMono-Variable.ttf") format("truetype-variations");
+    font-weight: 100 900;
+    font-display: block;
+  }
+
+  html, body { margin: 0; padding: 0; background: var(--bg); }
+
+  /* The stage is EXACTLY 1280x640 px and never scales. Label px == stage px == canvas
+     px, which is why label positions can be literal and correct at first paint. */
+  #stage {
+    position: relative;
+    width: 1280px;
+    height: 640px;
+    margin: 0 auto;
+    background: var(--bg);
+    overflow: hidden;
+    outline: 1px solid var(--border-1);   /* 1px hairline; border = elevation, no shadow */
+    outline-offset: -1px;
+  }
+
+  #gl { position: absolute; inset: 0; display: block; width: 1280px; height: 640px; }
+
+  /* DOM/SVG overlay: crisp Geist Mono labels, meter readout, wordmark over the canvas. */
+  #overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    font-family: "Geist Mono", ui-monospace, monospace;
+  }
+
+  .node-label {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+    opacity: 0;
+  }
+  .node-label .tick { color: var(--faint); }
+  #hub-label { color: var(--fg); }
+
+  /* CONTEXT METER readout — sits above the radial gauge, upper-centre.
+     DOM text so the digits stay crisp; the arc itself is the SVG below. */
+  #meter-readout {
+    position: absolute;
+    left: 640px;
+    top: 96px;
+    transform: translate(-50%, 0);
+    text-align: center;
+    opacity: 0;
+  }
+  #meter-readout .cap {
+    font-size: 9px; font-weight: 600; letter-spacing: 0.34em; text-transform: uppercase;
+    color: var(--subtle); text-indent: 0.34em;
+  }
+  #meter-readout .val {
+    margin-top: 4px;
+    font-size: 15px; font-weight: 600; letter-spacing: 0.10em;
+    color: var(--accent);               /* JS warms this toward --warn on redline */
+    font-variant-numeric: tabular-nums;
+  }
+  #meter-readout .arrow { color: var(--faint); }  /* ticking direction glyph */
+
+  /* Wordmark block, centred under the hub — inside the 640-square safe area. */
+  #wordmark {
+    position: absolute;
+    left: 640px;
+    top: 486px;
+    transform: translateX(-50%);
+    text-align: center;
+    opacity: 0;
+  }
+  #wordmark .mark {
+    font-weight: 600; font-size: 30px; letter-spacing: 0.34em;
+    text-transform: uppercase; color: var(--fg); text-indent: 0.34em;
+  }
+  #wordmark .sub {
+    margin-top: 10px;
+    font-weight: 600; font-size: 10px; letter-spacing: 0.30em;
+    text-transform: uppercase; color: var(--subtle); text-indent: 0.30em;
+  }
+  #wordmark .sub b { color: var(--accent); font-weight: 600; }
+
+  /* Designed STILL for reduced-motion / no-WebGL2 / context loss: the RESOLVED calm
+     state — the moment the rescue worked. Meter idle (phosphor, low), signal returned. */
+  #still { position: absolute; inset: 0; display: none; }
+  #stage.is-static #gl { display: none; }
+  #stage.is-static #still { display: block; }
+  #stage.is-static .node-label,
+  #stage.is-static #meter-readout,
+  #stage.is-static #wordmark { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .node-label, #meter-readout, #wordmark { opacity: 1 !important; }
+  }
+</style>
+</head>
+<body>
+  <!--
+    NODES / HUB constants (kept in sync with the JS block below). All inside the centre
+    640-square (x in [320,960]) so a square crop still reads the whole story.
+      HUB    640,300
+      GEMINI 470,158   (upper-left)
+      CODEX  866,196   (upper-right)
+      GROK   428,430   (lower-left, clears the wordmark)
+    Label px are the node px pushed ~26px radially outward from the hub — computed once,
+    written as literals, never re-measured. See the "CRITICAL: LABELS" note above.
+  -->
+  <div id="stage" class="is-static">
+    <canvas id="gl" width="2560" height="1280"></canvas>
+
+    <!-- Designed static still (SVG) = the RESOLVED state. Shown until first live paint,
+         and permanently on reduced-motion / tier "none" / context loss. -->
+    <svg id="still" viewBox="0 0 1280 640" preserveAspectRatio="xMidYMid meet"
+         xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <!-- spokes (accent-dim bed) -->
+      <g stroke="var(--accent-dim)" stroke-width="1.5" fill="none">
+        <line x1="640" y1="300" x2="470" y2="158"/>
+        <line x1="640" y1="300" x2="866" y2="196"/>
+        <line x1="640" y1="300" x2="428" y2="430"/>
+      </g>
+      <!-- resolved return signal: bright aligned dots marching in toward the hub -->
+      <g fill="var(--accent)">
+        <circle cx="612" cy="275" r="1.6"/><circle cx="583" cy="250" r="1.6"/>
+        <circle cx="555" cy="225" r="1.6"/><circle cx="527" cy="200" r="1.6"/>
+        <circle cx="498" cy="175" r="1.6"/>
+        <circle cx="676" cy="281" r="1.6"/><circle cx="713" cy="262" r="1.6"/>
+        <circle cx="750" cy="243" r="1.6"/><circle cx="786" cy="225" r="1.6"/>
+        <circle cx="823" cy="206" r="1.6"/>
+        <circle cx="598" cy="326" r="1.6"/><circle cx="555" cy="352" r="1.6"/>
+        <circle cx="513" cy="378" r="1.6"/><circle cx="470" cy="404" r="1.6"/>
+        <circle cx="449" cy="417" r="1.6"/>
+      </g>
+      <!-- context meter (radial gauge) at rest: phosphor arc, low idle fill -->
+      <g fill="none" transform="translate(640,300)">
+        <path d="M -46 32 A 56 56 0 1 1 46 32" stroke="var(--faint)" stroke-width="2.5"/>
+        <path d="M -46 32 A 56 56 0 0 1 -56 0" stroke="var(--accent)" stroke-width="2.5"/>
+      </g>
+      <!-- satellite nodes: hairline square, sharp corners -->
+      <g fill="var(--bg)" stroke="var(--border-2)" stroke-width="1">
+        <rect x="461" y="149" width="18" height="18"/>
+        <rect x="857" y="187" width="18" height="18"/>
+        <rect x="419" y="421" width="18" height="18"/>
+      </g>
+      <!-- hub: filled accent ring -->
+      <circle cx="640" cy="300" r="9" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.5"/>
+      <circle cx="640" cy="300" r="2.4" fill="var(--accent)"/>
+    </svg>
+
+    <!-- DOM/SVG overlay -->
+    <div id="overlay">
+      <!-- LIVE context-meter ARC (SVG, fill animated via stroke-dashoffset each frame).
+           Centred on the hub; the readout DOM sits above it. -->
+      <svg id="meter-svg" width="1280" height="640" viewBox="0 0 1280 640"
+           preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
+           style="position:absolute;inset:0;">
+        <g transform="translate(640,300)" fill="none" stroke-linecap="butt">
+          <!-- track (270deg arc, opening at the bottom) -->
+          <path id="meter-track" d="M -46 32 A 56 56 0 1 1 46 32"
+                stroke="var(--faint)" stroke-width="2.5"/>
+          <!-- fill (same path; length animated via dashoffset in JS) -->
+          <path id="meter-fill" d="M -46 32 A 56 56 0 1 1 46 32"
+                stroke="var(--accent)" stroke-width="2.5"/>
+          <!-- redline pip near the top of the arc -->
+          <line id="meter-redpip" x1="0" y1="-64" x2="0" y2="-48"
+                stroke="var(--faint)" stroke-width="2"/>
+        </g>
+      </svg>
+
+      <!-- Labels: LITERAL px, computed from NODES, never re-measured. -->
+      <div class="node-label" id="lbl-gemini" style="left:452px; top:140px;">GEMINI <span class="tick">/ READ</span></div>
+      <div class="node-label" id="lbl-codex"  style="left:884px; top:180px;">CODEX <span class="tick">/ DRAFT</span></div>
+      <div class="node-label" id="lbl-grok"   style="left:410px; top:448px;">GROK <span class="tick">/ CHECK</span></div>
+      <div class="node-label" id="hub-label"  style="left:640px; top:324px;">CLAUDE</div>
+
+      <!-- Context-meter readout (crisp digits, updated per frame). The arrow glyph
+           starts as the up-triangle; JS swaps it via textContent (no innerHTML). -->
+      <div id="meter-readout">
+        <div class="cap">CONTEXT</div>
+        <div class="val"><span id="ctx-num">61K</span> <span class="arrow" id="ctx-arrow">&#9650;</span></div>
+      </div>
+
+      <div id="wordmark">
+        <div class="mark">DEVSQUAD</div>
+        <div class="sub">HOOKS <b>&#47;&#47;</b> DON'T IGNORE YOU</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- three pinned via import map; ./three.module.js is co-located (offline capture). -->
+  <script type="importmap">
+  { "imports": { "three": "./three.module.js" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+
+    // ---- Layout constants (canvas space = 1280x640, y-down like SVG) ---------------
+    const W = 1280, H = 640;
+    const HUB = { x: 640, y: 300 };
+    const NODES = [
+      { key: "gemini", x: 470, y: 158 }, // upper-left   — READ  (slow swell)
+      { key: "codex",  x: 866, y: 196 }, // upper-right  — DRAFT (staccato bursts)
+      { key: "grok",   x: 428, y: 430 }, // lower-left    — CHECK (radar sweep)
+    ];
+
+    // ---- Loop timing ---------------------------------------------------------------
+    const LOOP_SECONDS = 5.4;                  // 162 frames @ 30fps -> seamless
+    const CAPTURE = new URLSearchParams(location.search).has("capture");
+
+    // ---- Story phase windows (normalised 0..1). Single source of truth; the shader
+    //      and the DOM/SVG chrome both read these so beats stay in lockstep. ----------
+    const BEAT = {
+      panicStart:   0.00,
+      hookFire:     0.19,   // scanline snap lands here
+      dispatch:     0.28,
+      returnStart:  0.62,
+      resolve:      0.88,
+    };
+
+    // ---- Direction glyphs as literal characters (set via textContent, never HTML) --
+    const GLYPH_UP = "▲";     // up triangle  (climbing)
+    const GLYPH_DOWN = "▼";   // down triangle (draining)
+
+    // ---- Read brand tokens ONCE (rule: no getComputedStyle in the hot loop) --------
+    const cs = getComputedStyle(document.documentElement);
+    const tok = (n) => cs.getPropertyValue(n).trim();
+    const COL_ACCENT = new THREE.Color(tok("--accent")    || "#00E5A0"); // signal
+    const COL_OUT    = new THREE.Color(tok("--subtle")    || "#75857B"); // dispatched/raw
+    const COL_NOISE  = new THREE.Color(tok("--faint")     || "#38423D"); // panic static
+    const COL_BED    = new THREE.Color(tok("--accent-dim")|| "#0D2A1F"); // spoke bed
+    const COL_NODE   = new THREE.Color(tok("--border-2")  || "#2C3630"); // node hairline
+    const COL_WARN   = new THREE.Color(tok("--warn")      || "#F5A623"); // redline (meter)
+
+    const stage = document.getElementById("stage");
+    const canvas = document.getElementById("gl");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // ---- Renderer gate (instrument-webgl-motion behaviour, standalone) -------------
+    function hasWebGL2() {
+      try {
+        const c = document.createElement("canvas");
+        return !!(window.WebGL2RenderingContext && c.getContext("webgl2"));
+      } catch { return false; }
+    }
+
+    if (reduce || !hasWebGL2()) {
+      window.__ready = true;                 // stays on the designed resolved still
+    } else {
+      startScene();
+    }
+
+    function startScene() {
+      let renderer;
+      try {
+        renderer = new THREE.WebGLRenderer({
+          canvas, antialias: true, alpha: true,
+          powerPreference: "high-performance",
+          preserveDrawingBuffer: true,       // headless screenshots
+        });
+      } catch {
+        window.__ready = true;               // stays on the static poster
+        return;
+      }
+      renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      renderer.setSize(W, H, false);
+      renderer.setClearColor(0x000000, 0);
+
+      const scene = new THREE.Scene();
+      // Orthographic camera mapping straight to pixel space (y-down to match layout).
+      // A tiny camera offset is applied for the hook frame-tick (micro screen-shake).
+      const camera = new THREE.OrthographicCamera(0, W, 0, H, -100, 100);
+      camera.position.z = 10;
+
+      // ===========================================================================
+      //  STATIC BED: spokes + node frames + hub. Spokes FLASH IN on the hook, so
+      //  their opacity is phase-driven (0 during panic, snap to 1 at hook).
+      // ===========================================================================
+      const bed = new THREE.Group();
+      scene.add(bed);
+
+      const spokeMats = [];
+      NODES.forEach((n) => {
+        const g = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(HUB.x, HUB.y, 0),
+          new THREE.Vector3(n.x, n.y, 0),
+        ]);
+        const m = new THREE.LineBasicMaterial({ color: COL_BED, transparent: true, opacity: 0 });
+        spokeMats.push(m);
+        bed.add(new THREE.Line(g, m));
+      });
+
+      NODES.forEach((n) => {
+        const s = 9;
+        const g = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(n.x - s, n.y - s, 0), new THREE.Vector3(n.x + s, n.y - s, 0),
+          new THREE.Vector3(n.x + s, n.y + s, 0), new THREE.Vector3(n.x - s, n.y + s, 0),
+          new THREE.Vector3(n.x - s, n.y - s, 0),
+        ]);
+        const m = new THREE.LineBasicMaterial({ color: COL_NODE.clone(), transparent: true, opacity: 0 });
+        n._frameMat = m;
+        bed.add(new THREE.Line(g, m));
+      });
+
+      // Hub ring (accent) — always present; it is the lone node in the cold open.
+      const hubRingMat = new THREE.LineBasicMaterial({ color: COL_ACCENT.clone(), transparent: true, opacity: 1 });
+      (function hubRing() {
+        const seg = 48, r = 9, pts = [];
+        for (let i = 0; i <= seg; i++) {
+          const a = (i / seg) * Math.PI * 2;
+          pts.push(new THREE.Vector3(HUB.x + Math.cos(a) * r, HUB.y + Math.sin(a) * r, 0));
+        }
+        const g = new THREE.BufferGeometry().setFromPoints(pts);
+        bed.add(new THREE.Line(g, hubRingMat));
+      })();
+
+      // Hub core dot (accent, additive bloom).
+      const hubCoreMat = new THREE.PointsMaterial({
+        color: COL_ACCENT.clone(), size: 5 * Math.min(2, window.devicePixelRatio || 1),
+        sizeAttenuation: false, transparent: true, depthTest: false,
+        blending: THREE.AdditiveBlending,
+      });
+      (function hubCore() {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([HUB.x, HUB.y, 0]), 3));
+        bed.add(new THREE.Points(g, hubCoreMat));
+      })();
+
+      // ===========================================================================
+      //  SCANLINE: a single bright horizontal tick that sweeps the width during the
+      //  hook beat and SNAPS at the hub. One Line whose geometry we rewrite per frame.
+      // ===========================================================================
+      const scanGeo = new THREE.BufferGeometry();
+      scanGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
+      const scanMat = new THREE.LineBasicMaterial({
+        color: COL_ACCENT.clone(), transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthTest: false,
+      });
+      const scanLine = new THREE.Line(scanGeo, scanMat);
+      scene.add(scanLine);
+
+      // ===========================================================================
+      //  PARTICLE FIELD: one Points object, one ShaderMaterial, phase-driven.
+      //  Point ROLES (aRole): 0 = NOISE (panic static around hub, resolves away)
+      //                       1 = DISPATCH (hub -> node, per-agent personality)
+      //                       2 = RETURN   (node -> hub, coherent phosphor signal)
+      //  NO pointUV / gl_PointCoord (rule 2, option A): meaning = BRIGHTNESS varying.
+      // ===========================================================================
+      const NOISE_N   = 260;                 // panic static cloud
+      const PER_SPOKE = 70;                  // dispatch points per spoke
+      const RET_SPOKE = 70;                  // return points per spoke
+      const N = NOISE_N + NODES.length * (PER_SPOKE + RET_SPOKE);
+
+      const aRole    = new Float32Array(N);
+      const aSpoke   = new Float32Array(N);
+      const aOffset  = new Float32Array(N);  // 0..1 position along a train / cloud seed
+      const aScatter = new Float32Array(N * 2);
+      const aSeed    = new Float32Array(N);
+      const positions = new Float32Array(N * 3);
+
+      let idx = 0;
+      // NOISE cloud: scattered around the hub in a disc.
+      for (let k = 0; k < NOISE_N; k++) {
+        aRole[idx] = 0; aSpoke[idx] = 0;
+        aOffset[idx] = Math.random();
+        aSeed[idx] = Math.random();
+        const ang = Math.random() * Math.PI * 2;
+        const rad = Math.sqrt(Math.random());       // uniform disc
+        aScatter[idx * 2 + 0] = Math.cos(ang) * rad;
+        aScatter[idx * 2 + 1] = Math.sin(ang) * rad;
+        idx++;
+      }
+      // DISPATCH + RETURN per spoke.
+      for (let s = 0; s < NODES.length; s++) {
+        for (let k = 0; k < PER_SPOKE; k++) {
+          aRole[idx] = 1; aSpoke[idx] = s;
+          aOffset[idx] = k / PER_SPOKE + Math.random() * (1 / PER_SPOKE);
+          aSeed[idx] = Math.random();
+          aScatter[idx * 2 + 0] = Math.random() * 2 - 1;   // perpendicular jitter (raw)
+          aScatter[idx * 2 + 1] = Math.random() * 2 - 1;
+          idx++;
+        }
+        for (let k = 0; k < RET_SPOKE; k++) {
+          aRole[idx] = 2; aSpoke[idx] = s;
+          aOffset[idx] = k / RET_SPOKE + Math.random() * (1 / RET_SPOKE);
+          aSeed[idx] = Math.random();
+          aScatter[idx * 2 + 0] = (Math.random() * 2 - 1) * 0.06; // tight (coherent)
+          aScatter[idx * 2 + 1] = (Math.random() * 2 - 1) * 0.06;
+          idx++;
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute("aRole",    new THREE.BufferAttribute(aRole, 1));
+      geo.setAttribute("aSpoke",   new THREE.BufferAttribute(aSpoke, 1));
+      geo.setAttribute("aOffset",  new THREE.BufferAttribute(aOffset, 1));
+      geo.setAttribute("aScatter", new THREE.BufferAttribute(aScatter, 2));
+      geo.setAttribute("aSeed",    new THREE.BufferAttribute(aSeed, 1));
+
+      const uNodes = NODES.map((n) => new THREE.Vector2(n.x, n.y));
+
+      const uniforms = {
+        uPhase:   { value: 0 },
+        uHub:     { value: new THREE.Vector2(HUB.x, HUB.y) },
+        uNodes:   { value: uNodes },
+        uColOut:  { value: COL_OUT },
+        uColRet:  { value: COL_ACCENT },
+        uColNoise:{ value: COL_NOISE },
+        uDpr:     { value: Math.min(2, window.devicePixelRatio || 1) },
+        uHookFire:{ value: BEAT.hookFire },
+        uDispatch:{ value: BEAT.dispatch },
+        uReturn:  { value: BEAT.returnStart },
+        uResolve: { value: BEAT.resolve },
+      };
+
+      const material = new THREE.ShaderMaterial({
+        uniforms,
+        transparent: true, depthTest: false, depthWrite: false,
+        blending: THREE.AdditiveBlending,          // phosphor luminance (sanctioned)
+        vertexShader: /* glsl */`
+          attribute float aRole;
+          attribute float aSpoke;
+          attribute float aOffset;
+          attribute vec2  aScatter;
+          attribute float aSeed;
+
+          uniform float uPhase;
+          uniform vec2  uHub;
+          uniform vec2  uNodes[3];
+          uniform float uDpr;
+          uniform float uHookFire, uDispatch, uReturn, uResolve;
+
+          varying float vBright;    // sprite meaning (rule 2 option A)
+          varying float vRole;
+
+          // cubic-bezier control points: P0=0, P1=(0.6,0), P2=(0.1,1), P3=1
+          float bez(float p1, float p2, float t){
+            float mt = 1.0 - t;
+            return 3.0*mt*mt*t*p1 + 3.0*mt*t*t*p2 + t*t*t;
+          }
+          // ease-instrument: solve x(t)=p (Newton), return y(t). The exact brand token.
+          float easeInstrument(float p){
+            float t = p;
+            for (int i = 0; i < 5; i++){
+              float x = bez(0.6, 0.1, t) - p;
+              float mt = 1.0 - t;
+              float d = 3.0*mt*mt*0.6 + 6.0*mt*t*(0.1-0.6) + 3.0*t*t*(1.0-0.1);
+              d = max(d, 1e-4);
+              t = clamp(t - x/d, 0.0, 1.0);
+            }
+            return bez(0.0, 1.0, t);
+          }
+
+          vec2 nodeFor(float s){
+            if (s < 0.5) return uNodes[0];
+            if (s < 1.5) return uNodes[1];
+            return uNodes[2];
+          }
+
+          void main(){
+            float ph = uPhase;
+            vRole = aRole;
+            vec2 pos = uHub;
+            vBright = 0.0;
+
+            // ============================ NOISE (panic static) ====================
+            if (aRole < 0.5){
+              // A disc of static around the hub. BUILDS during panic (0 -> hook) and
+              // CLEARS as signal returns (return -> resolve). At the seam it must be
+              // present again (next cold open), so it RE-ACCUMULATES after resolve so
+              // the value at ph=1 matches ph=0.
+              float build = smoothstep(0.0, uHookFire, ph);          // 0 -> 1 in panic
+              float clear = 1.0 - smoothstep(uReturn, uResolve, ph); // 1 -> 0 as signal returns
+              float reBuild = smoothstep(uResolve, 1.0, ph);         // climbs back across seam
+              float env = max(build * clear, reBuild);
+
+              // jitter the cloud so it shimmers like static; radius ~ 34px disc.
+              float jt = ph * 40.0 + aSeed * 60.0;
+              vec2 jitter = vec2(sin(jt * 1.7), cos(jt * 2.3)) * 3.0;
+              pos = uHub + aScatter * 34.0 + jitter;
+
+              float tw = 0.6 + 0.4 * sin(aSeed * 50.0 + ph * 30.0);   // twinkle
+              vBright = env * 0.42 * tw;
+              gl_PointSize = (1.6 + tw) * uDpr;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 0.0, 1.0);
+              return;
+            }
+
+            vec2 nodePos = nodeFor(aSpoke);
+
+            // ============================ DISPATCH (hub -> node) ==================
+            if (aRole < 1.5){
+              float local = clamp((ph - uDispatch) / (uReturn - uDispatch), 0.0, 1.0);
+              float march = fract(local + aOffset);
+              float e = easeInstrument(march);
+
+              vec2 a = uHub, b = nodePos;
+              vec2 base = mix(a, b, e);
+              vec2 dirv = normalize(b - a);
+              vec2 perp = vec2(-dirv.y, dirv.x);
+              float scatterFall = (1.0 - e) * 7.0 + 1.0;   // broad early (raw), narrows in
+              pos = base + perp * aScatter.x * scatterFall + dirv * aScatter.y * 3.0;
+
+              float ends = smoothstep(0.0, 0.06, march) * (1.0 - smoothstep(0.90, 1.0, march));
+              float personality = 1.0;
+              float sz = 2.0;
+
+              if (aSpoke < 0.5){
+                // GEMINI — one big slow swell: a single broad gaussian pulse in local.
+                float pulse = exp(-pow((local - 0.5) * 3.2, 2.0));
+                personality = pulse;
+                sz = 2.2 + pulse * 1.4;                 // swells fat at peak
+              } else if (aSpoke < 1.5){
+                // CODEX — staccato: 4 sharp stabs across the dispatch window.
+                float stab = fract(local * 4.0);
+                float burst = smoothstep(0.0, 0.12, stab) * (1.0 - smoothstep(0.30, 0.55, stab));
+                personality = burst;
+                sz = 1.6 + burst * 1.4;                 // crisp small stabs
+              } else {
+                // GROK — radar sweep: an angular gate rotates through the train; only
+                // points near the current sweep light. Reads as a scanning arc.
+                float sweep = fract(local);
+                float d = abs(fract(aOffset - sweep + 0.5) - 0.5);   // ring distance
+                personality = smoothstep(0.16, 0.0, d);
+                sz = 1.8 + personality * 1.2;
+              }
+
+              float win = smoothstep(uDispatch, uDispatch + 0.04, ph)
+                        * (1.0 - smoothstep(uReturn - 0.02, uReturn + 0.06, ph));
+              vBright = 0.34 * ends * personality * win;
+              gl_PointSize = sz * uDpr;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 0.0, 1.0);
+              return;
+            }
+
+            // ============================ RETURN (node -> hub) ====================
+            // Coherent phosphor signal, tightly aligned, streaming back to the hub.
+            {
+              float local = clamp((ph - uReturn) / (1.02 - uReturn), 0.0, 1.0);
+              float march = fract(local + aOffset);
+              float e = easeInstrument(march);
+
+              vec2 a = nodePos, b = uHub;
+              vec2 base = mix(a, b, e);
+              vec2 dirv = normalize(b - a);
+              vec2 perp = vec2(-dirv.y, dirv.x);
+              pos = base + perp * aScatter.x * 0.6 + dirv * aScatter.y * 0.5;
+
+              float ends = smoothstep(0.0, 0.06, march) * (1.0 - smoothstep(0.92, 1.0, march));
+              float win = smoothstep(uReturn, uReturn + 0.03, ph);
+              win *= (1.0 - smoothstep(0.97, 1.0, ph) * 0.6);   // gentle taper into the seam
+              vBright = 1.0 * ends * win;
+              gl_PointSize = 2.6 * uDpr;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 0.0, 1.0);
+              return;
+            }
+          }
+        `,
+        fragmentShader: /* glsl */`
+          precision mediump float;
+          uniform vec3 uColOut;
+          uniform vec3 uColRet;
+          uniform vec3 uColNoise;
+          varying float vBright;
+          varying float vRole;
+          void main(){
+            if (vBright <= 0.001) discard;
+            // NO gl_PointCoord / pointUV disc (rule 2). Square sprite; meaning is
+            // brightness. At 1.6-4px a square is indistinguishable from a disc, and
+            // additive blend gives the phosphor luminance.
+            vec3 c = uColNoise;
+            if (vRole > 1.5)      c = uColRet;   // return  = phosphor signal
+            else if (vRole > 0.5) c = uColOut;   // dispatch = dim raw work
+            gl_FragColor = vec4(c * vBright, vBright);
+          }
+        `,
+      });
+
+      const points = new THREE.Points(geo, material);
+      scene.add(points);
+
+      // ===========================================================================
+      //  CONTEXT METER (SVG arc + DOM readout). 270deg arc; fill via stroke-dashoffset;
+      //  warms phosphor -> amber past the redline. ctxLevel is a normalised 0..1 fill:
+      //    panic  -> climbs 0.30 -> 1.00 (redline)
+      //    hook   -> pegged near 1.0 (mechanism catches, meter still hot)
+      //    dispatch/return -> DRAINS 1.0 -> 0.12
+      //    resolve/seam -> idle low, then re-climbs into the next cold open
+      //  ctxLevelFor is continuous and seam-safe (value at ph=1 equals value at ph=0).
+      // ===========================================================================
+      const meterFill = document.getElementById("meter-fill");
+      const meterRedpip = document.getElementById("meter-redpip");
+      const ctxNum = document.getElementById("ctx-num");
+      const ctxArrow = document.getElementById("ctx-arrow");
+      const readoutVal = document.querySelector("#meter-readout .val");
+      const ARC_LEN = meterFill.getTotalLength();
+      meterFill.style.strokeDasharray = ARC_LEN;
+
+      const WARN_HEX = "#" + COL_WARN.getHexString();
+
+      function ctxLevelFor(ph){
+        if (ph < BEAT.hookFire){
+          return 0.30 + 0.70 * (ph / BEAT.hookFire);        // panic climb 0.30 -> 1.00
+        }
+        if (ph < BEAT.dispatch){
+          return 1.0;                                       // pegged hot through the hook
+        }
+        if (ph < BEAT.resolve){
+          const t = (ph - BEAT.dispatch) / (BEAT.resolve - BEAT.dispatch);
+          const e = t * t * (3 - 2 * t);                    // smoothstep drain
+          return 1.0 - 0.88 * e;                            // 1.0 -> 0.12
+        }
+        const t = (ph - BEAT.resolve) / (1.0 - BEAT.resolve);
+        return 0.12 + 0.18 * t;                             // 0.12 -> 0.30 at ph=1 == ph=0
+      }
+
+      function updateMeter(ph){
+        const lvl = ctxLevelFor(ph);
+        meterFill.style.strokeDashoffset = ARC_LEN * (1 - lvl);
+        const hot = THREE.MathUtils.clamp((lvl - 0.72) / 0.18, 0, 1);   // redline warmth
+        const hex = "#" + COL_ACCENT.clone().lerp(COL_WARN, hot).getHexString();
+        meterFill.setAttribute("stroke", hex);
+        meterRedpip.setAttribute("stroke", hot > 0.5 ? WARN_HEX : "var(--faint)");
+        readoutVal.style.color = hex;
+        const k = Math.round(28 + lvl * 100);               // ~28K idle .. ~128K redline
+        ctxNum.textContent = k + "K";
+        const climbing = ph < BEAT.hookFire || ph >= BEAT.resolve;
+        ctxArrow.textContent = climbing ? GLYPH_UP : GLYPH_DOWN;   // textContent, no HTML
+        ctxArrow.style.color = hot > 0.5 ? WARN_HEX : "var(--faint)";
+      }
+
+      // ===========================================================================
+      //  BED / SCANLINE / SHAKE — phase-driven JS updates (deterministic).
+      // ===========================================================================
+      function updateBed(ph){
+        // Spokes flash IN at the hook and hold; fade out across the seam so the cold
+        // open is a LONE hub again. Node frames pulse as dispatch arrives.
+        const spokeOn = THREE.MathUtils.clamp((ph - BEAT.hookFire) / 0.03, 0, 1);
+        const spokeOff = 1 - THREE.MathUtils.clamp((ph - 0.97) / 0.03, 0, 1);
+        const spokeOpacity = 0.9 * spokeOn * spokeOff;
+        spokeMats.forEach((m) => { m.opacity = spokeOpacity; });
+
+        NODES.forEach((n) => {
+          const local = THREE.MathUtils.clamp((ph - BEAT.dispatch) / (BEAT.returnStart - BEAT.dispatch), 0, 1);
+          const w = Math.max(0, Math.sin(Math.PI * local)) * spokeOn;
+          n._frameMat.opacity = (0.15 + 0.85 * w) * spokeOff;
+          n._frameMat.color.copy(COL_NODE).lerp(COL_ACCENT, w * 0.6);
+        });
+
+        // Hub core/ring warm toward amber during panic (burning context), calm on resolve.
+        const panic = 1 - THREE.MathUtils.clamp((ph - BEAT.hookFire) / 0.06, 0, 1);
+        const panicRe = THREE.MathUtils.clamp((ph - BEAT.resolve) / (1 - BEAT.resolve), 0, 1);
+        const stress = Math.max(panic, panicRe);
+        hubCoreMat.color.copy(COL_ACCENT).lerp(COL_WARN, stress * 0.5);
+        hubRingMat.color.copy(COL_ACCENT).lerp(COL_WARN, stress * 0.5);
+      }
+
+      function updateScanline(ph){
+        const sweepStart = BEAT.hookFire - 0.06;
+        const posArr = scanGeo.attributes.position.array;
+        if (ph >= sweepStart && ph <= BEAT.hookFire + 0.05){
+          if (ph <= BEAT.hookFire){
+            // sweeping IN: a full-width tick whose width collapses to the hub
+            const t = (ph - sweepStart) / 0.06;    // 0 -> 1
+            const e = t * t;                       // accelerate into the snap
+            const half = (1 - e) * (W * 0.5);
+            posArr[0] = HUB.x - half; posArr[1] = HUB.y; posArr[2] = 0;
+            posArr[3] = HUB.x + half; posArr[4] = HUB.y; posArr[5] = 0;
+            scanMat.opacity = 0.25 + 0.75 * t;
+          } else {
+            // SNAP flash: brief bright full-width line that decays
+            const t = (ph - BEAT.hookFire) / 0.05;
+            posArr[0] = 0;  posArr[1] = HUB.y; posArr[2] = 0;
+            posArr[3] = W;  posArr[4] = HUB.y; posArr[5] = 0;
+            scanMat.opacity = (1 - t) * 0.9;
+          }
+          scanGeo.attributes.position.needsUpdate = true;
+        } else {
+          scanMat.opacity = 0;
+        }
+      }
+
+      function applyShake(ph){
+        // One hard frame-tick at the hook snap: a tiny camera nudge that decays fast.
+        const t = (ph - BEAT.hookFire) / 0.045;
+        let ox = 0, oy = 0;
+        if (t >= 0 && t <= 1){
+          const amp = (1 - t) * 4.0;             // px, decays
+          ox = Math.sin(ph * 900.0) * amp;
+          oy = Math.cos(ph * 770.0) * amp * 0.6;
+        }
+        camera.position.x = ox;
+        camera.position.y = oy;
+      }
+
+      // ---- Render one frame at loop-phase p (0..1) ----
+      function renderAt(p){
+        uniforms.uPhase.value = p;
+        updateMeter(p);
+        updateBed(p);
+        updateScanline(p);
+        applyShake(p);
+        renderer.render(scene, camera);
+      }
+
+      // First paint, then reveal DOM chrome and swap off the static poster.
+      renderAt(0);
+      stage.classList.remove("is-static");
+
+      // Reveal labels + readout + wordmark. In CAPTURE mode, pin them at final opacity
+      // immediately (no transition) so every seeked frame has full chrome.
+      const chrome = ["hub-label", "lbl-gemini", "lbl-codex", "lbl-grok", "meter-readout", "wordmark"];
+      if (CAPTURE) {
+        chrome.forEach((id) => { document.getElementById(id).style.opacity = "1"; });
+      } else {
+        const revealTargets = [
+          ["hub-label", 100], ["meter-readout", 100],
+          ["lbl-gemini", 240], ["lbl-codex", 300], ["lbl-grok", 360],
+        ];
+        revealTargets.forEach(([id, delay]) => {
+          const el = document.getElementById(id);
+          el.style.transition = "opacity var(--dur-entrance) var(--ease-instrument)";
+          el.style.transitionDelay = delay + "ms";
+          requestAnimationFrame(() => { el.style.opacity = "1"; });
+        });
+        const wm = document.getElementById("wordmark");
+        wm.style.transition = "opacity var(--dur-slow) var(--ease-instrument)";
+        wm.style.transitionDelay = "200ms";
+        requestAnimationFrame(() => { wm.style.opacity = "1"; });
+      }
+
+      window.__ready = true;
+
+      // ===========================================================================
+      //  DRIVER: capture (frame-exact) vs live (IO/visibility-paused loop).
+      // ===========================================================================
+      if (CAPTURE) {
+        window.__seek = (t01) => {
+          const p = ((t01 % 1) + 1) % 1;
+          renderAt(p);
+        };
+      } else {
+        let running = false, raf = 0, t0 = performance.now();
+        const loop = () => {
+          const elapsed = (performance.now() - t0) / 1000;
+          const p = (elapsed % LOOP_SECONDS) / LOOP_SECONDS;
+          renderAt(p);
+          raf = requestAnimationFrame(loop);
+        };
+        const start = () => { if (running) return; running = true; t0 = performance.now(); raf = requestAnimationFrame(loop); };
+        const stop  = () => { running = false; cancelAnimationFrame(raf); };
+
+        let onScreen = true;
+        const io = new IntersectionObserver((e) => {
+          onScreen = e[0].isIntersecting;
+          onScreen && !document.hidden ? start() : stop();
+        }, { threshold: 0 });
+        io.observe(canvas);
+        document.addEventListener("visibilitychange", () => {
+          document.hidden ? stop() : (onScreen && start());
+        });
+        start();
+      }
+
+      // ---- Context-loss resilience -> designed static still (bridge guardrail) ----
+      canvas.addEventListener("webglcontextlost", (ev) => {
+        ev.preventDefault();
+        stage.classList.add("is-static");
+      }, false);
+    }
+  </script>
+</body>
+</html>

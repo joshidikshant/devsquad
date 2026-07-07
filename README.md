@@ -14,9 +14,9 @@
 
 ⭐ **Star this if you've ever watched an agent burn 100K tokens re-reading files it didn't need.**
 
-<!-- DEMO: record the hook firing per docs/assets/demo-script.md, then uncomment:
-<img src="docs/assets/demo.gif" alt="DevSquad hook firing mid-session" width="720">
--->
+<a href="docs/assets/hero.mp4"><img src="docs/assets/hero.gif" alt="DevSquad — the rescue: Claude's context meter climbs to the redline, the hook fires, work dispatches to Gemini/Codex/Grok, and distilled signal drains the meter back down" width="820"></a>
+
+<sub>Claude's context meter climbs to the redline → the hook fires → work dispatches to the squad → signal returns, the meter drains. That's DevSquad.</sub>
 
 </div>
 
