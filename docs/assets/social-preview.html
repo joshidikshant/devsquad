@@ -3,82 +3,126 @@
 <head>
 <meta charset="utf-8">
 <style>
+  /* Signal over Noise — The Instrument · Night Bench · phosphor #00E5A0
+     Tokens lifted verbatim from dikshantjoshi-design styles.css :root.
+     To re-render: place Geist-Variable.ttf + GeistMono-Variable.ttf beside
+     this file (from the dikshantjoshi-design skill's fonts/), then headless
+     Chrome --screenshot at --window-size=1280,640. The .ttf files are render
+     inputs, not committed (the PNG bakes the fonts in). */
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("GeistMono-Variable.ttf") format("truetype-variations");
+    font-weight: 100 900;
+  }
+  @font-face {
+    font-family: "Geist";
+    src: url("Geist-Variable.ttf") format("truetype-variations");
+    font-weight: 100 900;
+  }
+  :root {
+    --bg: #0A0D0C; --bg-subtle: #0E1210; --surface: #0E1210;
+    --fg: #E9EFEA; --fg-muted: #9DACA3; --fg-subtle: #75857B; --fg-faint: #38423D;
+    --border: #1E2622; --border-strong: #2C3630;
+    --accent: #00E5A0; --accent-fg: #06231A; --accent-dim: #0D2A1F;
+    --font-mono: "Geist Mono", ui-monospace, monospace;
+    --font-sans: "Geist", system-ui, sans-serif;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1280px; height: 640px; }
   body {
-    font-family: -apple-system, "SF Pro Display", "Segoe UI", Helvetica, Arial, sans-serif;
-    background: #0a0a0b;
-    background-image:
-      radial-gradient(900px 500px at 82% -10%, rgba(138,43,226,0.22), transparent 60%),
-      radial-gradient(700px 500px at 5% 110%, rgba(56,189,180,0.14), transparent 55%);
-    color: #f4f4f5;
+    background: var(--bg);
+    color: var(--fg);
     width: 1280px; height: 640px;
-    padding: 72px 80px;
+    padding: 64px 72px;
     display: flex; flex-direction: column; justify-content: space-between;
-    position: relative;
-    overflow: hidden;
+    position: relative; overflow: hidden;
+    font-family: var(--font-sans);
   }
+  /* faint measurement grid — calibration field, not decoration */
   .grid {
     position: absolute; inset: 0;
     background-image:
-      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    mask-image: radial-gradient(circle at 50% 40%, black, transparent 85%);
+      linear-gradient(var(--border-faint, #161C19) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border-faint, #161C19) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.5;
   }
-  .top { position: relative; z-index: 2; }
+  /* the signature move: noise (left) resolving into signal (right) */
+  .trace { position: absolute; left: 0; right: 0; top: 300px; height: 120px; z-index: 1; }
+  .frame { position: relative; z-index: 2; }
+
   .eyebrow {
-    font-size: 20px; letter-spacing: 5px; text-transform: uppercase;
-    color: #a78bfa; font-weight: 700; margin-bottom: 26px;
+    font-family: var(--font-mono); font-weight: 600;
+    font-size: 17px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--accent); display: flex; align-items: center; gap: 12px;
   }
+  .led { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+
   h1 {
-    font-size: 76px; line-height: 1.04; font-weight: 800;
-    letter-spacing: -2px; max-width: 1000px;
+    font-family: var(--font-mono); font-weight: 600; text-transform: uppercase;
+    font-size: 62px; line-height: 1.08; letter-spacing: -1px;
+    margin-top: 26px; color: var(--fg);
   }
-  h1 .em { color: #a78bfa; }
+  h1 .em { color: var(--accent); }
+
   .sub {
-    margin-top: 26px; font-size: 27px; line-height: 1.4; color: #c4c4c8;
-    max-width: 940px; font-weight: 400;
+    margin-top: 24px; font-size: 24px; line-height: 1.45; color: var(--fg-muted);
+    max-width: 900px; font-weight: 400;
   }
-  .sub b { color: #f4f4f5; font-weight: 600; }
-  .bottom {
-    position: relative; z-index: 2;
-    display: flex; align-items: center; justify-content: space-between;
+  .sub b { color: var(--fg); font-weight: 500; }
+
+  .bottom { display: flex; align-items: flex-end; justify-content: space-between; }
+  .flow { display: flex; align-items: center; gap: 12px; }
+  /* role-tag: 1px hairline, sharp corner, border-color = state. NEVER a pill/fill. */
+  .tag {
+    font-family: var(--font-mono); font-weight: 500; font-size: 19px;
+    text-transform: uppercase; letter-spacing: 1px;
+    padding: 9px 16px; border: 1px solid var(--border-strong); border-radius: 2px;
+    color: var(--fg-muted); background: var(--surface);
   }
-  .clis { display: flex; gap: 14px; align-items: center; }
-  .pill {
-    font-size: 22px; font-weight: 600; padding: 11px 22px;
-    border: 1.5px solid rgba(255,255,255,0.16); border-radius: 999px;
-    color: #e4e4e7; background: rgba(255,255,255,0.03);
+  .tag.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .arrow { color: var(--fg-faint); font-family: var(--font-mono); font-size: 20px; }
+
+  .readout { text-align: right; font-family: var(--font-mono); }
+  .readout .repo {
+    font-size: 24px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 2px; color: var(--fg);
   }
-  .arrow { color: #52525b; font-size: 24px; }
-  .pill.claude { border-color: rgba(167,139,250,0.55); color: #c4b5fd; background: rgba(138,43,226,0.10); }
-  .meta { text-align: right; }
-  .meta .repo { font-size: 24px; font-weight: 700; color: #f4f4f5; }
-  .meta .badges { margin-top: 10px; font-size: 19px; color: #8b8b93; font-weight: 500; }
-  .meta .badges .g { color: #4ade80; }
+  .readout .stat {
+    margin-top: 8px; font-size: 16px; color: var(--fg-subtle); letter-spacing: 0.5px;
+  }
+  .readout .stat .g { color: var(--accent); }
 </style>
 </head>
 <body>
   <div class="grid"></div>
-  <div class="top">
-    <div class="eyebrow">Claude Code Plugin</div>
+  <svg class="trace" viewBox="0 0 1280 120" preserveAspectRatio="none">
+    <!-- noise on the left dissolving into a clean phosphor signal on the right -->
+    <polyline fill="none" stroke="#38423D" stroke-width="1.5" opacity="0.55"
+      points="0,60 24,38 40,82 58,30 74,90 96,44 116,74 138,34 160,86 184,52 208,70 232,46 260,66 290,54 320,62 355,58 395,60 440,60" />
+    <polyline fill="none" stroke="#00E5A0" stroke-width="2.5"
+      points="440,60 500,60 540,26 580,94 620,60 700,60 760,60 800,30 840,90 880,60 1000,60 1080,60 1120,44 1160,76 1200,60 1280,60" />
+  </svg>
+
+  <div class="frame">
+    <div class="eyebrow"><span class="led"></span> Claude Code Plugin · Signal over Noise</div>
     <h1>Your AI agent ignores<br>your rules. <span class="em">Hooks don't.</span></h1>
     <div class="sub">Intercepts tool calls, routes the grunt work across three CLIs, then <b>A/B-tests whether delegation actually saves you tokens.</b></div>
   </div>
-  <div class="bottom">
-    <div class="clis">
-      <span class="pill">Gemini</span>
+
+  <div class="frame bottom">
+    <div class="flow">
+      <span class="tag">Gemini</span>
       <span class="arrow">·</span>
-      <span class="pill">Codex</span>
+      <span class="tag">Codex</span>
       <span class="arrow">·</span>
-      <span class="pill">Grok</span>
+      <span class="tag">Grok</span>
       <span class="arrow">→</span>
-      <span class="pill claude">Claude decides</span>
+      <span class="tag on">Claude decides</span>
     </div>
-    <div class="meta">
+    <div class="readout">
       <div class="repo">DevSquad</div>
-      <div class="badges"><span class="g">177 tests passing</span> · bash 3.2+ · MIT</div>
+      <div class="stat"><span class="g">177 TESTS PASSING</span> · BASH 3.2+ · MIT</div>
     </div>
   </div>
 </body>
