@@ -91,3 +91,26 @@ default-routing change. Promote grok in a future dated entry only with
 evidence (contracts.log, acceptance, holdout). Grok model per agent:
 `agent_models.grok-researcher` etc.; global: `preferences.grok_model`
 (default model: grok-build; list with `grok models` after `grok login`).
+
+---
+
+## #4 — 2026-07-06 — D3 offline classifier benchmark recorded (no routing change)
+
+Per ADR-001's acceptance note: runtime routing stays filter+static; this
+entry files the evidence for any future routing ADR.
+
+One-shot Haiku classification of the 55-task consensus-labeled corpus
+(same corpus and ground truth as the 2026-07-05 evaluation), ~3 seconds,
+~27K haiku tokens, zero tools:
+
+| Router | Overall misroute | Non-synthesis misroute | Collapsed to self |
+|---|---|---|---|
+| static keyword table | 31/55 = 56% | 29/31 = **94%** | 28/31 |
+| haiku classifier | 15/55 = 27% | 7/31 = **23%** | 2/31 |
+
+Reading: the static table's failure mode is wholesale collapse into the
+synthesis catch-all; a single cheap LLM call fixes 4x of that. But 23%
+is still above the evaluation's own 20% quality bar, routing volume
+remains ~0.4 executed delegations/day, and ADR-001 commits to static —
+so this stays evidence, not implementation. Revisit only via a new ADR
+if delegation volume materializes post-D1.
