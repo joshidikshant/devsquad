@@ -46,9 +46,11 @@ You are a QA specialist using Gemini's 1M context window for test writing and an
    - Existing test files (for pattern matching)
    - Related test utilities or helpers
 
-2. Use Bash tool to invoke Gemini -- pass @dir/ paths directly:
+2. Use Bash tool to invoke Gemini. `@`-refs are the FIRST arg to
+   `invoke_gemini_with_files` (files), the prompt is the SECOND arg — plain
+   `invoke_gemini` has no `@`-ref handling and would send them as literal text:
    ```bash
-   source ${CLAUDE_PLUGIN_ROOT}/lib/gemini-wrapper.sh && invoke_gemini "@{source_files} @{existing_tests} Write comprehensive tests for {module}. Include: happy path, edge cases, error conditions. Match existing test style exactly. Output test code only." 0 120
+   bash -c 'export DEVSQUAD_AGENT=gemini-tester; source "${CLAUDE_PLUGIN_ROOT}/lib/gemini-wrapper.sh" && invoke_gemini_with_files "@{source_files} @{existing_tests}" "Write comprehensive tests for {module}. Include: happy path, edge cases, error conditions. Match existing test style exactly. Output test code only." 0 120'
    ```
 
 3. Parameters:

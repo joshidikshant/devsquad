@@ -61,18 +61,6 @@ update_state_key() {
   fi
 }
 
-# Get a value from a JSON state file
-get_state_key() {
-  local file_path="$1"
-  local key="$2"
-
-  if command -v jq &>/dev/null; then
-    read_state "$file_path" | jq -r --arg k "$key" 'getpath($k | split(".")) // empty'
-  else
-    echo ""
-  fi
-}
-
 # Create default config if none exists
 ensure_config() {
   local state_dir="$1"
@@ -176,11 +164,4 @@ check_rate_limit() {
   else
     echo "false"
   fi
-}
-
-# Get snapshot contents (convenience wrapper)
-get_snapshot() {
-  local state_dir="$1"
-  local snapshot_file="${state_dir}/snapshot.json"
-  read_state "$snapshot_file"
 }

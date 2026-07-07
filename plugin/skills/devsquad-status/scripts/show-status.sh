@@ -10,6 +10,7 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # Source required libraries
 source "${PLUGIN_ROOT}/lib/state.sh"
 source "${PLUGIN_ROOT}/lib/usage.sh"
+source "${PLUGIN_ROOT}/lib/enforcement.sh"
 
 # Initialize state directory (capture output to avoid polluting stdout / --json mode)
 STATE_DIR=$(init_state_dir)
@@ -151,17 +152,9 @@ gemini_chars_formatted=$(format_number "$gemini_chars")
 codex_chars_formatted=$(format_number "$codex_chars")
 grok_chars_formatted=$(format_number "${grok_chars:-0}")
 
-# Read enforcement mode from config
+# Read enforcement mode via the single canonical reader (lib/enforcement.sh)
 config_file="${project_dir}/.devsquad/config.json"
-enforcement_mode="advisory"
-if [[ -f "$config_file" ]]; then
-  if command -v jq &>/dev/null; then
-    enforcement_mode=$(jq -r '.enforcement_mode // "advisory"' "$config_file" 2>/dev/null)
-  else
-    enforcement_mode=$(grep -o '"enforcement_mode"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    enforcement_mode="${enforcement_mode:-advisory}"
-  fi
-fi
+enforcement_mode=$(get_enforcement_mode)
 
 # Build warnings array if strict mode is enabled
 warnings=()

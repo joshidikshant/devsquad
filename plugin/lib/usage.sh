@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/usage.sh -- Usage tracking and zone calculation for DevSquad
 # Sourced by hooks and other scripts. Do not execute directly.
+set -euo pipefail
 
 # Record an agent invocation to usage files
 # Usage: record_usage agent_name prompt_chars response_chars

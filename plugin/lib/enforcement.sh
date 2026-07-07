@@ -304,11 +304,17 @@ get_suggestion_metrics() {
     return
   fi
 
+  # grep -c already prints "0" on no-match (and exits 1); `|| echo 0` would
+  # append a SECOND line, breaking the arithmetic below. Sanitize instead.
   local suggested accepted declined unresolved
-  suggested=$(grep -c "advisory_suggested" "$log_file" 2>/dev/null || echo "0")
-  accepted=$(grep -c "advisory_accepted" "$log_file" 2>/dev/null || echo "0")
-  declined=$(grep -c "advisory_declined" "$log_file" 2>/dev/null || echo "0")
-  unresolved=$(grep -c "advisory_unresolved" "$log_file" 2>/dev/null || echo "0")
+  suggested=$(grep -c "advisory_suggested" "$log_file" 2>/dev/null || true)
+  accepted=$(grep -c "advisory_accepted" "$log_file" 2>/dev/null || true)
+  declined=$(grep -c "advisory_declined" "$log_file" 2>/dev/null || true)
+  unresolved=$(grep -c "advisory_unresolved" "$log_file" 2>/dev/null || true)
+  suggested=${suggested//[^0-9]/}; suggested=${suggested:-0}
+  accepted=${accepted//[^0-9]/}; accepted=${accepted:-0}
+  declined=${declined//[^0-9]/}; declined=${declined:-0}
+  unresolved=${unresolved//[^0-9]/}; unresolved=${unresolved:-0}
 
   # Rate counts only resolved outcomes; unresolved is reported, not imputed
   local rate="N/A"

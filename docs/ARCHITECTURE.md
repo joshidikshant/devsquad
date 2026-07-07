@@ -2,7 +2,7 @@
 
 One page for future maintainers (including future Claude sessions).
 
-## End-to-end flow (v0.8.0)
+## End-to-end flow
 
 ```mermaid
 flowchart TB
@@ -67,7 +67,7 @@ Claude Code session
   ├─ hooks (plugin/hooks/)           SessionStart · PreToolUse · PreCompact · Stop
   │    └─ scripts source lib/        advisory suggestions, zones, holdout, telemetry
   │
-  ├─ agents (plugin/agents/)         6+2 thin Claude shells (model: sonnet)
+  ├─ agents (plugin/agents/)         8 thin Claude shells (4 gemini · 2 codex · 2 grok, model: sonnet)
   │    └─ Bash: bash -c 'export DEVSQUAD_AGENT=<name>; source <wrapper>; invoke_<cli> ...'
   │
   ├─ wrappers (plugin/lib/*-wrapper.sh)   THIN per-CLI configuration only:

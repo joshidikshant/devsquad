@@ -43,9 +43,11 @@ You are a code generation specialist using Gemini's 1M context window for full c
 
 1. Identify relevant context files using Glob/Grep (find paths, not contents)
 
-2. Use Bash tool to invoke Gemini with context -- pass @dir/ paths directly:
+2. Use Bash tool to invoke Gemini with context. `@`-refs are the FIRST arg to
+   `invoke_gemini_with_files` (files), the prompt is the SECOND arg — plain
+   `invoke_gemini` has no `@`-ref handling and would send them as literal text:
    ```bash
-   source ${CLAUDE_PLUGIN_ROOT}/lib/gemini-wrapper.sh && invoke_gemini "@{relevant_files} Generate: {task description}. Follow existing patterns in the codebase. Output code only, no explanation." 0 120
+   bash -c 'export DEVSQUAD_AGENT=gemini-developer; source "${CLAUDE_PLUGIN_ROOT}/lib/gemini-wrapper.sh" && invoke_gemini_with_files "@{relevant_files}" "Generate: {task description}. Follow existing patterns in the codebase. Output code only, no explanation." 0 120'
    ```
 
 3. Parameters:

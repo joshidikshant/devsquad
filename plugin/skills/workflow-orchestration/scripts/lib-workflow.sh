@@ -2,6 +2,7 @@
 # lib-workflow.sh — Helper functions for workflow-orchestration skill
 # Sourced by run-workflow.sh. Do not execute directly.
 # shellcheck disable=SC2034
+set -euo pipefail
 
 # --- workflow_gate -----------------------------------------------------------
 # Prompts the user for confirmation before a destructive step.
