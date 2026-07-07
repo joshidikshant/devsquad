@@ -4,6 +4,26 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.10.0] — 2026-07-07
+
+### Maintainability & scalability review
+Output of a 6-dimension adversarial review (50 findings, 46 verified against source, 4 refuted). Safe, low-risk fixes applied; scalability refactors that would be bash-3-hostile deliberately deferred with a written record.
+
+### Fixed
+- **`get_suggestion_metrics` double-zero bug** (`enforcement.sh`): `grep -c … || echo 0` appended a second "0" on no-match (grep -c already prints 0), breaking the acceptance-rate arithmetic — now sanitized
+- **Agent doc `@`-ref examples** (`gemini-developer.md`, `gemini-tester.md`): fixed to call `invoke_gemini_with_files` with separate files/prompt args — plain `invoke_gemini` has no `@`-ref handling and would have sent them as literal text
+
+### Changed
+- `show-status.sh` reads `enforcement_mode` via the canonical `get_enforcement_mode()` helper instead of an inline jq/grep block
+- `usage.sh` and `lib-workflow.sh` now set `set -euo pipefail`, matching every other lib
+- Removed dead code: `get_snapshot()`, `get_state_key()` (zero callers)
+- `ARCHITECTURE.md`: dropped the stale inline version stamp; corrected agent count to "8 (4 gemini / 2 codex / 2 grok)"
+
+### Added
+- **69 test assertions** across 5 new files (suite: 9 files, 179 assertions) — the D1 verdict engine (`holdout-reconcile.sh`, previously untested), config validation, zone math, catalog staleness, savings estimates, and git-health symlink scanning; all offline, bash-3, jq-less paths covered
+- **CONTRIBUTING.md** — dev setup, shell ground rules, add-a-CLI pointer
+- **docs/MAINTAINABILITY-BACKLOG.md** — the 22 deferred findings, whose dominant root cause is the hardcoded CLI roster across ~10 files; the fix is the ADR-001 squad-manifest work, deferred because a naive `declare -A` manifest breaks on bash 3.2
+
 ## [0.9.0] — 2026-07-06
 
 ### Added — model-churn autopilot (tier pins + live catalog)
