@@ -14,6 +14,10 @@
 
 ⭐ **Star this if you've ever watched an agent burn 100K tokens re-reading files it didn't need.**
 
+<!-- DEMO: record the hook firing per docs/assets/demo-script.md, then uncomment:
+<img src="docs/assets/demo.gif" alt="DevSquad hook firing mid-session" width="720">
+-->
+
 </div>
 
 ---

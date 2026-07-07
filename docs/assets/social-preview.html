@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; }
+  body {
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #0a0a0b;
+    background-image:
+      radial-gradient(900px 500px at 82% -10%, rgba(138,43,226,0.22), transparent 60%),
+      radial-gradient(700px 500px at 5% 110%, rgba(56,189,180,0.14), transparent 55%);
+    color: #f4f4f5;
+    width: 1280px; height: 640px;
+    padding: 72px 80px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(circle at 50% 40%, black, transparent 85%);
+  }
+  .top { position: relative; z-index: 2; }
+  .eyebrow {
+    font-size: 20px; letter-spacing: 5px; text-transform: uppercase;
+    color: #a78bfa; font-weight: 700; margin-bottom: 26px;
+  }
+  h1 {
+    font-size: 76px; line-height: 1.04; font-weight: 800;
+    letter-spacing: -2px; max-width: 1000px;
+  }
+  h1 .em { color: #a78bfa; }
+  .sub {
+    margin-top: 26px; font-size: 27px; line-height: 1.4; color: #c4c4c8;
+    max-width: 940px; font-weight: 400;
+  }
+  .sub b { color: #f4f4f5; font-weight: 600; }
+  .bottom {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .clis { display: flex; gap: 14px; align-items: center; }
+  .pill {
+    font-size: 22px; font-weight: 600; padding: 11px 22px;
+    border: 1.5px solid rgba(255,255,255,0.16); border-radius: 999px;
+    color: #e4e4e7; background: rgba(255,255,255,0.03);
+  }
+  .arrow { color: #52525b; font-size: 24px; }
+  .pill.claude { border-color: rgba(167,139,250,0.55); color: #c4b5fd; background: rgba(138,43,226,0.10); }
+  .meta { text-align: right; }
+  .meta .repo { font-size: 24px; font-weight: 700; color: #f4f4f5; }
+  .meta .badges { margin-top: 10px; font-size: 19px; color: #8b8b93; font-weight: 500; }
+  .meta .badges .g { color: #4ade80; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="top">
+    <div class="eyebrow">Claude Code Plugin</div>
+    <h1>Your AI agent ignores<br>your rules. <span class="em">Hooks don't.</span></h1>
+    <div class="sub">Intercepts tool calls, routes the grunt work across three CLIs, then <b>A/B-tests whether delegation actually saves you tokens.</b></div>
+  </div>
+  <div class="bottom">
+    <div class="clis">
+      <span class="pill">Gemini</span>
+      <span class="arrow">·</span>
+      <span class="pill">Codex</span>
+      <span class="arrow">·</span>
+      <span class="pill">Grok</span>
+      <span class="arrow">→</span>
+      <span class="pill claude">Claude decides</span>
+    </div>
+    <div class="meta">
+      <div class="repo">DevSquad</div>
+      <div class="badges"><span class="g">177 tests passing</span> · bash 3.2+ · MIT</div>
+    </div>
+  </div>
+</body>
+</html>
