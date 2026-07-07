@@ -79,8 +79,16 @@ def session_tokens(transcript):
 arms = {}          # session -> arm (first seen)
 events = {"control": 0, "treatment": 0}
 missing = []
+excluded = set()
 
 for proj in projects:
+    # Sessions excluded by the epoch marker (live during the Phase-0 hook
+    # consolidation — their data straddles the double-firing fix)
+    epoch_file = os.path.join(proj, ".devsquad", "holdout-epoch")
+    if os.path.isfile(epoch_file):
+        for line in open(epoch_file):
+            if line.startswith("exclude:"):
+                excluded.add(line.split(":", 1)[1].strip())
     log = os.path.join(proj, ".devsquad", "logs", "holdout.log")
     if not os.path.isfile(log):
         continue
@@ -91,7 +99,7 @@ for proj in projects:
             if len(parts) < 3:
                 continue
             sid, arm = parts[1], parts[2]
-            if arm not in events:
+            if arm not in events or sid in excluded:
                 continue
             events[arm] += 1
             if sid not in arms:

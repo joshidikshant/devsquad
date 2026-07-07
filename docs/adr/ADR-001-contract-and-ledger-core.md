@@ -1,7 +1,8 @@
 # ADR-001: Contract-and-Ledger Core (response to the Prebid-style platform brief)
 
-- **Status:** Proposed (awaiting DJ's review)
+- **Status:** Accepted (DJ, 2026-07-06)
 - **Date:** 2026-07-06
+- **Acceptance notes:** Routing tension with the evaluation's D3 verdict resolved the same day: runtime stays filter+static per this ADR; a one-shot offline Haiku-classifier benchmark against the 60-task labeled corpus supplies the evidence for any future routing ADR. D1 restarted post Phase-0 hook consolidation (single source = installed plugin).
 - **Author:** Fable 5 (Claude Code), synthesizing 4 independent architecture proposals + adversarial critiques (13 agents, ~1.16M tokens) against the v0.8.0 codebase
 - **Input:** Grok's "DevSquad → Prebid-Style Multi-Model AI Engineering Platform" brief (2026-07-06)
 
