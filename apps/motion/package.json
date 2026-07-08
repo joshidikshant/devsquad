@@ -1,0 +1,24 @@
+{
+  "name": "devsquad-motion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion project — DevSquad branded motion assets (hero, release clips)",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:hero": "remotion render HeroRescue ../../docs/assets/hero.mp4 --codec=h264",
+    "render:gif": "remotion render src/index.ts HeroRescue ../../docs/assets/hero.gif --codec=gif",
+    "render:square": "remotion render src/index.ts HeroRescueSquare ../../docs/assets/hero-square.gif --codec=gif",
+    "still": "remotion still src/index.ts HeroMeme ../../docs/assets/social-preview.png --frame=140",
+    "render:mp4": "remotion render src/index.ts HeroMeme ../../docs/assets/hero.mp4 --codec=h264"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^9.6.1",
+    "@remotion/cli": "^4.0.486",
+    "@remotion/three": "^4.0.486",
+    "@types/three": "^0.185.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "remotion": "^4.0.486",
+    "three": "^0.185.1"
+  }
+}

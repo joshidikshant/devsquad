@@ -14,9 +14,9 @@
 
 ⭐ **Star this if you've ever watched an agent burn 100K tokens re-reading files it didn't need.**
 
-<a href="docs/assets/hero.mp4"><img src="docs/assets/hero.gif" alt="DevSquad — the rescue: Claude's context meter climbs to the redline, the hook fires, work dispatches to Gemini/Codex/Grok, and distilled signal drains the meter back down" width="820"></a>
+<a href="docs/assets/hero.mp4"><img src="docs/assets/hero.gif" alt="Claude Code alone, on fire — Usage Limit Hit, Context Rot, 'I'll just do it myself.' Then the hook intervenes and it flips to a calm EM Claude with Gemini reading, Codex drafting, Grok checking. DevSquad 1, CLAUDE.md 0." width="840"></a>
 
-<sub>Claude's context meter climbs to the redline → the hook fires → work dispatches to the squad → signal returns, the meter drains. That's DevSquad.</sub>
+<sub>CLAUDE.md said delegate. Claude said <em>"I'll just do it myself."</em> — then hit the usage limit, on fire. Hooks don't ignore you: work flips to the squad, and it's <strong>DevSquad 1 | CLAUDE.md 0</strong>.</sub>
 
 </div>
 

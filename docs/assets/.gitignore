@@ -1,8 +1,7 @@
-# Render inputs — not shipped (GIF/PNG bake them in)
+# Render inputs / caches — never shipped (outputs bake them in)
 *.ttf
 three.module.js
 three.core.js
-# capture scratch
 _*.png
-sq/
 frames/
+sq/
