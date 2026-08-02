@@ -12,7 +12,7 @@
 [![license](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://docs.anthropic.com/en/docs/claude-code)
 
-⭐ **Star this if you've ever watched an agent burn 100K tokens re-reading files it didn't need.**
+**Built for anyone who's watched an agent burn 100K tokens re-reading files it didn't need.**
 
 <a href="docs/assets/hero.mp4"><img src="docs/assets/hero.gif" alt="Claude Code alone, on fire — Usage Limit Hit, Context Rot, 'I'll just do it myself.' Then the hook intervenes and it flips to a calm EM Claude with Gemini reading, Codex drafting, Grok checking. DevSquad 1, CLAUDE.md 0." width="840"></a>
 
