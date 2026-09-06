@@ -45,11 +45,13 @@ The Task schema rejects unknown fields and checks finite bounds. It contains:
 | `checks[]` | `id`, `argv` string array, repository-relative `cwd`, `timeout_seconds`, `required_to_pass` |
 | `scope` | Repository-relative `read_paths`, `write_paths`; non-empty writes only for delivery |
 | `lead` | `mode: host` or `headless`; headless requires candidate profiles in policy |
-| `routing` | `profiles_file`, `policy_file`; absolute or repository-relative trusted config files |
-| `budget` | `wall_seconds` of active run execution, `max_provider_calls`, `max_revisions`, `max_fallbacks_per_step`; all finite non-negative integers, wall/calls positive |
+| `routing` | `profiles_file`, `policy_file`; absolute or repository-relative trusted config files; optional per-role `overrides` |
+| `budget` | `wall_seconds` of active run execution, `max_worker_invocations`, `max_revisions`, `max_fallbacks_per_step`; all finite non-negative integers, wall/invocations positive |
 | `origin` | `surface` label, optional `session_ref`; no authorization or remote invocation implied |
 
 Snapshot the task, resolved refs, config files and their hashes before enqueue. Do not resolve a moving branch again halfway through a run. V1 uses committed inputs only: if dirty files intersect declared scope, reject with an actionable `INPUT_INVALID` rather than silently omitting them. Explicit dirty-worktree snapshot support is deferred. Validate paths against traversal and symlink escape. Task checks and policies are execution authority: repo content and provider output cannot add commands or widen permissions.
+
+`max_worker_invocations` counts launched adapter attempts, including retries, fallback attempts and headless lead invocations. It does not count native internal model requests: one CLI worker may run several model/tool turns. Observed native requests/tokens/quota and host work have separate nullable measurements. Pre-launch validation or capacity rejection does not consume a launch, though its elapsed work still counts toward execution time. The September selection/Council amendment renames the earlier design field `max_provider_calls` before schema implementation to make this unit explicit. Enforce native turn/tool limits only where the adapter verifies support; a worker-launch cap alone is not a token, quota or spending cap.
 
 The CLI must print the resolved scope/check plan in validation output; an app lead should supply it from the user's actual task. No magic inference from a README's embedded instructions. Checks may legitimately have side effects; run them in the isolated workspace with the declared process policy. “Read-only reviewer” does not mean executing arbitrary repository scripts is safe to treat as read-only.
 
@@ -66,6 +68,14 @@ quality_status; evidence_refs[]
 `effort.transport` is `native`, `model_variant`, or `provider_default`. Values are native to that harness/model; never translate “high” into a numeric equivalent across vendors. Unsupported explicit effort fails validation. Provider default may be allowed, but its effective value remains unknown unless reported. `quality_status` is `unvalidated`, `trial`, `proven` or `suspended`, scoped to task class by policy evidence. Trial profiles are eligible only in explicitly permitted classes. Exact family and model IDs are mandatory for cross-model independence claims; inability to verify identity blocks that claim.
 
 Install-time discovery reports supported values and evidence (`documented`, `probed`, `unavailable`, `unknown`) with `checked_at`, CLI version and toolset hash. Selecting a known catalog entry verifies that it exists, not that the invocation used it: attempts retain separate `requested` and `observed` fields. Manually verified mappings may establish identity for a versioned harness; silent model fallback must never be labelled confirmed.
+
+### Automatic selection and manual overrides
+
+Default selection is automatic among policy-eligible profiles. The host supplies task requirements; the deterministic router chooses the model/effort/tool profile without another planning-model call. Within the selected toolbox, the worker chooses individual tool calls. Discovery can enumerate supported configurations; initial quality preferences and account-pool mappings still require evidence and operator setup.
+
+`routing.overrides` defaults to `{}`. Each key is a model role supported by the chosen workflow, with value `{profile_id, fallback}`; `fallback` defaults to `none` and optionally allows `policy`. A pin constrains the initial profile; `none` also prohibits substitution/escalation to another profile. A pinned profile must pass the ordinary identity, capability, quality, permission and billing filters. Invalid pins fail validation; temporarily unavailable pins block. `policy` permits the normal qualified fallback list within the task budget. Roles without pins remain automatic. Record overrides and their origin in the routing receipt and separate them from automatic decisions in evaluations.
+
+The [selection and Council amendment](SELECTION-AND-COUNCIL.md) gives examples and ownership boundaries. Evidence gathering/proposals are automatic; promotion of changed routing defaults remains a reviewed policy update. Its optional C1 workflow is outside the initial two-workflow schema until the gated extension ships.
 
 ## 3. Adapter execution boundary
 

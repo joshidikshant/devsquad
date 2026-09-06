@@ -58,7 +58,7 @@ Work in this order:
 
 **New files:** `src/devsquad/{workflows,router,reports}.py`, `policies/`, role templates, branch-review schema/fixtures; `test/core/test_review_workflow.py`.
 
-1. Implement profile/policy loading, version/hash snapshots and capability/permission/quality filters. Use a small static candidate list. Add basic shared-pool concurrency and typed unknown capacity now; richer observations arrive in M6.
+1. Implement profile/policy loading, version/hash snapshots and capability/permission/quality filters. Select automatically from a small static candidate list, with validated per-role profile overrides and explicit fallback semantics from the selection amendment. Add basic shared-pool concurrency and typed unknown capacity now; richer observations arrive in M6.
 2. Resolve commit refs and task scope; create a frozen review workspace. Reject intersecting dirty inputs rather than silently omitting them.
 3. Implement reviewer → trusted checks → lead disposition, with `required_to_pass` semantics. Support host handoffs through CLI and a headless lead profile. Expose clear `awaiting_host` packets.
 4. Produce receipt JSON/Markdown, events export and artifact manifest for every terminal outcome. Record unknown host usage honestly.
@@ -66,6 +66,10 @@ Work in this order:
 **Acceptance gate:** An actual branch review returns actionable findings or a supported clean verdict, against recorded base/target hashes. A report-only failed check is included in a successful review; a required failed check prevents acceptance. A denied reviewer write or missing output cannot count as a valid review. A moving branch does not change the frozen run input. A second terminal claims a saved host handoff; a late completion from the first is fenced out. Verify original checkout/index/HEAD are unchanged.
 
 **First product stop:** At this point DevSquad is usable from terminal for a bounded job. Demonstrate it before adding more architecture.
+
+**Selection gate:** Identical task/policy/availability snapshots produce the same automatic selection. Pin one role and verify others remain automatic. Unsupported pins fail; an unavailable pin with `fallback:none` blocks without substitution. `fallback:policy` selects only a qualified alternative. No override broadens permissions or billing authority. Receipt explains effective model, effort and toolbox; a worker can only call permitted tools. Fake fixtures exercise an explicit bounded escalation and preserve each attempt's original profile.
+
+**Accounting gate:** `max_worker_invocations` limits adapter launches, including retries and the headless lead. Native internal model/tool turns and observed token/quota usage are separate fields; unknown stays null. A simulated worker with several native turns must not be reported as one measured model request or a fixed allowance charge.
 
 ## M4 — Use that same run from local apps
 
@@ -107,7 +111,7 @@ Work in this order:
 
 1. Implement pool mapping, applicable quota windows, TTL/source/confidence and local reservations. Use documented provider observations where available and timestamped manual values otherwise. Status displays unknown and stale values explicitly.
 2. Add bounded fallback, native retry metadata and explicit paid-API eligibility. Snapshot every routing decision with exclusions and policy version.
-3. Add final/late outcome records, role contribution, lead repair and evidence references; produce comparison reports with sample sizes and missingness.
+3. Add final/late outcome records, role contribution, lead repair and evidence references; produce comparison reports with sample sizes and missingness. Separate manually pinned decisions, normal automatic routing and experimental assignments to avoid treating selection bias as a profile improvement.
 4. Implement experiment specs and held-out evaluation fixtures. `learn propose` generates a draft hypothesis/evaluation/decision packet; promotion remains a reviewed Git policy change with a rollback target.
 5. Generate receipts/handoffs on run transitions, and curated documentation on explicit report/proposal operations. Record drift and affected evidence; do not introduce an unrequested scheduled automation.
 
@@ -128,6 +132,10 @@ Work in this order:
 5. Verify terminal CLI, Codex App, Claude Code App local Code tab, Antigravity local IDE/CLI and Grok Build against the same saved runtime. Check native capabilities/profile identity as used, not by brand inference.
 
 **Acceptance gate:** Fresh standalone install works without Claude installed; existing Claude plugin install contains `plugin/core` contents correctly. Reinstall creates no duplicate hook/server registration and a release update does not break a running job. Record actual start/observe/handoff-or-cancel receipts from every listed surface. Complete one end-to-end delivery with a different-model reviewer after installation. Documentation commands run as written. If an installed host cannot support an operation, retain that item as blocked with exact evidence instead of declaring universal support.
+
+## Optional C1 — Selective Council decisions
+
+After M6, implement the separately gated [Council extension](SELECTION-AND-COUNCIL.md). Reuse the runner and native adapters for two independent proposals, a distinct critic and the existing lead. Preserve dissent, enforce evidence checks and account for every call. C1 does not block M7; its own acceptance/evaluation gate controls whether automatic council triggering is enabled. Track it under `extensions` in the backlog, preserving the seven core milestones.
 
 ## Evidence and ongoing status
 

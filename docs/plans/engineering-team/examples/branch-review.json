@@ -37,7 +37,7 @@
   },
   "budget": {
     "wall_seconds": 600,
-    "max_provider_calls": 3,
+    "max_worker_invocations": 3,
     "max_revisions": 0,
     "max_fallbacks_per_step": 1
   },

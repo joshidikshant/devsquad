@@ -6,6 +6,7 @@
   "architecture": "../../adr/ADR-002-surface-independent-engineering-team.md",
   "contracts": "CONTRACTS.md",
   "implementation": "IMPLEMENTATION.md",
+  "selection_and_council": "SELECTION-AND-COUNCIL.md",
   "status": "planned",
   "next_milestone": "M1",
   "milestones": [
@@ -69,6 +70,19 @@
       "depends_on": ["M6"],
       "status": "pending",
       "acceptance_section": "M7 — Package, migrate and prove every requested surface",
+      "evidence": [],
+      "blocker": null
+    }
+  ],
+  "extensions": [
+    {
+      "id": "C1",
+      "title": "Selective evidence-based Council decisions",
+      "optional": true,
+      "depends_on": ["M6"],
+      "status": "pending",
+      "specification": "SELECTION-AND-COUNCIL.md",
+      "acceptance_section": "C1 — Optional Council extension after M6",
       "evidence": [],
       "blocker": null
     }

@@ -115,6 +115,8 @@ An execution profile is `(harness, harness version, model family, exact model, e
 
 Routing starts with a small versioned preference list per role/task class. Filter for capability, permission, quality eligibility and verified model/effort support. Then consider every applicable quota window, cooldown, concurrency, deadline and latency. If no eligible profile is available, block with a reason. Never silently relax required capabilities or switch to paid API usage.
 
+Selection is automatic by default. A user may pin a validated profile for any role; unpinned roles remain automatic. The selected profile defines the permitted toolbox, and the worker selects actual tool calls within it. Overrides have explicit fallback behavior. Discovery and evaluation can propose new profiles; changing the default policy remains a reviewed, versioned decision. See the [selection and Council amendment](../plans/engineering-team/SELECTION-AND-COUNCIL.md).
+
 Account pools span applications and repositories where the underlying allowance is shared. Provider observations have sources and expiry times; unknown allowance is unknown. DevSquad's concurrency reservations do not reserve quota with a provider. Spend estimates, token counts, characters and subscription allowance are distinct measurements.
 
 ## Learning and documentation are part of completion
@@ -147,6 +149,8 @@ Runtime records generate a receipt at every terminal state and a handoff packet 
 | M7 | Fresh installation, documentation and real smoke receipts for all requested surfaces |
 
 The detailed [contracts](../plans/engineering-team/CONTRACTS.md) and [work packages](../plans/engineering-team/IMPLEMENTATION.md) are normative for the build. Their gates replace claims based only on dry runs or syntax checks.
+
+**Optional C1 after M6:** Adapt LLM Council's independent-proposal, critique and synthesis pattern for difficult decisions. Use a bounded council within this runner, with evidence-based judgement and saved dissent. It does not delay M7 or replace routine implementation/review/checks. The [source study and extension gate](../plans/engineering-team/SELECTION-AND-COUNCIL.md) explain the protocol and capacity tradeoff; automatic council triggering requires evaluation evidence.
 
 ## Source notes
 
