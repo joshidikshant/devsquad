@@ -8,6 +8,8 @@
   "implementation": "IMPLEMENTATION.md",
   "selection_and_council": "SELECTION-AND-COUNCIL.md",
   "model_lifecycle_and_native_adapters": "MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md",
+  "execution_brief": "SOL-HANDOFF.md",
+  "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "planned",
   "next_milestone": "M1",
   "milestones": [

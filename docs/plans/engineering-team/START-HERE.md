@@ -2,6 +2,8 @@
 
 **Build status: planned, not implemented.** This packet follows the local/GitHub review and Dikshant's September 6 brief. Start with M1; do not run another open-ended architecture exercise.
 
+**Full-build assignment:** Use [SOL-HANDOFF.md](SOL-HANDOFF.md) for the user's request to have Sol execute everything, test thoroughly and make normal use simple. It includes M1–M7 plus the opt-in Council feature, and adds guided task entry over the same contracts.
+
 > Build an AI engineering team that can be operated from terminal, Codex, Claude Code, Antigravity and Grok. Use each eligible model/effort/tool configuration where it produces the best verified outcome; account for shared subscription limits. Preserve work across surfaces, learn from attempts and maintain the evidence automatically.
 
 ```mermaid
@@ -32,7 +34,7 @@ Also read the [native adapters and model lifecycle amendment](MODEL-LIFECYCLE-AN
 Implement DevSquad's September engineering-team plan in this repository.
 Read docs/plans/engineering-team/START-HERE.md and its contracts first.
 Start at the earliest pending milestone whose dependencies are complete.
-For the initial pass, implement M1 and pass its acceptance gate before M2.
+Implement M1 and pass its gate, then continue through M2–M7 and C1.
 Preserve existing Bash 3.2 wrapper callers and their four error prefixes.
 Keep all distributable core files inside plugin/core; add no cloud service.
 Use fake CLIs for development; real provider runs are bounded smoke tests.
@@ -40,7 +42,7 @@ Do not change global AI account settings or silently switch to paid APIs.
 Before marking a milestone complete, record the revision, checks, outcome,
 and a reproducible receipt in backlog.json and update the relevant docs.
 Run bash test/run.sh before each commit as CONTRIBUTING.md requires.
-Commit each verified milestone. Continue through ready work when requested;
+Commit each verified milestone. Continue through all ready work;
 report exact blockers rather than claiming unsupported integrations work.
 ```
 
