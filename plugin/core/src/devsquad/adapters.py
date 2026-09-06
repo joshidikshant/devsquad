@@ -51,6 +51,9 @@ class AdapterManifest:
     def resolve_binary(self) -> str | None:
         return next((p for name in self.binary_candidates if (p := shutil.which(name))), None)
 
+    def with_model_efforts(self, mapping: dict[str, tuple[str, ...]]) -> "AdapterManifest":
+        return AdapterManifest(self.name, self.transport, self.binary_candidates, self.model_provider, mapping, self.permission_profiles, self.output_format, self.verified_versions)
+
 
 def _permission_args(manifest: AdapterManifest, permission: str) -> tuple[str, ...]:
     try:
@@ -100,6 +103,23 @@ def prepare_cli(
         verification="unverified",
     )
     return LaunchSpec(SCHEMA_VERSION, manifest.name, "cli_exec", tuple(args), str(Path(cwd).resolve()), stdin_path, timeout_seconds, requested, {"DEVSQUAD_WORKER": "1"})
+
+
+def prepare_native_codex(manifest: AdapterManifest, *, cwd: str, model: str, effort: str, permission: str, timeout_seconds: int, harness_version_value: str) -> LaunchSpec:
+    """Prepare the supervisor-owned app-server child without spawning it."""
+    if manifest.name != "codex" or manifest.transport != "native_protocol":
+        raise ContractError("native Codex manifest required")
+    binary = manifest.resolve_binary()
+    if not binary:
+        raise ContractError("adapter unavailable: codex")
+    if harness_version_value not in manifest.verified_versions:
+        raise ProfileUnsupported(f"unverified Codex app-server version: {harness_version_value}")
+    supported = manifest.efforts_by_model.get(model)
+    if supported is None or effort not in supported:
+        raise ProfileUnsupported(f"unsupported or unverified effort {effort!r} for codex model {model!r}")
+    _permission_args(manifest, permission)
+    requested = ExecutionIdentity("codex", harness_version_value, "openai", None, model, effort, (), permission, None, "verified")
+    return LaunchSpec(SCHEMA_VERSION, "codex", "native_protocol", (binary, "app-server", "--listen", "stdio://"), str(Path(cwd).resolve()), None, timeout_seconds, requested, {"DEVSQUAD_WORKER": "1"})
 
 
 def _provider_records(adapter: str, stdout: str) -> tuple[list[dict[str, Any]], bool, str | None]:

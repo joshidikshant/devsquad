@@ -12,7 +12,7 @@ CORE = Path(__file__).resolve().parents[2] / "plugin" / "core"
 import sys
 sys.path.insert(0, str(CORE / "src"))
 
-from devsquad.adapters import AdapterManifest, classify_cli, prepare_cli
+from devsquad.adapters import AdapterManifest, classify_cli, prepare_cli, prepare_native_codex
 from devsquad.catalog import update_last_good
 from devsquad.codex_protocol import NativeTurnState, model_list_request, parse_model_page
 from devsquad.contracts import ContractError, validate_launch_payload
@@ -83,6 +83,17 @@ class M1ContractsTest(unittest.TestCase):
         self.assertEqual(classify_cli(spec, returncode=0, stdout=valid, stderr="").execution_status, "succeeded")
         startup = json.dumps({"type":"thread.started","thread_id":"x"}) + "\n" + json.dumps({"type":"turn.completed","usage":{}})
         self.assertEqual(classify_cli(spec, returncode=0, stdout=startup, stderr="").execution_status, "malformed")
+
+    def test_native_launch_is_preparation_only_and_version_scoped(self):
+        temp, binary = self.fake_path("codex"); self.addCleanup(temp.cleanup)
+        manifest = self.manifest("codex").with_model_efforts({"gpt-test": ("low",)})
+        with patch.dict(os.environ, {"PATH": str(binary.parent)}):
+            spec = prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.135.0")
+            self.assertEqual(spec.transport, "native_protocol")
+            self.assertEqual(spec.argv[-2:], ("--listen", "stdio://"))
+            self.assertEqual(spec.environment["DEVSQUAD_WORKER"], "1")
+            with self.assertRaises(ContractError):
+                prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli future")
 
     def test_launch_round_trip_is_strict(self):
         temp, binary = self.fake_path("grok"); self.addCleanup(temp.cleanup)
