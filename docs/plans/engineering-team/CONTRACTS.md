@@ -43,6 +43,7 @@ The Task schema rejects unknown fields and checks finite bounds. It contains:
 | `goal`, `task_class` | Bounded objective and comparison class, e.g. `bugfix-python-small` |
 | `acceptance[]` | Stable criterion `id`, concrete `description`, `evidence_kind` (`review`, `check`, `artifact`, `host`) |
 | `checks[]` | `id`, `argv` string array, repository-relative `cwd`, `timeout_seconds`, `required_to_pass` |
+| `review` | Optional `{mode, focus}`; mode defaults to `standard`, or `adversarial`; focus is allowed only for adversarial review |
 | `scope` | Repository-relative `read_paths`, `write_paths`; non-empty writes only for delivery |
 | `lead` | `mode: host` or `headless`; headless requires candidate profiles in policy |
 | `routing` | `profiles_file`, `policy_file`; absolute or repository-relative trusted config files; optional per-role `overrides` |
@@ -56,6 +57,8 @@ Snapshot the task, resolved refs, config files and their hashes before enqueue. 
 The CLI must print the resolved scope/check plan in validation output; an app lead should supply it from the user's actual task. No magic inference from a README's embedded instructions. Checks may legitimately have side effects; run them in the isolated workspace with the declared process policy. “Read-only reviewer” does not mean executing arbitrary repository scripts is safe to treat as read-only.
 
 `Policy` contains an `id`, `version`, workflow role candidate lists, per-task-class minimum quality status, `require_different_model_for_review`, optional `prefer_different_harness_for_review`, account-pool policy and experiment budget. V1 role names are `implementer`, `reviewer`, `lead`; checks are deterministic process steps, not model calls. Add a `researcher` role only when a workflow needs specific research artifacts. Don't make every task pay for research or a council.
+
+Role candidate entries are tagged references `{kind: profile|alias, id}`. A profile reference resolves to an immutable concrete configuration; an alias such as `review.deep` resolves through the versioned qualified-binding registry. Preflight snapshots the resolved profile and fallback set, plus template/binding revisions. An alias may gain a qualified replacement for new runs without changing workflow files. Explicit `routing.overrides.profile_id` remains a concrete pin and never floats. Templates and binding changes follow the [model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md).
 
 `Profile` contains:
 
@@ -75,17 +78,19 @@ Default selection is automatic among policy-eligible profiles. The host supplies
 
 `routing.overrides` defaults to `{}`. Each key is a model role supported by the chosen workflow, with value `{profile_id, fallback}`; `fallback` defaults to `none` and optionally allows `policy`. A pin constrains the initial profile; `none` also prohibits substitution/escalation to another profile. A pinned profile must pass the ordinary identity, capability, quality, permission and billing filters. Invalid pins fail validation; temporarily unavailable pins block. `policy` permits the normal qualified fallback list within the task budget. Roles without pins remain automatic. Record overrides and their origin in the routing receipt and separate them from automatic decisions in evaluations.
 
-The [selection and Council amendment](SELECTION-AND-COUNCIL.md) gives examples and ownership boundaries. Evidence gathering/proposals are automatic; promotion of changed routing defaults remains a reviewed policy update. Its optional C1 workflow is outside the initial two-workflow schema until the gated extension ships.
+The [selection and Council amendment](SELECTION-AND-COUNCIL.md) gives examples and ownership boundaries. Evidence gathering/proposals are automatic. Initially promotions are reviewed; the [model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md) permits tested model-binding promotion under an explicitly enabled, previously reviewed `guarded_auto` policy. Changing permissions, billing authority or the promotion policy itself remains reviewed. Optional C1 is outside the initial two-workflow schema until that gated extension ships.
 
 ## 3. Adapter execution boundary
 
-Retain `invoke_codex`, `invoke_gemini`, `invoke_grok` and their legacy stdout/exit/error contract. Add a Claude headless adapter. New execution uses a bridge around shared wrapper configuration and classification helpers:
+Retain `invoke_codex`, `invoke_gemini`, `invoke_grok` and their legacy stdout/exit/error contract. Add a Claude headless adapter. Adapters declare `transport: cli_exec | native_protocol`, while exposing the same normalized lifecycle/results. The CLI transport uses a bridge around shared wrapper configuration and classification helpers:
 
 1. `prepare(request.json)` returns `LaunchSpec`: fixed manifest-selected executable, argv array, working directory, optional stdin artifact, allowlisted environment overrides, requested model/effort, parser version, permission evidence. The bridge may source bundled wrapper functions; it must not source a request-selected file.
 2. Python launches that argv directly in a new process session/group, with no `shell=True` or `eval`, owns lifecycle and captures bounded stdout/stderr to files.
 3. `classify(exit_code, stdout_file, stderr_file, timed_out)` returns the legacy-compatible error class or execution completion plus native model/usage/session metadata. Extract shared logic rather than implementing two independent classifiers. A Bash argv builder can send NUL-separated arguments to a bundled Python serializer; never interpolate JSON strings into shell code.
 
 The new bridge does not call `_adapter_invoke`'s watchdog or write legacy JSON usage arrays. Python writes new-run telemetry once. Existing sourced callers retain their old bookkeeping. Per-run model/effort/permission overrides must not edit shared configuration. Native CLI timeouts may act as an earlier provider limit, but Python remains the sole supervisor and cleanup owner.
+
+For Codex, prefer a version-verified `native_protocol` adapter backed by a supervisor-owned stdio app-server. The adapter prepares typed thread/review/turn requests, maps native events into core events and retains native IDs. Requests come from validated task fields and adapter code, not arbitrary caller-supplied protocol methods. Use native interruption before process cleanup; require terminal evidence. An acknowledged start/interrupt is not task completion. Native errors normalize into the same legacy-compatible taxonomy plus structured core details. A broken transport cannot trigger a second writer without reconciliation. See the [native adapter amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md) for capability/version gates and retained Bash compatibility.
 
 The four adapter error codes stay `RATE_LIMITED | AUTH_ERROR | TIMEOUT | CLI_ERROR`, with auth checked before rate. Additional **core** errors include `INPUT_INVALID`, `PROFILE_UNSUPPORTED`, `CAPABILITY_UNAVAILABLE`, `CONFLICT`, `RECOVERY_REQUIRED`, `BUDGET_EXHAUSTED`, `POLICY_DENIED`, `INTERNAL_ERROR`. Do not expand the legacy prefix enum to represent orchestration states.
 
@@ -97,7 +102,7 @@ Workers get `DEVSQUAD_WORKER=1`, run/attempt IDs and a delegation-depth guard. D
 
 ## 4. Durable state, concurrency and recovery
 
-SQLite schema has `projects`, `runs`, `steps`, `attempts`, `events`, `artifacts`, `claims`, `pool_observations`, `pool_reservations`, `outcomes` and `schema_migrations`. Entity IDs are opaque UUIDs; event cursors, versions, fencing tokens and migration versions are integers. UTC timestamps accompany durations measured with a monotonic clock. Mutations increment a run `version`; the append-only event and affected projections commit together in one short transaction. File artifacts are atomically finalized and hashed before a transaction references them; crash-created unreferenced files are recoverable garbage, not valid results.
+SQLite schema has `projects`, `runs`, `steps`, `attempts`, `events`, `artifacts`, `claims`, `pool_observations`, `pool_reservations`, `outcomes`, `profile_templates`, `profile_bindings`, `qualification_runs` and `schema_migrations`. Entity IDs are opaque UUIDs; event cursors, versions, fencing tokens and migration versions are integers. UTC timestamps accompany durations measured with a monotonic clock. Mutations increment a run `version`; the append-only event and affected projections commit together in one short transaction. Binding updates use their own compare-and-swap version and event. File artifacts are atomically finalized and hashed before a transaction references them; crash-created unreferenced files are recoverable garbage, not valid results.
 
 ```mermaid
 stateDiagram-v2
@@ -175,7 +180,7 @@ devsquad/
   learning/policy-changelog.md            links to evidence and policy diffs
 ```
 
-`report` derives summaries from the database; `learn propose` writes draft distilled records for review. It does not change routing. Raw task content is not automatically committed or uploaded. Track redacted evidence with reproducible case IDs/hashes and an explicit `evidence_availability` value (`local`, `tracked_fixture`, `unavailable`); a local path alone is not portable proof. Policy promotion requires a reviewed, versioned change with evaluation links. During M6 use an ordinary Git diff/review for this, not another bespoke approval UI.
+`report` derives summaries from the database; `learn propose` writes draft distilled records for review. It does not change routing. Raw task content is not automatically committed or uploaded. Track redacted evidence with reproducible case IDs/hashes and an explicit `evidence_availability` value (`local`, `tracked_fixture`, `unavailable`); a local path alone is not portable proof. Policy changes require review with evaluation links; use an ordinary Git diff/review during M6. A separately enabled `guarded_auto` qualification gate may update a model binding within that policy, writing an evidence/rollback receipt for each promotion. Runtime binding updates do not edit the user's Git checkout.
 
 Use this loop:
 
@@ -184,7 +189,7 @@ Use this loop:
 3. Propose one change: model, effort, prompt/context strategy, tool access or workflow. Compare like tasks and keep the remaining settings controlled or explicitly record confounders.
 4. Run a small predeclared evaluation with held-out cases, budget and stopping rule. Avoid routing only hard tasks to one model and then treating unadjusted averages as model quality.
 5. Promote only with supported quality evidence, acceptable rework/latency/capacity tradeoff and a rollback target; otherwise preserve the policy and record no-change.
-6. Revalidate affected profiles after model/harness/prompt/tool/policy drift or escaped defects. Do not discard unrelated evidence or automatically promote a newly released model.
+6. Revalidate affected profiles after model/harness/prompt/tool/policy drift or escaped defects. Do not discard unrelated evidence or promote a model on release/discovery alone. Any guarded automatic binding promotion must satisfy the versioned qualification/evaluation rules.
 
 Default experiment budget is disabled until explicitly configured, then at most 10% of eligible runs with a hard call/time cap. Most work uses the current proven policy. V1 uses human-governed static preferences, not exhaustive permutations, an automatic bandit or foundation-model fine-tuning. Report sample sizes and missingness; tiny samples justify hypotheses, not provider rankings.
 

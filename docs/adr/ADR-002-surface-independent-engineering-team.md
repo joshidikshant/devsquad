@@ -36,7 +36,7 @@ Optimize accepted outcomes first, then reduce rework, latency and scarce allowan
 
 | July design | September implementation decision |
 |---|---|
-| Bash-only coordinator | Python 3.11+ standard-library coordinator; preserve Bash 3.2 adapter compatibility |
+| Bash-only coordinator | Python 3.11+ standard-library coordinator; preserve Bash 3.2 adapter compatibility and use verified native protocols where available |
 | JSONL as primary ledger | Transactional SQLite event ledger and projections; JSONL is an export |
 | Claude session always synthesizes | One explicitly selected lead: current host or a headless worker |
 | Provider/role aliases and implicit self fallback | Exact execution profiles; qualified fallback or an explicit blocked state |
@@ -107,7 +107,7 @@ flowchart LR
 
 Start with the smaller `branch-review` template: snapshot → review → checks → disposition → receipt. Add `issue-delivery` after this is useful. Repository changes occur in an isolated worktree with one writer. Reviewers have verified read-only permissions and a frozen revision. Checks use trusted argv arrays. Patch changes invalidate prior review/test acceptance. V1 returns work for integration; it does not merge, push, deploy or publish automatically.
 
-Preserve the existing shell wrapper API and four error prefixes. Extract shared argument-building/classification helpers for a new bridge. In new runs Python owns timeouts, cancellation, draining and reaping; the legacy wrapper keeps its separately repaired bounded invocation path. Do not nest two competing watchdogs or rewrite provider behavior in a second place.
+Preserve the existing shell wrapper API and four error prefixes. Extract shared argument-building/classification helpers for CLI adapters; prefer a verified native app-server adapter for new Codex jobs. Python owns the protocol child or CLI subprocess, timeouts, cancellation, draining and reaping; the legacy wrapper keeps its separately repaired bounded invocation path. Do not nest competing watchdogs or two job coordinators. The [native adapter amendment](../plans/engineering-team/MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md) records the source-backed extension.
 
 ## Select configurations, measure outcomes
 
@@ -115,7 +115,7 @@ An execution profile is `(harness, harness version, model family, exact model, e
 
 Routing starts with a small versioned preference list per role/task class. Filter for capability, permission, quality eligibility and verified model/effort support. Then consider every applicable quota window, cooldown, concurrency, deadline and latency. If no eligible profile is available, block with a reason. Never silently relax required capabilities or switch to paid API usage.
 
-Selection is automatic by default. A user may pin a validated profile for any role; unpinned roles remain automatic. The selected profile defines the permitted toolbox, and the worker selects actual tool calls within it. Overrides have explicit fallback behavior. Discovery and evaluation can propose new profiles; changing the default policy remains a reviewed, versioned decision. See the [selection and Council amendment](../plans/engineering-team/SELECTION-AND-COUNCIL.md).
+Selection is automatic by default. A user may pin a validated profile for any role; unpinned roles remain automatic. The selected profile defines the permitted toolbox, and the worker selects actual tool calls within it. Overrides have explicit fallback behavior. Stable role aliases resolve to qualified concrete profiles and are frozen per run. Discovery/evaluation can propose replacements; a reviewed update policy may authorize guarded automatic binding promotions, while policy changes remain reviewed. See the [selection amendment](../plans/engineering-team/SELECTION-AND-COUNCIL.md) and [model lifecycle](../plans/engineering-team/MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md).
 
 Account pools span applications and repositories where the underlying allowance is shared. Provider observations have sources and expiry times; unknown allowance is unknown. DevSquad's concurrency reservations do not reserve quota with a provider. Spend estimates, token counts, characters and subscription allowance are distinct measurements.
 

@@ -7,6 +7,7 @@
   "contracts": "CONTRACTS.md",
   "implementation": "IMPLEMENTATION.md",
   "selection_and_council": "SELECTION-AND-COUNCIL.md",
+  "model_lifecycle_and_native_adapters": "MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md",
   "status": "planned",
   "next_milestone": "M1",
   "milestones": [

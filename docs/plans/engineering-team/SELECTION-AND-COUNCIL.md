@@ -15,7 +15,7 @@
 | Decide which permitted tool to call during work | Selected worker, inside the assigned permissions |
 | Pin a particular configuration for this task | User override, resolved by the host into a validated profile |
 | Collect outcomes and propose better configurations | DevSquad's evidence and evaluation loop |
-| Promote a changed default policy | Reviewed versioned change, initially human-governed |
+| Promote a changed default policy | Reviewed versioned change; it may preauthorize bounded model-binding updates |
 
 You should usually say “fix this issue” or “review this branch,” not fill in a model matrix. The host prepares a task; the router selects an eligible profile. The router itself needs no model call. A profile packages an exact harness/model, native effort setting, tool access, permission policy and account pool. Selection among tested combinations keeps the search space manageable.
 
@@ -60,6 +60,8 @@ Illustrative fragment, using a fictional configured profile:
 Validate role names against the selected workflow. A pin must meet the same capability, identity, quality, permission and billing constraints as automatic candidates. Invalid settings return a validation error; temporary unavailability blocks with a reason. `fallback:none` never silently substitutes another profile. `fallback:policy` permits only the ordinary qualified candidate list and logs the substitution. Profile edits produce a new version; no live model/effort/tool mutation mid-attempt. All surfaces submit this same task shape.
 
 Reports explain selections, excluded alternatives, explicit overrides, escalations and observed settings. An unmeasured or manually pinned trial must not be counted as proof of a general routing improvement.
+
+The [model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md) adds stable aliases, automatic discovery and bounded qualification. After calibration, an enabled `guarded_auto` policy can promote tested bindings without per-release manual edits. The reviewed policy remains the authority; discovery or council votes alone cannot promote a candidate.
 
 ## What LLM Council actually contributes
 

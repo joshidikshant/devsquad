@@ -24,6 +24,8 @@ flowchart LR
 
 Selection is automatic by default, with validated per-role profile overrides. Read the [selection and LLM Council amendment](SELECTION-AND-COUNCIL.md) for the clarified contract. Its optional C1 extension follows M6 and does not block the seven core milestones.
 
+Also read the [native adapters and model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md): use verified Codex app-server capabilities, stable profile aliases, automatic catalog updates and qualified binding promotions. These refine M1/M3/M6/M7; they add no prerequisite milestone and do not require rewriting workflows for each model release.
+
 ## Copyable execution brief
 
 ```text

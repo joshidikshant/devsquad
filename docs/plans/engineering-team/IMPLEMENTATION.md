@@ -23,19 +23,21 @@ Implement sequentially through M3. M4 and M5 may proceed in parallel after agree
 
 **Existing files:** `plugin/lib/adapter.sh`, `codex-wrapper.sh`, `gemini-wrapper.sh`, `grok-wrapper.sh`, `model-catalog.sh`; `test/test_wrapper_contract.sh`, `test/test_models.sh`.
 
-**New files:** `plugin/core/pyproject.toml`, `bin/squad`, `src/devsquad/{cli,contracts,adapters}.py`, `schemas/`, `adapters/{codex,antigravity,grok}/`; `test/core/test_contracts.py`, `test/core/test_adapters.py` and fake executables.
+**New files:** `plugin/core/pyproject.toml`, `bin/squad`, `src/devsquad/{cli,contracts,adapters,codex_protocol}.py`, `schemas/`, `adapters/{codex,antigravity,grok}/`; `test/core/test_contracts.py`, `test/core/test_adapters.py` and fake executables/protocol servers.
 
 Work in this order:
 
 1. Establish package/import layout, Python 3.11 floor, `squad --version`, initial `doctor`, strict v1 schemas and fixture loading. Record package/source fingerprints.
-2. Extract reusable argv-building and classification helpers without changing sourced-wrapper signatures or error prefixes. Implement `prepare`/`classify` bridge; retain legacy telemetry only on legacy invocations.
+2. Extract reusable argv-building and classification helpers without changing sourced-wrapper signatures or error prefixes. Implement `prepare`/`classify` for CLI transport; add the version-verified Codex stdio app-server transport and event normalization. Preserve legacy telemetry only on legacy invocations. Use upstream native-protocol patterns from the model lifecycle amendment without importing a second job coordinator.
 3. Fix legacy portable-watchdog completion delay and descendant cleanup with timing/process assertions. Preserve Bash 3.2 and jq-absent legacy tests. Do not make legacy operation require installing Python.
-4. Add per-call explicit model/effort/tool/permission settings; verify installed CLI mappings with help/documentation and bounded probes. Remove cross-family numeric tier ranking from new selection; correct legacy resolution with compatibility tests. Catalog drift produces unknown/revalidation rather than silent identity substitution.
+4. Add per-call explicit model/effort/tool/permission settings; verify installed CLI mappings with help/documentation and bounded probes. Discover Codex models/efforts through app-server metadata; define stable alias/templates separately from concrete profiles. Remove cross-family numeric tier ranking from new selection; correct legacy resolution with compatibility tests. Paginated catalog refresh retains last-good data on error/incomplete responses. Catalog drift produces unknown/revalidation rather than silent identity substitution.
 5. Replace the Gemini extension whitelist and whitespace splitting with scoped, bounded context enumeration. Document when native file access replaces prompt concatenation.
 
 **Acceptance gate:** Existing suite passes. Fake immediate CLI returns promptly with a 2-second timeout (target under 1 second on normal local CI); a hanging CLI and descendant are gone by timeout plus grace. Fixtures cover empty exit-0, exit-0 auth banner, denied tool, malformed output, spaces/TSX inputs, explicit unsupported effort, unavailable capability and cross-family catalog entries. Overrides do not mutate global/project config. Doctor distinguishes supported, unverified and unavailable settings. One short read-only real adapter probe validates the chosen starting profile; save a redacted receipt and version facts.
 
 **Boundary:** No learned routing, MCP, worktree edits or universal model catalog. Manifests for unprobed harnesses remain visibly unverified.
+
+**Native/discovery gate:** A fake app-server exercises thread/review/turn events, explicit supported/unsupported effort and native IDs. Acknowledged start/interrupt is not reported as terminal completion. Paginated metadata assembles one complete snapshot; parse/auth/timeout failures preserve the previous snapshot. An added model becomes an unqualified candidate, and an unknown family cannot inherit capabilities from its name. Native model-list schema availability alone does not count as live entitlement or quality evidence.
 
 ## M2 — Persist jobs and own their processes
 
@@ -58,9 +60,9 @@ Work in this order:
 
 **New files:** `src/devsquad/{workflows,router,reports}.py`, `policies/`, role templates, branch-review schema/fixtures; `test/core/test_review_workflow.py`.
 
-1. Implement profile/policy loading, version/hash snapshots and capability/permission/quality filters. Select automatically from a small static candidate list, with validated per-role profile overrides and explicit fallback semantics from the selection amendment. Add basic shared-pool concurrency and typed unknown capacity now; richer observations arrive in M6.
+1. Implement profile/policy loading, alias binding resolution, version/hash snapshots and capability/permission/quality filters. Select automatically from a small static candidate list, with validated per-role profile overrides and explicit fallback semantics from the selection amendment. Freeze concrete profiles and fallback sets during preflight; never resolve a changed alias halfway through a run. Add basic shared-pool concurrency and typed unknown capacity now; richer observations arrive in M6.
 2. Resolve commit refs and task scope; create a frozen review workspace. Reject intersecting dirty inputs rather than silently omitting them.
-3. Implement reviewer → trusted checks → lead disposition, with `required_to_pass` semantics. Support host handoffs through CLI and a headless lead profile. Expose clear `awaiting_host` packets.
+3. Implement reviewer → trusted checks → lead disposition, with `required_to_pass` semantics. Support host handoffs through CLI and a headless lead profile. Expose clear `awaiting_host` packets. Distinguish ordinary native review from a steerable adversarial-review prompt, recording the mode and supported controls; both remain review-only against the frozen candidate.
 4. Produce receipt JSON/Markdown, events export and artifact manifest for every terminal outcome. Record unknown host usage honestly.
 
 **Acceptance gate:** An actual branch review returns actionable findings or a supported clean verdict, against recorded base/target hashes. A report-only failed check is included in a successful review; a required failed check prevents acceptance. A denied reviewer write or missing output cannot count as a valid review. A moving branch does not change the frozen run input. A second terminal claims a saved host handoff; a late completion from the first is fenced out. Verify original checkout/index/HEAD are unchanged.
@@ -109,15 +111,19 @@ Work in this order:
 
 **New files:** `src/devsquad/{capacity,learning}.py`, observation/experiment/outcome schemas, learning templates; `test/core/test_capacity.py`, `test/core/test_learning.py`.
 
-1. Implement pool mapping, applicable quota windows, TTL/source/confidence and local reservations. Use documented provider observations where available and timestamped manual values otherwise. Status displays unknown and stale values explicitly.
+1. Implement pool mapping, applicable quota windows, TTL/source/confidence and local reservations. Use documented provider observations, including Codex app-server rate limits when supported, and timestamped manual values otherwise. Status displays unknown and stale values explicitly.
 2. Add bounded fallback, native retry metadata and explicit paid-API eligibility. Snapshot every routing decision with exclusions and policy version.
 3. Add final/late outcome records, role contribution, lead repair and evidence references; produce comparison reports with sample sizes and missingness. Separate manually pinned decisions, normal automatic routing and experimental assignments to avoid treating selection bias as a profile improvement.
 4. Implement experiment specs and held-out evaluation fixtures. `learn propose` generates a draft hypothesis/evaluation/decision packet; promotion remains a reviewed Git policy change with a rollback target.
 5. Generate receipts/handoffs on run transitions, and curated documentation on explicit report/proposal operations. Record drift and affected evidence; do not introduce an unrequested scheduled automation.
 
+6. Implement the [model lifecycle](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md): budgeted qualification, limited trials, reviewed or explicitly enabled guarded automatic binding promotion, compare-and-swap binding versions, last-qualified fallback and rollback. Promotions stay within allowed templates, quality criteria, permissions and billing authority. They write local decision receipts and affect new runs only. The default remains reviewed until evaluation gates and policy enable guarded automation.
+
 **Acceptance gate:** Two projects sharing one pool obey a fresh exhausted weekly window despite available short-window capacity. Stale/unknown values never become zero; external usage changes do not get assigned to one worker. Concurrency reservations release only after ownership is reconciled. A paid API fallback is excluded unless allowed. A failed original attempt later repaired by another model produces final success without crediting the original as independently successful. A late escaped bug updates outcome history. A one-variable fixture experiment produces a traceable no-change or promotion proposal, with all failures and a rollback version; insufficient evidence leaves active policy unchanged. Re-run a held-out fixture after policy change and exercise rollback.
 
 **Boundary:** No automatic learned router. Experiment budgets default off; activate only through explicit versioned policy.
+
+**Release gate:** A new model cannot become default from discovery alone. Insufficient evidence, unsupported effort or widened permissions/billing prevents automatic promotion. Changed metadata revalidates only affected profiles; same-ID backing changes retain unknown revision when unobservable. An approved binding update affects a newly started run while an existing run and concrete override remain pinned. Concurrent promotions conflict on stale binding versions. A regression reverts to an available qualified binding and records why. All qualification/trial launches share the configured experiment and account-pool budgets.
 
 ## M7 — Package, migrate and prove every requested surface
 
@@ -128,7 +134,7 @@ Work in this order:
 1. Package the core inside `plugin/`, with a stable standalone launcher and optional MCP environment. Preserve active run release pins. Installer is idempotent and reports source/plugin/standalone drift.
 2. Keep legacy plugin mode available during migration. Reconcile hook registration only when duplicate evidence exists; September review found no current duplicate. New hooks call the shared route source after its tests pass and remain fast/network-free. No Python dependency imposed on legacy mode.
 3. Create generated command/schema examples and concise install/operate/recover guides. Mark implemented vs deferred features; link completion claims to receipts. Keep historical ADR/audit statements dated.
-4. Add offline CI for legacy and core suites (Bash 3.2/macOS compatibility and chosen Python floor/current version), package-content checks, and optional MCP tests. Live provider/app tests remain explicit bounded smoke runs.
+4. Add offline CI for legacy and core suites (Bash 3.2/macOS compatibility and chosen Python floor/current version), package-content checks, native protocol compatibility fixtures and optional MCP tests. Live provider/app tests remain explicit bounded smoke runs. Document supported protocol ranges, capability drift and the optional native Claude→Codex session-import path, while retaining portable artifact handoffs for every host.
 5. Verify terminal CLI, Codex App, Claude Code App local Code tab, Antigravity local IDE/CLI and Grok Build against the same saved runtime. Check native capabilities/profile identity as used, not by brand inference.
 
 **Acceptance gate:** Fresh standalone install works without Claude installed; existing Claude plugin install contains `plugin/core` contents correctly. Reinstall creates no duplicate hook/server registration and a release update does not break a running job. Record actual start/observe/handoff-or-cancel receipts from every listed surface. Complete one end-to-end delivery with a different-model reviewer after installation. Documentation commands run as written. If an installed host cannot support an operation, retain that item as blocked with exact evidence instead of declaring universal support.
