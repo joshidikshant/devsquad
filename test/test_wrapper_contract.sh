@@ -27,6 +27,7 @@ case "${FAKE_MODE:-success}" in
   auth)    echo "401 unauthorized request" >&2; exit 1 ;;
   migrate) echo "please migrate to the new suite: IneligibleTierError while authenticating" >&2; exit 1 ;;
   banner)  echo "Signing in with Grok..." ;;
+  empty)   : ;;
 esac
 FAKESH
   chmod +x "$FAKE/$bin"
@@ -75,6 +76,12 @@ for spec in "gemini-wrapper.sh:invoke_gemini:gemini" "codex-wrapper.sh:invoke_co
   # 5. failures also recorded in telemetry
   [ -f "$TDIR/.devsquad/usage/$agent.json" ] && ok || bad "$agent failure usage record"
 done
+
+# Exit zero without a usable response is a contract failure, not success.
+run_case codex-wrapper.sh invoke_codex empty
+[ "$EC" -ne 0 ] && ok || bad "codex empty exit-zero treated as success"
+printf '%s' "$ERR_TXT" | grep -q '^CLI_ERROR:' && ok || bad "codex empty exit-zero prefix"
+[ -f "$TDIR/.devsquad/usage/codex.json" ] && ok || bad "codex empty exit-zero usage record"
 
 # grok-specific: unauthenticated CLI exits 0 with a sign-in banner — the
 # wrapper must classify that as AUTH_ERROR, not success

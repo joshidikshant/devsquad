@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .adapters import AdapterManifest, classify_cli, harness_version, prepare_cli
+from .adapters import AdapterManifest, classify_cli, harness_version, prepare_cli, prepare_native_codex_from_catalog
 from .contracts import ContractError, envelope, error_payload
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
@@ -32,7 +32,18 @@ def command_doctor(_: argparse.Namespace) -> tuple[dict, int]:
 
 def command_prepare(args: argparse.Namespace) -> dict:
     manifest = AdapterManifest.load(CORE_ROOT / "adapters" / args.adapter / "adapter.json")
-    spec = prepare_cli(manifest, prompt=args.prompt, cwd=args.cwd, model=args.model, effort=args.effort, permission=args.permission, timeout_seconds=args.timeout)
+    transport = args.transport or manifest.transport
+    if transport == "native_protocol":
+        if manifest.name != "codex" or not args.catalog_file or not args.model or not args.effort:
+            raise ContractError("native preparation requires Codex, --catalog-file, --model and --effort")
+        binary = manifest.resolve_binary()
+        version = harness_version(binary) if binary else None
+        snapshot = json.loads(Path(args.catalog_file).read_text())
+        spec = prepare_native_codex_from_catalog(manifest, snapshot, cwd=args.cwd, model=args.model, effort=args.effort, permission=args.permission, timeout_seconds=args.timeout, harness_version_value=version or "unknown")
+    elif transport == "cli_exec":
+        spec = prepare_cli(manifest, prompt=args.prompt, cwd=args.cwd, model=args.model, effort=args.effort, permission=args.permission, timeout_seconds=args.timeout)
+    else:
+        raise ContractError(f"unsupported transport: {transport}")
     return envelope(data=spec.to_dict()), 0
 
 
@@ -61,6 +72,8 @@ def parser() -> argparse.ArgumentParser:
         cmd.add_argument("--effort")
         cmd.add_argument("--permission", choices=("read_only", "workspace_write"), default="read_only")
         cmd.add_argument("--timeout", type=int, default=90)
+        cmd.add_argument("--transport", choices=("cli_exec", "native_protocol"))
+        cmd.add_argument("--catalog-file")
         if name == "prepare":
             cmd.add_argument("--prompt", required=True)
         else:

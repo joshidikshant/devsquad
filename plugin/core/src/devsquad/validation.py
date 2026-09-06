@@ -54,6 +54,13 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
     routing = value["routing"]; _exact(routing, {"profiles_file", "policy_file", "overrides"}, {"profiles_file", "policy_file"}, "routing")
     for key in ("profiles_file", "policy_file"):
         if not isinstance(routing[key], str) or not routing[key]: raise ContractError(f"routing {key} must be a path")
+    overrides = routing.get("overrides", {})
+    if not isinstance(overrides, dict): raise ContractError("routing overrides must be an object")
+    for role, override in overrides.items():
+        if role not in {"implementer", "reviewer", "lead", "researcher"}: raise ContractError("invalid override role")
+        _exact(override, {"profile_id", "fallback"}, {"profile_id"}, "routing override")
+        if not isinstance(override["profile_id"], str) or not override["profile_id"]: raise ContractError("override profile_id must be non-empty")
+        if override.get("fallback", "none") not in {"none", "policy"}: raise ContractError("override fallback must be none or policy")
     origin = value["origin"]; _exact(origin, {"surface", "session_ref"}, {"surface"}, "origin")
     if not isinstance(origin["surface"], str) or not origin["surface"]: raise ContractError("origin surface must be non-empty")
     if "review" in value:
@@ -64,3 +71,34 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
     for key, number in budget.items():
         if not isinstance(number, int) or isinstance(number, bool) or number < 0: raise ContractError(f"budget {key} must be a finite non-negative integer")
     if budget["wall_seconds"] == 0 or budget["max_worker_invocations"] == 0: raise ContractError("wall_seconds and max_worker_invocations must be positive")
+
+
+def validate_profile(value: dict[str, Any]) -> None:
+    fields = {"id", "harness", "model_family", "model_id", "effort", "required_tools", "permission_policy", "account_pool_id", "billing_mode", "quality_status", "evidence_refs"}
+    _exact(value, fields, fields, "profile")
+    for key in ("id", "harness", "model_family", "model_id", "account_pool_id"):
+        if not isinstance(value[key], str) or not value[key]: raise ContractError(f"profile {key} must be non-empty")
+    effort = value["effort"]; _exact(effort, {"value", "transport"}, {"value", "transport"}, "profile effort")
+    if effort["value"] is not None and not isinstance(effort["value"], str): raise ContractError("effort value must be string or null")
+    if effort["transport"] not in {"native", "model_variant", "provider_default"}: raise ContractError("invalid effort transport")
+    for key in ("required_tools", "evidence_refs"):
+        if not isinstance(value[key], list) or not all(isinstance(v, str) for v in value[key]) or len(set(value[key])) != len(value[key]): raise ContractError(f"profile {key} must contain unique strings")
+    if value["permission_policy"] not in {"read_only", "workspace_write"}: raise ContractError("invalid permission policy")
+    if value["billing_mode"] not in {"subscription", "paid_api"}: raise ContractError("invalid billing mode")
+    if value["quality_status"] not in {"unvalidated", "trial", "proven", "suspended"}: raise ContractError("invalid quality status")
+
+
+def validate_policy(value: dict[str, Any]) -> None:
+    fields = {"schema_version", "id", "version", "roles", "task_classes", "require_different_model_for_review", "prefer_different_harness_for_review", "account_pools", "experiment_budget"}
+    required = fields - {"prefer_different_harness_for_review"}
+    _exact(value, fields, required, "policy")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1 or type(value["version"]) is not int or value["version"] < 1: raise ContractError("invalid policy version")
+    if type(value["require_different_model_for_review"]) is not bool or ("prefer_different_harness_for_review" in value and type(value["prefer_different_harness_for_review"]) is not bool): raise ContractError("policy review flags must be boolean")
+    if not isinstance(value["roles"], dict) or set(value["roles"]) - {"implementer", "reviewer", "lead", "researcher"}: raise ContractError("invalid policy roles")
+    for candidates in value["roles"].values():
+        if not isinstance(candidates, list) or not candidates: raise ContractError("role candidates must be non-empty arrays")
+        for ref in candidates:
+            _exact(ref, {"kind", "id"}, {"kind", "id"}, "candidate reference")
+            if ref["kind"] not in {"profile", "alias"} or not isinstance(ref["id"], str) or not ref["id"]: raise ContractError("invalid candidate reference")
+    for key in ("task_classes", "account_pools", "experiment_budget"):
+        if not isinstance(value[key], dict): raise ContractError(f"policy {key} must be an object")

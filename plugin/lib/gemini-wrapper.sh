@@ -118,7 +118,7 @@ invoke_gemini_with_files() {
   # expand backslash escapes INSIDE file contents, corrupting code)
   local nl=$'\n'
   local file_content=""
-  local token path f manifest="$files_arg"
+  local token path f manifest="$files_arg" resolved_parent
   local project_root="${CLAUDE_PROJECT_DIR:-.}"
   local max_bytes="${DEVSQUAD_CONTEXT_MAX_BYTES:-1048576}"
   local max_file_bytes="${DEVSQUAD_CONTEXT_MAX_FILE_BYTES:-262144}"
@@ -153,6 +153,13 @@ invoke_gemini_with_files() {
       while IFS= read -r -d '' f; do
         matched="true"
         [[ -L "$project_root/$f" ]] && { echo "CONTEXT_OMITTED: symlink input is not followed: ${f}" >&2; continue; }
+        resolved_parent=$(cd "$(dirname "$project_root/$f")" 2>/dev/null && pwd -P) || {
+          echo "CONTEXT_OMITTED: file parent is unavailable: ${f}" >&2; continue;
+        }
+        case "${resolved_parent}/" in
+          "${project_root}/"*) ;;
+          *) echo "CONTEXT_OMITTED: symlink ancestor escapes project scope: ${f}" >&2; continue ;;
+        esac
         case "/$f" in
           */.devsquad/*|*/.env|*/.env.*|*/credentials.json|*.pem|*.key)
             echo "CONTEXT_OMITTED: sensitive or runtime path excluded: ${f}" >&2; continue ;;
@@ -177,7 +184,7 @@ invoke_gemini_with_files() {
         fi
         file_content+="=== ${f} ===${nl}$(cat "$project_root/$f")${nl}${nl}"
         used_bytes=$(( used_bytes + file_bytes + header_bytes ))
-      done < <(git -C "$project_root" ls-files -z -- "$path" 2>/dev/null)
+      done < <(git -C "$project_root" ls-files -z -- ":(literal)$path" 2>/dev/null)
       if [[ "$matched" == "false" ]]; then
         echo "CONTEXT_OMITTED: no tracked files in scope: ${path}" >&2
       fi

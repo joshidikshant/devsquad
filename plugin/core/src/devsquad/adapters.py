@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import ContractError, ExecutionIdentity, LaunchSpec, NormalizedResult, ProfileUnsupported, SCHEMA_VERSION
+from .catalog import verified_efforts
 
 ERROR_PATTERNS = (
     ("AUTH_ERROR", re.compile(r"auth|unauthorized|ineligible|\b401\b|\b403\b", re.I)),
@@ -122,10 +123,16 @@ def prepare_native_codex(manifest: AdapterManifest, *, cwd: str, model: str, eff
     return LaunchSpec(SCHEMA_VERSION, "codex", "native_protocol", (binary, "app-server", "--listen", "stdio://"), str(Path(cwd).resolve()), None, timeout_seconds, requested, {"DEVSQUAD_WORKER": "1"})
 
 
-def _provider_records(adapter: str, stdout: str) -> tuple[list[dict[str, Any]], bool, str | None]:
+def prepare_native_codex_from_catalog(manifest: AdapterManifest, snapshot: dict[str, Any], *, cwd: str, model: str, effort: str, permission: str, timeout_seconds: int, harness_version_value: str) -> LaunchSpec:
+    efforts = verified_efforts(snapshot, harness="codex", version=harness_version_value, model_id=model)
+    return prepare_native_codex(manifest.with_model_efforts({model: efforts}), cwd=cwd, model=model, effort=effort, permission=permission, timeout_seconds=timeout_seconds, harness_version_value=harness_version_value)
+
+
+def _provider_records(adapter: str, stdout: str) -> tuple[list[dict[str, Any]], bool, bool, str | None]:
     records: list[dict[str, Any]] = []
     deliverable = False
     error_text = None
+    terminal = False
     try:
         document = json.loads(stdout)
         source = document if isinstance(document, list) else [document]
@@ -133,11 +140,13 @@ def _provider_records(adapter: str, stdout: str) -> tuple[list[dict[str, Any]], 
         source = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     for item in source:
         if not isinstance(item, dict):
-            raise json.JSONDecodeError("record is not an object", line, 0)
+            raise json.JSONDecodeError("record is not an object", stdout, 0)
         records.append(item)
         if item.get("is_error") is True or item.get("error"):
             error_text = str(item.get("error") or item.get("result") or item.get("message"))
         kind = item.get("type")
+        if kind in {"result", "turn.completed"}:
+            terminal = True
         if adapter == "codex" and kind == "item.completed":
             native_item = item.get("item") or {}
             if native_item.get("type") in {"agent_message", "agentMessage"}:
@@ -147,7 +156,7 @@ def _provider_records(adapter: str, stdout: str) -> tuple[list[dict[str, Any]], 
             payload = item.get("result") or item.get("message") or item.get("text")
             if isinstance(payload, str) and payload.strip():
                 deliverable = True
-    return records, deliverable, error_text
+    return records, deliverable, terminal, error_text
 
 
 def classify_cli(spec: LaunchSpec, *, returncode: int, stdout: str, stderr: str, timed_out: bool = False) -> NormalizedResult:
@@ -163,11 +172,11 @@ def classify_cli(spec: LaunchSpec, *, returncode: int, stdout: str, stderr: str,
         status, code = "malformed", "CLI_ERROR"
     elif spec.adapter in {"codex", "antigravity", "grok"}:
         try:
-            _, deliverable, provider_error = _provider_records(spec.adapter, stdout)
+            _, deliverable, terminal, provider_error = _provider_records(spec.adapter, stdout)
             if provider_error:
                 code = next((candidate for candidate, pattern in ERROR_PATTERNS if pattern.search(provider_error)), "CLI_ERROR")
                 status = "denied" if re.search(r"permission denied|tool (?:use )?denied|not allowed", provider_error, re.I) else "failed"
-            elif not deliverable:
+            elif not deliverable or not terminal:
                 status, code = "malformed", "CLI_ERROR"
         except json.JSONDecodeError:
             status, code = "malformed", "CLI_ERROR"

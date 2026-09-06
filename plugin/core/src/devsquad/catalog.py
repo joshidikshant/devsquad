@@ -58,3 +58,15 @@ def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
     tmp.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
     os.replace(tmp, path)
+
+
+def verified_efforts(snapshot: dict[str, Any], *, harness: str, version: str, model_id: str) -> tuple[str, ...]:
+    if snapshot.get("complete") is not True or snapshot.get("harness") != harness or snapshot.get("harness_version") != version:
+        raise ContractError("catalog snapshot does not verify this harness version")
+    matches = [m for m in snapshot.get("models", []) if m.get("id") == model_id]
+    if len(matches) != 1:
+        raise ContractError(f"model is not uniquely present in verified catalog: {model_id}")
+    efforts = matches[0].get("supported_efforts")
+    if not isinstance(efforts, list) or not all(isinstance(v, str) for v in efforts):
+        raise ContractError("model effort metadata is unknown")
+    return tuple(efforts)

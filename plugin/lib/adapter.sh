@@ -118,6 +118,12 @@ _adapter_invoke() {
 
   local cli
   cli=$(_adapter_resolve_cli)
+  if [[ -n "${DEVSQUAD_TEST_ADAPTER_EXECUTABLE:-}" ]]; then
+    case "$DEVSQUAD_TEST_ADAPTER_EXECUTABLE" in
+      /*) [[ -x "$DEVSQUAD_TEST_ADAPTER_EXECUTABLE" ]] && cli="$DEVSQUAD_TEST_ADAPTER_EXECUTABLE" ;;
+      *) _adapter_fail "CLI_ERROR: test adapter executable must be absolute"; return 1 ;;
+    esac
+  fi
   if [[ -z "$cli" ]]; then
     _adapter_fail "CLI_ERROR: ${ADAPTER_MISSING_MSG}"
     return 1
@@ -129,8 +135,8 @@ _adapter_invoke() {
   _adapter_build_args "$final_prompt" "$model" "$timeout_secs"
 
   local timeout_cmd=""
-  if command -v timeout &>/dev/null; then timeout_cmd="timeout"
-  elif command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout"
+  if [[ "${DEVSQUAD_FORCE_PORTABLE_TIMEOUT:-0}" != "1" ]] && command -v timeout &>/dev/null; then timeout_cmd="timeout"
+  elif [[ "${DEVSQUAD_FORCE_PORTABLE_TIMEOUT:-0}" != "1" ]] && command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout"
   fi
 
   local stderr_file stdout_file
@@ -157,24 +163,28 @@ _adapter_invoke() {
     local cli_pid=$!
     local timed_out_file="${stdout_file}.timed-out"
     local process_snapshot="${stdout_file}.processes"
+    local watchdog_snapshot="${stdout_file}.watchdog-processes"
     # Redirect the watchdog itself: inherited capture descriptors were the
     # reason a successful immediate command waited for the full timeout.
-    ( sleep "$timeout_secs"; _adapter_snapshot_tree "$cli_pid" > "$process_snapshot"; : > "$timed_out_file"; _adapter_signal_snapshot "$process_snapshot" TERM ) >/dev/null 2>&1 &
+    ( sleep "$timeout_secs"; _adapter_snapshot_tree "$cli_pid" > "$process_snapshot"; : > "$timed_out_file"; _adapter_signal_snapshot "$process_snapshot" TERM; sleep 0.1; _adapter_signal_snapshot "$process_snapshot" KILL ) >/dev/null 2>&1 &
     local watchdog_pid=$!
     if wait "$cli_pid"; then
       exit_code=0
     else
       exit_code=$?
     fi
-    kill "$watchdog_pid" 2>/dev/null || true
+    # Snapshot the watchdog subtree while its sleep child is still attached,
+    # then stop the exact identities. This never scans after orphaning.
+    _adapter_snapshot_tree "$watchdog_pid" > "$watchdog_snapshot"
+    _adapter_signal_snapshot "$watchdog_snapshot" KILL
     wait "$watchdog_pid" 2>/dev/null || true
     if [[ -f "$timed_out_file" ]]; then
-      # Give descendants a brief grace, then ensure stubborn children vanish.
-      sleep 0.1
+      # The watchdog performs escalation before wait can return. Repeat the
+      # exact captured set defensively; never discover unrelated PIDs here.
       _adapter_signal_snapshot "$process_snapshot" KILL
       exit_code=124
     fi
-    rm -f "$timed_out_file" "$process_snapshot"
+    rm -f "$timed_out_file" "$process_snapshot" "$watchdog_snapshot"
   fi
 
   local stdout stderr_content
@@ -187,7 +197,8 @@ _adapter_invoke() {
     _adapter_fail "AUTH_ERROR: ${agent} CLI is not authenticated. ${ADAPTER_AUTH_HINT}"
   elif [[ $exit_code -eq 0 ]]; then
     if [[ -z "$stdout" ]]; then
-      echo "WARNING: ${agent} returned empty response" >&2
+      _adapter_fail "CLI_ERROR: ${agent} returned an empty response. ${ADAPTER_FALLBACK}"
+      return 1
     fi
     update_agent_stats "$state_dir" "$agent" "true"
     record_usage "$agent" "$chars_in" "${#stdout}"

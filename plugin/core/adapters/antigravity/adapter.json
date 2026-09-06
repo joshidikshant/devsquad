@@ -5,6 +5,6 @@
   "binary_candidates": ["agy", "antigravity"],
   "model_provider": null,
   "capabilities": {"efforts_by_model": {}, "native_model_list": false, "resume": true},
-  "permission_profiles": {"read_only": ["--sandbox"], "workspace_write": []},
+  "permission_profiles": {"read_only": ["--sandbox"], "workspace_write": ["--sandbox"]},
   "output_format": "json"
 }

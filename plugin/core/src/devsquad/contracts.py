@@ -34,6 +34,16 @@ class ExecutionIdentity:
     account_pool: str | None = None
     verification: Verification = "unknown"
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.harness, str) or not self.harness:
+            raise ContractError("identity harness must be non-empty")
+        if self.permissions not in {"read_only", "workspace_write"}:
+            raise ContractError("identity permission is invalid")
+        if self.verification not in {"verified", "unverified", "unavailable", "unknown"}:
+            raise ContractError("identity verification is invalid")
+        if not isinstance(self.tools, tuple) or not all(isinstance(v, str) for v in self.tools):
+            raise ContractError("identity tools must be a string tuple")
+
 
 @dataclass(frozen=True)
 class LaunchSpec:
@@ -60,6 +70,9 @@ class LaunchSpec:
             raise ContractError("timeout_seconds must be positive")
         if not Path(self.cwd).is_absolute():
             raise ContractError("cwd must be absolute")
+        allowed_env = {"DEVSQUAD_WORKER", "DEVSQUAD_RUN_ID", "DEVSQUAD_ATTEMPT_ID", "DEVSQUAD_DELEGATION_DEPTH"}
+        if not isinstance(self.environment, dict) or set(self.environment) - allowed_env or not all(isinstance(k, str) and isinstance(v, str) for k, v in self.environment.items()):
+            raise ContractError("environment contains non-allowlisted or non-string values")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

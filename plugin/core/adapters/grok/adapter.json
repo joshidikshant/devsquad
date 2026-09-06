@@ -5,6 +5,6 @@
   "binary_candidates": ["grok"],
   "model_provider": "xai",
   "capabilities": {"efforts_by_model": {}, "native_model_list": false, "resume": true},
-  "permission_profiles": {"read_only": ["--disable-web-search"], "workspace_write": []},
+  "permission_profiles": {"read_only": ["--disable-web-search"]},
   "output_format": "json"
 }

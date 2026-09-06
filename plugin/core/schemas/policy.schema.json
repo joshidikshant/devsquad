@@ -1,6 +1,12 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://devsquad.local/schemas/policy-v1.json",
-  "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "id", "version", "roles", "task_classes", "require_different_model_for_review", "account_pools", "experiment_budget"],
-  "properties": {"schema_version": {"const": 1}, "id": {"type": "string", "minLength": 1}, "version": {"type": "integer", "minimum": 1}, "roles": {"type": "object"}, "task_classes": {"type": "object"}, "require_different_model_for_review": {"type": "boolean"}, "prefer_different_harness_for_review": {"type": "boolean"}, "account_pools": {"type": "object"}, "experiment_budget": {"type": "object"}}
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://devsquad.local/schemas/policy-v1.json",
+  "type":"object","additionalProperties":false,
+  "required":["schema_version","id","version","roles","task_classes","require_different_model_for_review","account_pools","experiment_budget"],
+  "properties":{
+    "schema_version":{"const":1},"id":{"type":"string","minLength":1},"version":{"type":"integer","minimum":1},
+    "roles":{"type":"object","propertyNames":{"enum":["implementer","reviewer","lead","researcher"]},"additionalProperties":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/candidate"}}},
+    "task_classes":{"type":"object"},"require_different_model_for_review":{"type":"boolean"},"prefer_different_harness_for_review":{"type":"boolean"},
+    "account_pools":{"type":"object"},"experiment_budget":{"type":"object"}
+  },
+  "$defs":{"candidate":{"type":"object","additionalProperties":false,"required":["kind","id"],"properties":{"kind":{"enum":["profile","alias"]},"id":{"type":"string","minLength":1}}}}
 }
