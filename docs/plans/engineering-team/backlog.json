@@ -10,16 +10,26 @@
   "model_lifecycle_and_native_adapters": "MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md",
   "execution_brief": "SOL-HANDOFF.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
-  "status": "planned",
+  "status": "in_progress",
   "next_milestone": "M1",
   "milestones": [
     {
       "id": "M1",
       "title": "Truthful reusable adapter invocation",
       "depends_on": [],
-      "status": "pending",
+      "status": "in_progress",
       "acceptance_section": "M1 — Make invocation truthful and reusable",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "572e452",
+          "command_or_action": "offline core/legacy suites, temporary wheel install, live Codex app-server metadata and read-only invocation probe",
+          "outcome": "M1 implementation and stated probes pass; independent gate review remains open",
+          "artifact": "evidence/M1-invocation-core-2026-09-06.json",
+          "recorded_at": "2026-09-06T13:02:37Z",
+          "availability": "portable_redacted"
+        }
+      ],
       "blocker": null
     },
     {
