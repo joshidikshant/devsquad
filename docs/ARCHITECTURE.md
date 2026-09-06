@@ -2,6 +2,14 @@
 
 One page for future maintainers (including future Claude sessions).
 
+> **September 2026:** The diagram below describes the legacy Claude plugin;
+> provider names, deployment details and measurements are historical. The
+> [current assessment](audits/2026-09-06-engineering-team-assessment.md) records
+> verified gaps. The proposed shared runner is specified in
+> [ADR-002](adr/ADR-002-surface-independent-engineering-team.md), with a
+> [coding-agent execution packet](plans/engineering-team/START-HERE.md).
+> That new runtime is planned, not implemented.
+
 ## End-to-end flow
 
 ```mermaid

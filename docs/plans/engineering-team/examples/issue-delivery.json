@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "project": {
+    "repo_path": "/absolute/path/to/fixture-repository",
+    "base_ref": "fixture-base",
+    "target_ref": "fixture-base"
+  },
+  "workflow": "issue-delivery",
+  "goal": "Fix the fixture parser's handling of an empty input and add a regression test.",
+  "task_class": "fixture-bugfix-small",
+  "acceptance": [
+    {
+      "id": "empty-input",
+      "description": "Empty input returns the documented empty result without an exception.",
+      "evidence_kind": "check"
+    },
+    {
+      "id": "independent-review",
+      "description": "A different verified model reviews the exact candidate and resolves critical findings.",
+      "evidence_kind": "review"
+    }
+  ],
+  "checks": [
+    {
+      "id": "fixture-tests",
+      "argv": ["python3", "-m", "unittest", "discover", "-s", "tests"],
+      "cwd": ".",
+      "timeout_seconds": 30,
+      "required_to_pass": true
+    }
+  ],
+  "scope": {"read_paths": ["src", "tests"], "write_paths": ["src/parser.py", "tests/test_parser.py"]},
+  "lead": {"mode": "headless"},
+  "routing": {
+    "profiles_file": "devsquad/profiles.json",
+    "policy_file": "devsquad/policy.json"
+  },
+  "budget": {
+    "wall_seconds": 1200,
+    "max_provider_calls": 9,
+    "max_revisions": 2,
+    "max_fallbacks_per_step": 1
+  },
+  "origin": {"surface": "cli"}
+}

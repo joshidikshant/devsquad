@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "plan_id": "surface-independent-engineering-team",
+  "created_at": "2026-09-06",
+  "baseline_revision": "c7f5930",
+  "architecture": "../../adr/ADR-002-surface-independent-engineering-team.md",
+  "contracts": "CONTRACTS.md",
+  "implementation": "IMPLEMENTATION.md",
+  "status": "planned",
+  "next_milestone": "M1",
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "Truthful reusable adapter invocation",
+      "depends_on": [],
+      "status": "pending",
+      "acceptance_section": "M1 — Make invocation truthful and reusable",
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "M2",
+      "title": "Durable runs, cancellation and recovery",
+      "depends_on": ["M1"],
+      "status": "pending",
+      "acceptance_section": "M2 — Persist jobs and own their processes",
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "M3",
+      "title": "Usable branch review from terminal",
+      "depends_on": ["M2"],
+      "status": "pending",
+      "acceptance_section": "M3 — Ship a useful branch review",
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "M4",
+      "title": "Shared local MCP access and host handoffs",
+      "depends_on": ["M3"],
+      "status": "pending",
+      "acceptance_section": "M4 — Use that same run from local apps",
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "M5",
+      "title": "Bounded implementation with independent review",
+      "depends_on": ["M3"],
+      "status": "pending",
+      "acceptance_section": "M5 — Deliver a bounded engineering change",
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "M6",
+      "title": "Shared capacity and evidence-based improvement",
+      "depends_on": ["M4", "M5"],
+      "status": "pending",
+      "acceptance_section": "M6 — Make capacity and improvement evidence useful",
+      "evidence": [],
+      "blocker": null
+    },
+    {
+      "id": "M7",
+      "title": "Installation, migration and all-surface proof",
+      "depends_on": ["M6"],
+      "status": "pending",
+      "acceptance_section": "M7 — Package, migrate and prove every requested surface",
+      "evidence": [],
+      "blocker": null
+    }
+  ]
+}

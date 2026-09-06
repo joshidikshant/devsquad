@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "project": {
+    "repo_path": "/absolute/path/to/fixture-repository",
+    "base_ref": "fixture-base",
+    "target_ref": "fixture-candidate"
+  },
+  "workflow": "branch-review",
+  "goal": "Review the fixture change and report supported correctness findings.",
+  "task_class": "fixture-review-small",
+  "acceptance": [
+    {
+      "id": "review-exact-diff",
+      "description": "Findings identify the resolved candidate and supporting file locations.",
+      "evidence_kind": "review"
+    },
+    {
+      "id": "report-check-outcome",
+      "description": "Include the fixture check result even when it reports a failure.",
+      "evidence_kind": "check"
+    }
+  ],
+  "checks": [
+    {
+      "id": "fixture-tests",
+      "argv": ["python3", "-m", "unittest", "discover", "-s", "tests"],
+      "cwd": ".",
+      "timeout_seconds": 30,
+      "required_to_pass": false
+    }
+  ],
+  "scope": {"read_paths": ["src", "tests"], "write_paths": []},
+  "lead": {"mode": "host"},
+  "routing": {
+    "profiles_file": "devsquad/profiles.json",
+    "policy_file": "devsquad/policy.json"
+  },
+  "budget": {
+    "wall_seconds": 600,
+    "max_provider_calls": 3,
+    "max_revisions": 0,
+    "max_fallbacks_per_step": 1
+  },
+  "origin": {"surface": "cli"}
+}
