@@ -66,6 +66,10 @@ def initialize_request(request_id: int = 1) -> dict[str, Any]:
     return request(request_id, "initialize", {"clientInfo": {"name": "devsquad", "version": "0.1.0"}, "capabilities": {"experimentalApi": True}})
 
 
+def initialized_notification() -> dict[str, Any]:
+    return {"method": "initialized", "params": {}}
+
+
 def thread_start_request(request_id: int, *, cwd: str, model: str, permission: str) -> dict[str, Any]:
     sandbox = {"read_only": "read-only", "workspace_write": "workspace-write"}.get(permission)
     if sandbox is None:

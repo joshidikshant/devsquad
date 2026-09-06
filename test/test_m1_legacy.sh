@@ -41,10 +41,17 @@ chmod +x "$T/bin/sleep"
 # Force the portable path even on systems with timeout/gtimeout installed.
 WATCHDOG_SLEEP_PID_FILE="$T/watchdog-sleep.pid"; export WATCHDOG_SLEEP_PID_FILE
 FAST_ELAPSED_FILE="$T/fast-elapsed"; export FAST_ELAPSED_FILE
-HOME="$T/home" PATH="$T/bin:/usr/bin:/bin" DEVSQUAD_FORCE_PORTABLE_TIMEOUT=1 CLAUDE_PROJECT_DIR="$T/project" FAKE_MODE=fast \
-  bash -c 'source "$1/plugin/lib/codex-wrapper.sh"; s=$(perl -MTime::HiRes=time -e '\''printf "%.6f", time'\''); invoke_codex hello 10 2; f=$(perl -MTime::HiRes=time -e '\''printf "%.6f", time'\''); awk -v s="$s" -v f="$f" '\''BEGIN { printf "%.3f", f-s }'\'' > "$FAST_ELAPSED_FILE"' _ "$ROOT" > "$T/out" 2> "$T/err"
+NOW_BIN="$T/bin/now"; export NOW_BIN
+cat > "$NOW_BIN" <<'EOF'
+#!/usr/bin/perl
+use Time::HiRes qw(time);
+printf "%.6f", time;
+EOF
+chmod +x "$NOW_BIN"
+HOME="$T/home" PATH="/usr/bin:/bin" DEVSQUAD_FORCE_PORTABLE_TIMEOUT=1 DEVSQUAD_TEST_ADAPTER_EXECUTABLE="/bin/echo" CLAUDE_PROJECT_DIR="$T/project" FAKE_MODE=fast \
+  bash -c 'source "$1/plugin/lib/codex-wrapper.sh"; s=$($NOW_BIN); invoke_codex hello 10 2; f=$($NOW_BIN); awk -v s="$s" -v f="$f" '\''BEGIN { printf "%.3f", f-s }'\'' > "$FAST_ELAPSED_FILE"' _ "$ROOT" > "$T/out" 2> "$T/err"
 fast_elapsed=$(cat "$FAST_ELAPSED_FILE")
-[[ "$(cat "$T/out")" == "ok" ]] && ok || bad "portable watchdog output"
+grep -q 'exec hello' "$T/out" && ok || bad "portable watchdog output"
 awk -v e="$fast_elapsed" 'BEGIN { exit !(e < 1.0) }' && ok || bad "portable fast call took ${fast_elapsed}s"
 if [[ -s "$WATCHDOG_SLEEP_PID_FILE" ]] && kill -0 "$(cat "$WATCHDOG_SLEEP_PID_FILE")" 2>/dev/null; then
   bad "portable success left watchdog sleep alive"

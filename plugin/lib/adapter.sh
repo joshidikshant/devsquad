@@ -32,6 +32,8 @@ set -euo pipefail
 _ADAPTER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${_ADAPTER_LIB_DIR}/model-catalog.sh"
+# shellcheck source=/dev/null
+source "${_ADAPTER_LIB_DIR}/../core/adapters/classification-policy.conf"
 
 # Terminate a bounded subprocess tree without requiring GNU timeout, setsid,
 # or job-control process groups (all absent on a stock macOS Bash 3.2 host).
@@ -161,30 +163,34 @@ _adapter_invoke() {
       "$cli" "${ADAPTER_ARGS[@]}" >"$stdout_file" 2>"$stderr_file" &
     fi
     local cli_pid=$!
-    local timed_out_file="${stdout_file}.timed-out"
-    local process_snapshot="${stdout_file}.processes"
-    local watchdog_snapshot="${stdout_file}.watchdog-processes"
-    # Redirect the watchdog itself: inherited capture descriptors were the
-    # reason a successful immediate command waited for the full timeout.
-    ( sleep "$timeout_secs"; _adapter_snapshot_tree "$cli_pid" > "$process_snapshot"; : > "$timed_out_file"; _adapter_signal_snapshot "$process_snapshot" TERM; sleep 0.1; _adapter_signal_snapshot "$process_snapshot" KILL ) >/dev/null 2>&1 &
-    local watchdog_pid=$!
+    local process_snapshot="${stdout_file}.processes" timed_out="false"
+    local polls_remaining=$(( timeout_secs * 20 )) state=""
+    # Poll the directly-owned child. This avoids a background sleep/watchdog
+    # retaining capture descriptors after fast completion.
+    while :; do
+      state=$(ps -p "$cli_pid" -o stat= 2>/dev/null | tr -d ' ' || true)
+      [[ -z "$state" || "$state" == Z* ]] && break
+      if [[ "$polls_remaining" -le 0 ]]; then
+        timed_out="true"
+        _adapter_snapshot_tree "$cli_pid" > "$process_snapshot"
+        _adapter_signal_snapshot "$process_snapshot" TERM
+        sleep 0.1
+        _adapter_signal_snapshot "$process_snapshot" KILL
+        break
+      fi
+      sleep 0.05
+      polls_remaining=$(( polls_remaining - 1 ))
+    done
     if wait "$cli_pid"; then
       exit_code=0
     else
       exit_code=$?
     fi
-    # Snapshot the watchdog subtree while its sleep child is still attached,
-    # then stop the exact identities. This never scans after orphaning.
-    _adapter_snapshot_tree "$watchdog_pid" > "$watchdog_snapshot"
-    _adapter_signal_snapshot "$watchdog_snapshot" KILL
-    wait "$watchdog_pid" 2>/dev/null || true
-    if [[ -f "$timed_out_file" ]]; then
-      # The watchdog performs escalation before wait can return. Repeat the
-      # exact captured set defensively; never discover unrelated PIDs here.
+    if [[ "$timed_out" == "true" ]]; then
       _adapter_signal_snapshot "$process_snapshot" KILL
       exit_code=124
     fi
-    rm -f "$timed_out_file" "$process_snapshot" "$watchdog_snapshot"
+    rm -f "$process_snapshot"
   fi
 
   local stdout stderr_content
@@ -207,9 +213,9 @@ _adapter_invoke() {
     return 0
   elif [[ $exit_code -eq 124 ]]; then
     _adapter_fail "TIMEOUT: ${agent} did not respond within ${timeout_secs}s. ${ADAPTER_FALLBACK}"
-  elif echo "$stderr_content" | grep -qiE 'auth|401|403|ineligible|unauthorized'; then
+  elif echo "$stderr_content" | grep -qiE "$DEVSQUAD_AUTH_ERROR_PATTERN"; then
     _adapter_fail "AUTH_ERROR: ${agent} CLI authentication failed. ${ADAPTER_AUTH_HINT}"
-  elif echo "$stderr_content" | grep -qiE '429|rate.?limit|quota|resource.?exhausted|too many requests'; then
+  elif echo "$stderr_content" | grep -qiE "$DEVSQUAD_RATE_LIMIT_PATTERN"; then
     record_rate_limit "$state_dir" "$agent"
     _adapter_fail "RATE_LIMITED: ${agent} hit a rate limit. 2-minute cooldown started. ${ADAPTER_FALLBACK}"
   else

@@ -10,11 +10,11 @@
     "model_family": {"type": "string", "minLength": 1},
     "model_id": {"type": "string", "minLength": 1},
     "effort": {"type": "object", "additionalProperties": false, "required": ["value", "transport"], "properties": {"value": {"type": ["string", "null"]}, "transport": {"enum": ["native", "model_variant", "provider_default"]}}},
-    "required_tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "required_tools": {"type": "array", "items": {"type": "string", "minLength":1}, "uniqueItems": true},
     "permission_policy": {"enum": ["read_only", "workspace_write"]},
     "account_pool_id": {"type": "string", "minLength": 1},
     "billing_mode": {"enum": ["subscription", "paid_api"]},
     "quality_status": {"enum": ["unvalidated", "trial", "proven", "suspended"]},
-    "evidence_refs": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+    "evidence_refs": {"type": "array", "items": {"type": "string", "minLength":1}, "uniqueItems": true}
   }
 }

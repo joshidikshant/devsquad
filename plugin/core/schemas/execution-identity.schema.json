@@ -4,10 +4,10 @@
   "type": "object", "additionalProperties": false,
   "required": ["harness", "harness_version", "model_provider", "model_family", "model", "effort", "tools", "permissions", "account_pool", "verification"],
   "properties": {
-    "harness": {"type": "string", "minLength": 1}, "harness_version": {"type": ["string", "null"]},
-    "model_provider": {"type": ["string", "null"]}, "model_family": {"type": ["string", "null"]}, "model": {"type": ["string", "null"]},
-    "effort": {"type": ["string", "null"]}, "tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-    "permissions": {"enum": ["read_only", "workspace_write"]}, "account_pool": {"type": ["string", "null"]},
+    "harness": {"type": "string", "minLength": 1}, "harness_version": {"oneOf":[{"type":"string","minLength":1},{"type":"null"}]},
+    "model_provider": {"oneOf":[{"type":"string","minLength":1},{"type":"null"}]}, "model_family": {"oneOf":[{"type":"string","minLength":1},{"type":"null"}]}, "model": {"oneOf":[{"type":"string","minLength":1},{"type":"null"}]},
+    "effort": {"oneOf":[{"type":"string","minLength":1},{"type":"null"}]}, "tools": {"type": "array", "items": {"type": "string", "minLength":1}, "uniqueItems": true},
+    "permissions": {"enum": ["read_only", "workspace_write"]}, "account_pool": {"oneOf":[{"type":"string","minLength":1},{"type":"null"}]},
     "verification": {"enum": ["verified", "unverified", "unavailable", "unknown"]}
   }
 }

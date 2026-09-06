@@ -5,8 +5,8 @@
   "properties":{
     "schema_version":{"const":1},"id":{"type":"string","minLength":1},"version":{"type":"integer","minimum":1},
     "roles":{"type":"object","propertyNames":{"enum":["implementer","reviewer","lead","researcher"]},"additionalProperties":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/candidate"}}},
-    "task_classes":{"type":"object"},"require_different_model_for_review":{"type":"boolean"},"prefer_different_harness_for_review":{"type":"boolean"},
-    "account_pools":{"type":"object"},"experiment_budget":{"type":"object"}
+    "task_classes":{"type":"object","propertyNames":{"minLength":1},"additionalProperties":{"enum":["unvalidated","trial","proven","suspended"]}},"require_different_model_for_review":{"type":"boolean"},"prefer_different_harness_for_review":{"type":"boolean"},
+    "account_pools":{"type":"object","propertyNames":{"minLength":1},"additionalProperties":{"type":"object"}},"experiment_budget":{"type":"object","propertyNames":{"minLength":1},"additionalProperties":{"type":"integer","minimum":0}}
   },
   "$defs":{"candidate":{"type":"object","additionalProperties":false,"required":["kind","id"],"properties":{"kind":{"enum":["profile","alias"]},"id":{"type":"string","minLength":1}}}}
 }

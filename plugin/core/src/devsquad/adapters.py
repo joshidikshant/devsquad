@@ -7,6 +7,8 @@ import os
 import re
 import shutil
 import subprocess
+import shlex
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,10 +16,20 @@ from typing import Any
 from .contracts import ContractError, ExecutionIdentity, LaunchSpec, NormalizedResult, ProfileUnsupported, SCHEMA_VERSION
 from .catalog import verified_efforts
 
-ERROR_PATTERNS = (
-    ("AUTH_ERROR", re.compile(r"auth|unauthorized|ineligible|\b401\b|\b403\b", re.I)),
-    ("RATE_LIMITED", re.compile(r"rate.?limit|quota|resource.?exhausted|too many requests|\b429\b", re.I)),
-)
+def _classification_policy() -> dict[str, str]:
+    source = Path(__file__).resolve().parents[2] / "adapters" / "classification-policy.conf"
+    if not source.exists():
+        source = Path(sys.prefix) / "share" / "devsquad" / "adapters" / "classification-policy.conf"
+    values = {}
+    for line in source.read_text().splitlines():
+        if line and not line.startswith("#"):
+            key, raw = line.split("=", 1); values[key] = shlex.split(raw)[0]
+    return values
+
+
+_POLICY = _classification_policy()
+ERROR_PATTERNS = (("AUTH_ERROR", re.compile(_POLICY["DEVSQUAD_AUTH_ERROR_PATTERN"], re.I)), ("RATE_LIMITED", re.compile(_POLICY["DEVSQUAD_RATE_LIMIT_PATTERN"], re.I)))
+DENIED_PATTERN = re.compile(_POLICY["DEVSQUAD_DENIED_PATTERN"], re.I)
 
 
 @dataclass(frozen=True)
@@ -120,7 +132,8 @@ def prepare_native_codex(manifest: AdapterManifest, *, cwd: str, model: str, eff
         raise ProfileUnsupported(f"unsupported or unverified effort {effort!r} for codex model {model!r}")
     _permission_args(manifest, permission)
     requested = ExecutionIdentity("codex", harness_version_value, "openai", None, model, effort, (), permission, None, "verified")
-    return LaunchSpec(SCHEMA_VERSION, "codex", "native_protocol", (binary, "app-server", "--listen", "stdio://"), str(Path(cwd).resolve()), None, timeout_seconds, requested, {"DEVSQUAD_WORKER": "1"})
+    argv = (binary, "-c", f'model="{model}"', "-c", f'model_reasoning_effort="{effort}"', "app-server", "--listen", "stdio://")
+    return LaunchSpec(SCHEMA_VERSION, "codex", "native_protocol", argv, str(Path(cwd).resolve()), None, timeout_seconds, requested, {"DEVSQUAD_WORKER": "1"})
 
 
 def prepare_native_codex_from_catalog(manifest: AdapterManifest, snapshot: dict[str, Any], *, cwd: str, model: str, effort: str, permission: str, timeout_seconds: int, harness_version_value: str) -> LaunchSpec:
@@ -149,6 +162,8 @@ def _provider_records(adapter: str, stdout: str) -> tuple[list[dict[str, Any]], 
             terminal = True
         if adapter == "codex" and kind == "item.completed":
             native_item = item.get("item") or {}
+            if not isinstance(native_item, dict):
+                raise json.JSONDecodeError("item.completed item is not an object", stdout, 0)
             if native_item.get("type") in {"agent_message", "agentMessage"}:
                 payload = native_item.get("text") or native_item.get("content")
                 deliverable = isinstance(payload, str) and bool(payload.strip())
@@ -175,7 +190,7 @@ def classify_cli(spec: LaunchSpec, *, returncode: int, stdout: str, stderr: str,
             _, deliverable, terminal, provider_error = _provider_records(spec.adapter, stdout)
             if provider_error:
                 code = next((candidate for candidate, pattern in ERROR_PATTERNS if pattern.search(provider_error)), "CLI_ERROR")
-                status = "denied" if re.search(r"permission denied|tool (?:use )?denied|not allowed", provider_error, re.I) else "failed"
+                status = "denied" if DENIED_PATTERN.search(provider_error) else "failed"
             elif not deliverable or not terminal:
                 status, code = "malformed", "CLI_ERROR"
         except json.JSONDecodeError:

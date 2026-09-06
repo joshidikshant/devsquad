@@ -15,7 +15,7 @@ sys.path.insert(0, str(CORE / "src"))
 
 from devsquad.adapters import AdapterManifest, classify_cli, prepare_cli, prepare_native_codex, prepare_native_codex_from_catalog
 from devsquad.catalog import update_last_good
-from devsquad.codex_protocol import JsonLinePeer, NativeTurnState, collect_model_pages, discover_models, initialize_request, model_list_request, parse_model_page, receive_response, review_start_request, thread_start_request, turn_interrupt_request, turn_start_request
+from devsquad.codex_protocol import JsonLinePeer, NativeTurnState, collect_model_pages, discover_models, initialize_request, initialized_notification, model_list_request, parse_model_page, receive_response, review_start_request, thread_start_request, turn_interrupt_request, turn_start_request
 from devsquad.contracts import ContractError, validate_launch_payload
 from devsquad.validation import validate_policy, validate_profile, validate_task
 
@@ -56,6 +56,8 @@ class M1ContractsTest(unittest.TestCase):
         self.assertEqual(classify_cli(spec, returncode=0, stdout='{"type":"result","is_error":true,"error":"tool denied"}', stderr="").execution_status, "denied")
         self.assertEqual(classify_cli(spec, returncode=0, stdout="not json", stderr="").execution_status, "malformed")
         self.assertEqual(classify_cli(spec, returncode=0, stdout="42", stderr="").execution_status, "malformed")
+        nested_bad = '{"type":"item.completed","item":"bad"}\n{"type":"turn.completed"}'
+        self.assertEqual(classify_cli(spec, returncode=0, stdout=nested_bad, stderr="").execution_status, "malformed")
 
     def test_auth_precedes_rate_and_acceptance_is_separate(self):
         temp, binary = self.fake_path("grok")
@@ -95,6 +97,7 @@ class M1ContractsTest(unittest.TestCase):
             spec = prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.135.0")
             self.assertEqual(spec.transport, "native_protocol")
             self.assertEqual(spec.argv[-2:], ("--listen", "stdio://"))
+            self.assertIn('model_reasoning_effort="low"', spec.argv)
             self.assertEqual(spec.environment["DEVSQUAD_WORKER"], "1")
             with self.assertRaises(ContractError):
                 prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli future")
@@ -165,7 +168,7 @@ class NativeProtocolTest(unittest.TestCase):
             process.stdin.close(); process.stdout.close()
         self.addCleanup(cleanup)
         peer = JsonLinePeer(process.stdout, process.stdin)
-        peer.send(initialize_request(1)); self.assertIn("result", receive_response(peer, 1, timeout_seconds=2))
+        peer.send(initialize_request(1)); self.assertIn("result", receive_response(peer, 1, timeout_seconds=2)); peer.send(initialized_notification())
         self.assertEqual([m["id"] for m in discover_models(peer, first_request_id=2, timeout_seconds=2)], ["gpt-fake"])
         peer.send(turn_start_request(4, thread_id="thread-1", prompt="p", model="gpt-fake", effort="low", cwd="/tmp", permission="read_only"))
         response = receive_response(peer, 4, timeout_seconds=2); self.assertEqual(response["result"]["turn"]["id"], "turn-1")
