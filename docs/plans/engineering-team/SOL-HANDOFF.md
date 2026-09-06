@@ -7,10 +7,11 @@ This is the full execution prompt for Sol. It is an implementation assignment; t
 Build the complete DevSquad engineering-team plan into a simple, reliable local product I can actually use from terminal, Codex App, Claude Code App, Antigravity and Grok Build. Treat this as a persistent implementation goal. Execute, test, repair and document it through completion; do not stop after planning, scaffolding, M1, the first successful demo or passing existing tests.
 
 Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
-Architecture branch at handoff: `codex/surface-independent-team-plan`.
+Canonical build branch after cleanup: `codex/engineering-team` (local and GitHub).
+Complete architecture and original handoff checkpoint: `ff1fa60`.
 Latest architecture amendment before this handoff: `bfaa390`.
 
-Inspect current Git state and files first. Work from a checkout containing this handoff and all plan amendments; GitHub `main` may not contain these local commits. Preserve existing work. Create or continue an implementation branch under `codex/` from this state; do not reset to an older baseline. Read repository instructions and `CONTRIBUTING.md`.
+Inspect current Git state and files first. Continue `codex/engineering-team`, or use an isolated Codex worktree based on that branch. Verify `git merge-base --is-ancestor ff1fa60 HEAD` and preserve existing work. GitHub `main` remains the published runtime baseline and does not contain this build plan. Do not restart from `main`, resurrect an archived branch or merge the unrelated February backup history. Read the [branch consolidation record](../../audits/2026-09-06-branch-consolidation.md), repository instructions and `CONTRIBUTING.md`. Use one integration branch for milestone checkpoints; remove temporary task branches/worktrees after their work is integrated and preserved.
 
 ## Read the complete specification
 

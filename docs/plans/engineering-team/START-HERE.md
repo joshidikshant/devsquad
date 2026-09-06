@@ -4,6 +4,8 @@
 
 **Full-build assignment:** Use [SOL-HANDOFF.md](SOL-HANDOFF.md) for the user's request to have Sol execute everything, test thoroughly and make normal use simple. It includes M1–M7 plus the opt-in Council feature, and adds guided task entry over the same contracts.
 
+**Git starting point:** `codex/engineering-team` is the shared local/GitHub build branch. `main` remains the published runtime baseline. The [branch consolidation record](../../audits/2026-09-06-branch-consolidation.md) documents the preserved history and recovery paths. Continue this branch, or base a Codex worktree on it; verify the complete handoff checkpoint `ff1fa60` is an ancestor before coding.
+
 > Build an AI engineering team that can be operated from terminal, Codex, Claude Code, Antigravity and Grok. Use each eligible model/effort/tool configuration where it produces the best verified outcome; account for shared subscription limits. Preserve work across surfaces, learn from attempts and maintain the evidence automatically.
 
 ```mermaid
