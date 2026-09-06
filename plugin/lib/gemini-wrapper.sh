@@ -104,9 +104,10 @@ invoke_gemini() {
   _adapter_invoke "$final_prompt" "$timeout_secs"
 }
 
-# File-based invocation: concatenates file/dir contents and pipes them via
-# stdin (bypasses Antigravity's workspace sandbox restriction on @file refs).
-# Usage: invoke_gemini_with_files "@src/auth/ @src/models/user.ts" "prompt" [word_limit] [timeout_secs]
+# File-based invocation. Context arguments are newline-delimited so paths with
+# spaces remain intact. A single legacy whitespace-delimited argument remains
+# accepted only when every token resolves, preserving existing callers.
+# Usage: invoke_gemini_with_files $'@src/auth/\n@src/models/user.ts' "prompt" [word_limit] [timeout_secs]
 invoke_gemini_with_files() {
   local files_arg="$1"
   local prompt="$2"
@@ -117,22 +118,71 @@ invoke_gemini_with_files() {
   # expand backslash escapes INSIDE file contents, corrupting code)
   local nl=$'\n'
   local file_content=""
-  local token path f
-  for token in $files_arg; do
+  local token path f manifest="$files_arg"
+  local project_root="${CLAUDE_PROJECT_DIR:-.}"
+  local max_bytes="${DEVSQUAD_CONTEXT_MAX_BYTES:-1048576}"
+  local max_file_bytes="${DEVSQUAD_CONTEXT_MAX_FILE_BYTES:-262144}"
+  local used_bytes=0 file_bytes header_bytes
+  project_root=$(cd "$project_root" 2>/dev/null && pwd -P) || {
+    echo "CONTEXT_OMITTED: project root is unavailable: ${project_root}" >&2
+    return 1
+  }
+  if [[ "$files_arg" != *$'\n'* ]]; then
+    local all_tokens_resolve="true"
+    for token in $files_arg; do
+      path="${token#@}"
+      [[ "$token" == @* && ( -f "$project_root/$path" || -d "$project_root/$path" ) ]] || all_tokens_resolve="false"
+    done
+    if [[ "$all_tokens_resolve" == "true" ]]; then
+      manifest=$(printf '%s\n' $files_arg)
+    fi
+  fi
+  while IFS= read -r token; do
     if [[ "$token" == @* ]]; then
       path="${token#@}"
-      if [[ -f "$path" ]]; then
-        file_content+="=== ${path} ===${nl}$(cat "$path")${nl}${nl}"
-      elif [[ -d "$path" ]]; then
-        while IFS= read -r f; do
-          file_content+="=== ${f} ===${nl}$(cat "$f")${nl}${nl}"
-        done < <(find "$path" -type f \( \
-          -name "*.ts" -o -name "*.js" -o -name "*.sh" -o -name "*.py" \
-          -o -name "*.go" -o -name "*.rs" -o -name "*.md" -o -name "*.json" \
-        \) 2>/dev/null | sort)
+      case "$path" in
+        ""|/*|../*|*/../*|*/..) echo "CONTEXT_OMITTED: path escapes project scope: ${path}" >&2; continue ;;
+      esac
+      path="${path#./}"
+      if [[ -L "$project_root/$path" ]]; then
+        echo "CONTEXT_OMITTED: symlink input is not followed: ${path}" >&2
+        continue
+      fi
+
+      local matched="false"
+      while IFS= read -r -d '' f; do
+        matched="true"
+        [[ -L "$project_root/$f" ]] && { echo "CONTEXT_OMITTED: symlink input is not followed: ${f}" >&2; continue; }
+        case "/$f" in
+          */.devsquad/*|*/.env|*/.env.*|*/credentials.json|*.pem|*.key)
+            echo "CONTEXT_OMITTED: sensitive or runtime path excluded: ${f}" >&2; continue ;;
+        esac
+        if git -C "$project_root" check-ignore --no-index -q -- "$f" 2>/dev/null; then
+          echo "CONTEXT_OMITTED: ignored path excluded: ${f}" >&2
+          continue
+        fi
+        if ! grep -Iq . "$project_root/$f" 2>/dev/null && [[ -s "$project_root/$f" ]]; then
+          echo "CONTEXT_OMITTED: binary file excluded: ${f}" >&2
+          continue
+        fi
+        file_bytes=$(wc -c < "$project_root/$f" | tr -d ' ')
+        if [[ "$file_bytes" -gt "$max_file_bytes" ]]; then
+          echo "CONTEXT_OMITTED: file exceeds ${max_file_bytes} byte limit: ${f} (${file_bytes} bytes)" >&2
+          continue
+        fi
+        header_bytes=$(( ${#f} + 10 ))
+        if [[ $(( used_bytes + file_bytes + header_bytes )) -gt "$max_bytes" ]]; then
+          echo "CONTEXT_OMITTED: total context exceeds ${max_bytes} byte limit before: ${f}" >&2
+          continue
+        fi
+        file_content+="=== ${f} ===${nl}$(cat "$project_root/$f")${nl}${nl}"
+        used_bytes=$(( used_bytes + file_bytes + header_bytes ))
+      done < <(git -C "$project_root" ls-files -z -- "$path" 2>/dev/null)
+      if [[ "$matched" == "false" ]]; then
+        echo "CONTEXT_OMITTED: no tracked files in scope: ${path}" >&2
       fi
     fi
-  done
+  done <<< "$manifest"
 
   local final_prompt
   final_prompt=$(_gemini_final_prompt "$prompt" "$word_limit")

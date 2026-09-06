@@ -6,6 +6,10 @@
 
 # Dependencies
 node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
 
 # Logs
 *.log

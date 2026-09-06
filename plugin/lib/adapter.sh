@@ -33,6 +33,26 @@ _ADAPTER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${_ADAPTER_LIB_DIR}/model-catalog.sh"
 
+# Terminate a bounded subprocess tree without requiring GNU timeout, setsid,
+# or job-control process groups (all absent on a stock macOS Bash 3.2 host).
+# Descendants are collected before the parent so an exiting parent cannot
+# orphan children between discovery and signalling.
+_adapter_snapshot_tree() {
+  local root_pid="$1" child
+  for child in $(pgrep -P "$root_pid" 2>/dev/null || true); do
+    _adapter_snapshot_tree "$child"
+  done
+  printf '%s\n' "$root_pid"
+}
+
+_adapter_signal_snapshot() {
+  local snapshot_file="$1" signal="${2:-TERM}" pid
+  [[ -f "$snapshot_file" ]] || return 0
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] && kill -"$signal" "$pid" 2>/dev/null || true
+  done < "$snapshot_file"
+}
+
 # Resolve model: agent-specific (agent_models.<DEVSQUAD_AGENT>) >
 # global (.preferences.<pref_key>) > "" (CLI default).
 # Values may be exact model names OR tiers ("tier:fast" / "tier:frontier"),
@@ -135,7 +155,11 @@ _adapter_invoke() {
       "$cli" "${ADAPTER_ARGS[@]}" >"$stdout_file" 2>"$stderr_file" &
     fi
     local cli_pid=$!
-    ( sleep "$timeout_secs"; kill "$cli_pid" 2>/dev/null ) &
+    local timed_out_file="${stdout_file}.timed-out"
+    local process_snapshot="${stdout_file}.processes"
+    # Redirect the watchdog itself: inherited capture descriptors were the
+    # reason a successful immediate command waited for the full timeout.
+    ( sleep "$timeout_secs"; _adapter_snapshot_tree "$cli_pid" > "$process_snapshot"; : > "$timed_out_file"; _adapter_signal_snapshot "$process_snapshot" TERM ) >/dev/null 2>&1 &
     local watchdog_pid=$!
     if wait "$cli_pid"; then
       exit_code=0
@@ -144,10 +168,13 @@ _adapter_invoke() {
     fi
     kill "$watchdog_pid" 2>/dev/null || true
     wait "$watchdog_pid" 2>/dev/null || true
-    # SIGTERM from the watchdog surfaces as 143 — normalize to timeout's 124
-    if [[ $exit_code -eq 143 ]]; then
+    if [[ -f "$timed_out_file" ]]; then
+      # Give descendants a brief grace, then ensure stubborn children vanish.
+      sleep 0.1
+      _adapter_signal_snapshot "$process_snapshot" KILL
       exit_code=124
     fi
+    rm -f "$timed_out_file" "$process_snapshot"
   fi
 
   local stdout stderr_content

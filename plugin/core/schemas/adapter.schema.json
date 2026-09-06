@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devsquad.local/schemas/adapter-v1.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "name", "transport", "binary_candidates", "capabilities", "permission_profiles"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "name": {"type": "string", "minLength": 1},
+    "transport": {"enum": ["cli_exec", "native_protocol"]},
+    "binary_candidates": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "capabilities": {"type": "object"},
+    "permission_profiles": {"type": "object"}
+  }
+}

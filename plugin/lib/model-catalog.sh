@@ -61,15 +61,20 @@ refresh_model_catalog() {
     if [[ -n "$k_models" ]]; then k_status="ok"; else k_status="error"; fi
   fi
 
+  local old_json='{}'
+  [[ -f "$CATALOG_FILE" ]] && old_json=$(cat "$CATALOG_FILE" 2>/dev/null || echo '{}')
   local new_json
   new_json=$(jq -n \
     --arg ts "$ts" \
     --arg gs "$g_status" --arg g "$g_models" \
     --arg ks "$k_status" --arg k "$k_models" \
+    --argjson old "$old_json" \
     '{
       fetched_at: $ts,
-      gemini: { status: $gs, models: ($g | split("\n") | map(select(length > 0))) },
-      grok:   { status: $ks, models: ($k | split("\n") | map(select(length > 0))) },
+      gemini: (if $gs == "ok" then { status: "ok", models: ($g | split("\n") | map(select(length > 0))), last_good_at: $ts, last_refresh_error: null }
+               else (($old.gemini // {models: []}) + {status: ($old.gemini.status // "unavailable"), last_refresh_error: $gs}) end),
+      grok:   (if $ks == "ok" then { status: "ok", models: ($k | split("\n") | map(select(length > 0))), last_good_at: $ts, last_refresh_error: null }
+               else (($old.grok // {models: []}) + {status: ($old.grok.status // "unavailable"), last_refresh_error: $ks}) end),
       codex:  { status: "unlistable", models: [] }
     }')
 
@@ -104,11 +109,9 @@ refresh_model_catalog() {
 }
 
 # Map a tier to the best available model for a CLI, from the cached catalog.
-# tier:fast     -> cheap/fast family (flash|fast|mini|lite|haiku),
-#                  highest version, prefer (Medium) then (Low)
-# tier:frontier -> non-fast family matching pro|opus|max|ultra (fallback:
-#                  any non-fast, then anything), highest version, prefer
-#                  (High) then Thinking
+# Structured entries declare family and compatible tiers. Legacy string entries
+# are constrained to the harness family before applying their old local ranking;
+# version numbers are never compared across model families.
 # Echoes "" when unresolvable — callers fall back to the CLI default.
 resolve_model_tier() {
   local cli="$1" tier="$2"
@@ -116,19 +119,27 @@ resolve_model_tier() {
   command -v jq &>/dev/null || { echo ""; return 0; }
 
   local models
-  models=$(jq -r --arg c "$cli" '.[$c].models // [] | .[]' "$CATALOG_FILE" 2>/dev/null || true)
+  models=$(jq -r --arg c "$cli" --arg t "$tier" '
+    .[$c].models // [] | .[] |
+    if type == "object" then
+      select((.family == $c) and ((.compatibility.tiers // []) | index($t))) | .id
+    else
+      select((ascii_downcase | startswith($c + "-") or startswith($c + " "))) | .
+    end' "$CATALOG_FILE" 2>/dev/null || true)
   [[ -n "$models" ]] || { echo ""; return 0; }
 
   local pool
-  if [[ "$tier" == "fast" ]]; then
-    pool=$(printf '%s\n' "$models" | grep -iE 'flash|fast|mini|lite|haiku' || true)
-    [[ -n "$pool" ]] || pool="$models"
+  if jq -e --arg c "$cli" '.[$c].models // [] | any(type == "object")' "$CATALOG_FILE" >/dev/null 2>&1; then
+    pool="$models"
+  elif [[ "$tier" == "fast" ]]; then
+    pool=$(printf '%s\n' "$models" | grep -iE '(^|[- (])(flash|fast|mini|lite|haiku)([- )]|$)' || true)
+    [[ -n "$pool" ]] || { echo ""; return 0; }
   else
-    pool=$(printf '%s\n' "$models" | grep -ivE 'flash|fast|mini|lite|haiku' | grep -iE 'pro|opus|max|ultra' || true)
+    pool=$(printf '%s\n' "$models" | grep -ivE '(^|[- (])(flash|fast|mini|lite|haiku)([- )]|$)' | grep -iE '(^|[- (])(pro|opus|max|ultra)([- )]|$)' || true)
     if [[ -z "$pool" ]]; then
-      pool=$(printf '%s\n' "$models" | grep -ivE 'flash|fast|mini|lite|haiku' || true)
+      pool=$(printf '%s\n' "$models" | grep -ivE '(^|[- (])(flash|fast|mini|lite|haiku)([- )]|$)' || true)
     fi
-    [[ -n "$pool" ]] || pool="$models"
+    [[ -n "$pool" ]] || { echo ""; return 0; }
   fi
 
   printf '%s\n' "$pool" | awk -v tier="$tier" '

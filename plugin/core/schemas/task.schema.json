@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://devsquad.local/schemas/task-v1.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "project", "workflow", "goal", "task_class", "acceptance", "checks", "scope", "lead", "routing", "budget", "origin"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project": {"type": "object", "additionalProperties": false, "required": ["repo_path", "base_ref", "target_ref"], "properties": {"repo_path": {"type": "string"}, "base_ref": {"type": "string"}, "target_ref": {"type": "string"}}},
+    "workflow": {"enum": ["branch-review", "issue-delivery"]}, "goal": {"type": "string", "minLength": 1}, "task_class": {"type": "string", "minLength": 1},
+    "acceptance": {"type": "array", "minItems": 1}, "checks": {"type": "array"}, "scope": {"type": "object"}, "lead": {"type": "object"}, "routing": {"type": "object"}, "budget": {"type": "object"}, "origin": {"type": "object"}
+  }
+}

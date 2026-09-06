@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devsquad.local/schemas/execution-identity-v1.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["harness", "harness_version", "model_provider", "model_family", "model", "effort", "tools", "permissions", "account_pool", "verification"],
+  "properties": {
+    "harness": {"type": "string", "minLength": 1}, "harness_version": {"type": ["string", "null"]},
+    "model_provider": {"type": ["string", "null"]}, "model_family": {"type": ["string", "null"]}, "model": {"type": ["string", "null"]},
+    "effort": {"type": ["string", "null"]}, "tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "permissions": {"enum": ["read_only", "workspace_write"]}, "account_pool": {"type": ["string", "null"]},
+    "verification": {"enum": ["verified", "unverified", "unavailable", "unknown"]}
+  }
+}

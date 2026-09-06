@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "name": "grok",
+  "transport": "cli_exec",
+  "binary_candidates": ["grok"],
+  "model_provider": "xai",
+  "capabilities": {"efforts_by_model": {}, "native_model_list": false, "resume": true},
+  "permission_profiles": {"read_only": ["--disable-web-search"], "workspace_write": []},
+  "output_format": "json"
+}
