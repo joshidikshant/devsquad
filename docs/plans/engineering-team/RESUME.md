@@ -6,19 +6,16 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` is the published runtime baseline.
-- Last verified implementation checkpoint: `a67ab58`.
-- Last evidence/status checkpoint before this recovery note: `cc98ce7`.
-- Recovery checkpoint: `ad46b2f`. The opt-in saved probe is
-  `test/core/probes/native_codex_smoke.py`. Probe checkpoints `aa3fe1c`,
-  `e6b9752`, `5a373eb` and `314c8ec` preserve the script and bounded process
-  ownership repairs; the next checkpoint adds strict native event correlation.
+- Accepted M1 implementation checkpoint: `97a10f0`.
+- Probe cleanup hardening checkpoint: `7b5c41c`.
+- Accepted M1 status/evidence checkpoint: `c50c6b4`.
 - Native correlation/probe checkpoint: `97a10f0`. The saved integrated probe
   passed; its private receipt SHA256 is
   `324c2ce6154936ecf71a8bf913a195befd4251efc6dbb8bbab3dc0dbe1b86df8`.
   Exact private receipt directory:
   `/Users/Dikshant/.devsquad/private-probes/native-codex-20260907T025419Z-97a10f0ae1e8`.
-- M1 is accepted for its bounded invocation/preparation scope. Probe cleanup
-  polling is checkpointed at `7b5c41c`; the next milestone is M2.
+- M1 is accepted for its bounded invocation/preparation scope. The next
+  milestone is M2.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 has not started.
@@ -44,25 +41,22 @@ probe-only path/field defects, so neither launched Codex nor consumed a model
 turn. Their private receipts remain under `~/.devsquad/private-probes`. The
 probe now uses a dedicated process session, bounded group TERM/KILL cleanup,
 an explicit terminal deadline, and retains early notifications for correlation.
-After the latest native-state reviewer regressions, core discovery contains 34
-passing tests; update the authoritative evidence count with the eventual live
-result. The successful run retained separate stderr files of 138,030 and
+The successful run retained separate stderr files of 138,030 and
 285,644 bytes, supporting the diagnosis that an undrained stderr pipe caused
 the earlier apparent nonresponses.
 
-The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed evidence is [M1-invocation-core-2026-09-06.json](evidence/M1-invocation-core-2026-09-06.json). [backlog.json](backlog.json) retains M1 as `in_progress`. Grok workspace-write and unprobed Antigravity/Grok settings are not advertised as verified.
+The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed evidence is [M1-invocation-core-2026-09-06.json](evidence/M1-invocation-core-2026-09-06.json). [backlog.json](backlog.json) marks M1 complete and M2 next. Grok workspace-write and unprobed Antigravity/Grok settings are not advertised as verified.
 
 ## Exact next work
 
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
-2. Review the saved integrated native result and the complete M1 matrix. The
-   opt-in probe writes protocol frames and stderr to separate private files
-   under `~/.devsquad/private-probes`, uses bounded deadlines, and records
-   cleanup and hashes in its private receipt.
-3. Start only the bounded M2 assignment supplied by root. Preserve the M1
-   limitations below; acceptance is not a claim that the full product exists.
-4. Investigate the nonresponse before declaring an external blocker. Prior probes reported successful initialization but no `model/list` or `thread/start` reply after bounded waits, despite sending the required `initialized` notification. They reported an installed Codex 0.135.0 warning about the global `ultra` effort value. Per-process overrides were attempted; global settings were not changed. **A new hypothesis to test is blocked stderr output from an undrained subprocess PIPE.** Redirect stderr to a private file or drain it concurrently; a full stderr pipe can stall a child. This cause is not yet established.
-5. If the actual adapter path succeeds, record the exact revision/commands/outcome and complete the remaining independent M1 review. Only then close M1 and proceed to M2. If it fails, retain the exact diagnostics and keep the live gate open; distinguish implementation defects from provider/configuration limitations.
+2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md) and the
+   corresponding contracts before editing. Implement the bounded M2 store
+   foundation assigned by root, then the supervisor/recovery slices in their
+   dependency order.
+3. Preserve M1 limitations and process-ownership boundaries. M1 acceptance is
+   not a claim that the full product exists, and no additional native probe is
+   needed for the accepted gate.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 
