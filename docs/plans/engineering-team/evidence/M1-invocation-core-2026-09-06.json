@@ -1,9 +1,10 @@
 {
   "schema_version": 1,
   "milestone": "M1",
-  "status": "in_progress",
-  "implementation_revision": "a67ab58",
-  "recorded_at": "2026-09-07T08:20:00+05:30",
+  "status": "complete",
+  "implementation_revision": "97a10f0",
+  "verification_revision": "7b5c41c",
+  "recorded_at": "2026-09-07T08:30:00+05:30",
   "evidence": [
     {
       "kind": "offline_test",
@@ -14,7 +15,7 @@
     {
       "kind": "offline_test",
       "command_or_action": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s test/core -v",
-      "outcome": "32 tests passed, including six independent reviewer regressions",
+      "outcome": "34 tests passed, including eight independent reviewer regressions",
       "availability": "tracked tests"
     },
     {
@@ -38,12 +39,14 @@
     {
       "kind": "live_integrated_probe",
       "command_or_action": "production preparation and JSON-line peer: initialize response, initialized notification, then model/list or prepared thread/start; bounded per-process low-effort override",
-      "outcome": "Earlier inline attempt initialized, then did not receive model/list or thread/start within its bound. Root is rerunning a saved diagnostic probe, including stderr draining; no integrated success is claimed yet",
-      "availability": "pending saved diagnostic evidence"
+      "outcome": "Passed at 97a10f0: complete discovery selected gpt-5.5/low, catalog-backed preparation launched a fresh server, and the read-only no-tools turn returned the exact expected output with correlated terminal completion. Both owned process groups were confirmed absent after cleanup. Receipt SHA256: 324c2ce6154936ecf71a8bf913a195befd4251efc6dbb8bbab3dc0dbe1b86df8",
+      "availability": "private receipt and stream hashes retained locally; redacted summary only"
     }
   ],
-  "residual_blockers": [
-    "The integrated native app-server path has not yet completed a saved real turn probe.",
-    "Independent final M1 gate review is pending."
-  ]
+  "independent_review": {
+    "status": "accepted",
+    "scope": "bounded M1 invocation and preparation",
+    "outcome": "Reviewer reran 34 core tests, relied on the required 202-assertion shell run, verified the receipt and all five private artifact hashes, and inspected requested gpt-5.5/low, readOnly with networkAccess false, and correlated turn completion."
+  },
+  "residual_blockers": []
 }

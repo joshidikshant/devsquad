@@ -11,26 +11,26 @@
   "execution_brief": "SOL-HANDOFF.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
-  "next_milestone": "M1",
+  "next_milestone": "M2",
   "milestones": [
     {
       "id": "M1",
       "title": "Truthful reusable adapter invocation",
       "depends_on": [],
-      "status": "in_progress",
+      "status": "complete",
       "acceptance_section": "M1 — Make invocation truthful and reusable",
       "evidence": [
         {
           "kind": "implementation_checkpoint",
-          "revision": "a67ab58",
-          "command_or_action": "32 core tests, 202 shell assertions, temporary wheel install, prior live Codex metadata and read-only CLI smoke",
-          "outcome": "All enumerated offline M1 gates pass; saved integrated native live probe and independent final review remain open",
+          "revision": "97a10f0",
+          "command_or_action": "34 core tests, 202 shell assertions, temporary wheel install, and saved integrated native read-only smoke",
+          "outcome": "All enumerated offline and live M1 gates pass; independent review accepted the bounded invocation/preparation scope",
           "artifact": "evidence/M1-invocation-core-2026-09-06.json",
           "recorded_at": "2026-09-07T08:20:00+05:30",
           "availability": "portable_redacted"
         }
       ],
-      "blocker": "Integrated native app-server probe and independent final M1 review are pending."
+      "blocker": null
     },
     {
       "id": "M2",

@@ -1,8 +1,10 @@
 # M1 implementation status
 
-M1 is implemented through candidate `a67ab58` and remains **in progress**
-pending independent review and a successful integrated native live probe. M2
-process ownership has not started.
+M1 is **complete** for its bounded invocation and preparation scope at
+`97a10f0`. Independent review accepted it after the 34-test core suite, the
+202-assertion shell suite, and inspection of the saved native receipt. Probe
+cleanup hardening is preserved at `7b5c41c`. M2 process ownership has not
+started.
 
 | # | Requirement | Evidence | Status |
 |---|---|---|---|
@@ -18,8 +20,8 @@ process ownership has not started.
 | 10 | Tracked, bounded Antigravity context | Literal Git inventory; ignored/binary/secret/oversize omissions; file and ancestor-symlink containment tests | verified offline |
 | 11 | Package and CLI envelope | Temporary wheel installation resolves schemas, adapters and shared taxonomy; input/readiness exit behavior is tested | verified offline |
 | 12 | Bounded real starting-profile smoke | Codex CLI `gpt-5.5`, low effort, read-only, ephemeral JSONL invocation completed on 2026-09-06 | verified live (CLI) |
-| 13 | Integrated native preparation/protocol/classification probe | Correct handshake initializes, but the earlier inline app-server attempt stalled at `model/list` or `thread/start`; root is diagnosing with a saved probe | pending live |
-| 14 | Independent gate review | Reviewer regressions are tracked and pass; final root disposition remains outstanding | pending final review |
+| 13 | Integrated native preparation/protocol/classification probe | Saved probe at `97a10f0`: discovery → catalog → preparation → read-only gpt-5.5/low turn → correlated completion; private receipt and stream hashes retained | verified live |
+| 14 | Independent gate review | Eight reviewer regressions pass; reviewer independently reran 34 core tests, inspected all private artifact hashes and verified requested gpt-5.5/low plus readOnly/networkAccess:false and correlated completion | verified |
 
 The Python bridge returns launch/protocol preparation and normalized parser
 policy only. It does not spawn a worker or implement a second watchdog. M2
