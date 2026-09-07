@@ -106,7 +106,7 @@ def main() -> int:
     run_dir.mkdir(parents=True, mode=0o700, exist_ok=False)
     os.chmod(run_dir, 0o700)
     receipt: dict[str, Any] = {"started_at": stamp, "revision": revision, "status": "failed", "cleanup": []}
-    manifest_path = CORE_SRC.parents[1] / "adapters" / "codex" / "adapter.json"
+    manifest_path = CORE_SRC.parent / "adapters" / "codex" / "adapter.json"
     manifest = AdapterManifest.load(manifest_path)
     binary = manifest.resolve_binary()
     if not binary:
