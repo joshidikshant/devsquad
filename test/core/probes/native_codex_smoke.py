@@ -76,6 +76,16 @@ def _stop(process: subprocess.Popen[str]) -> dict[str, Any]:
     else:
         absent = False
         os.killpg(pgid, 9)
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            try:
+                os.killpg(pgid, 0)
+            except OSError as exc:
+                if exc.errno != errno.ESRCH:
+                    raise
+                absent = True
+                break
+            time.sleep(0.05)
     return {"exit_code": process.returncode, "process_group": pgid, "group_absent": absent}
 
 
