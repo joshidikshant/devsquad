@@ -17,6 +17,9 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"devsquad.migrations" = ["*.sql"]
+
 [tool.setuptools.data-files]
 "share/devsquad/adapters/codex" = ["adapters/codex/adapter.json"]
 "share/devsquad/adapters/antigravity" = ["adapters/antigravity/adapter.json"]
