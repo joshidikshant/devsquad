@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -18,8 +19,9 @@ from typing import Any
 CORE_SRC = Path(__file__).resolve().parents[3] / "plugin" / "core" / "src"
 sys.path.insert(0, str(CORE_SRC))
 
-from devsquad.adapters import AdapterManifest, harness_version, prepare_native_codex, prepare_native_codex_from_catalog
+from devsquad.adapters import AdapterManifest, harness_version, prepare_native_codex_from_catalog
 from devsquad.catalog import update_last_good
+from devsquad.contracts import ExecutionIdentity, LaunchSpec, SCHEMA_VERSION
 from devsquad.codex_protocol import (
     JsonLinePeer,
     NativeTurnState,
@@ -56,15 +58,25 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _stop(process: subprocess.Popen[str]) -> str:
+def _stop(process: subprocess.Popen[str]) -> dict[str, Any]:
+    pgid = os.getpgid(process.pid) if process.poll() is None else process.pid
     if process.poll() is None:
-        process.terminate()
+        os.killpg(pgid, 15)
         try:
             process.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            process.kill()
+            os.killpg(pgid, 9)
             process.wait(timeout=2)
-    return f"exit:{process.returncode}"
+    try:
+        os.killpg(pgid, 0)
+    except OSError as exc:
+        if exc.errno != errno.ESRCH:
+            raise
+        absent = True
+    else:
+        absent = False
+        os.killpg(pgid, 9)
+    return {"exit_code": process.returncode, "process_group": pgid, "group_absent": absent}
 
 
 def _server(spec: Any, stderr_path: Path, transcript_path: Path):
@@ -75,6 +87,7 @@ def _server(spec: Any, stderr_path: Path, transcript_path: Path):
     process = subprocess.Popen(
         list(spec.argv), cwd=spec.cwd, env=environment, stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=stderr_stream, text=True, bufsize=1,
+        start_new_session=True,
     )
     assert process.stdin is not None and process.stdout is not None
     peer = RecordingPeer(JsonLinePeer(process.stdout, process.stdin), transcript)
@@ -119,9 +132,12 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="devsquad-native-smoke-") as workspace_name:
             workspace = Path(workspace_name)
             subprocess.run(["git", "init", "-q", str(workspace)], check=True)
-            bootstrap = prepare_native_codex(
-                manifest.with_model_efforts({"bootstrap": ("low",)}), cwd=str(workspace), model="bootstrap",
-                effort="low", permission="read_only", timeout_seconds=args.timeout, harness_version_value=version,
+            bootstrap = LaunchSpec(
+                SCHEMA_VERSION, "codex", "native_protocol",
+                (binary, "app-server", "--listen", "stdio://"), str(workspace), None,
+                args.timeout,
+                ExecutionIdentity("codex", version, "openai", None, None, None, (), "read_only", None, "verified"),
+                {"DEVSQUAD_WORKER": "1"},
             )
             first, peer, stderr_stream, transcript = _server(bootstrap, run_dir / "discovery.stderr.log", run_dir / "discovery.jsonl")
             try:
@@ -162,7 +178,10 @@ def main() -> int:
                 state = NativeTurnState(thread_id=thread_id, turn_id=turn_id)
                 deadline = time.monotonic() + args.timeout
                 while not state.terminal:
-                    state.consume(peer.receive(max(0.01, deadline - time.monotonic())))
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("native turn did not reach correlated terminal state")
+                    state.consume(peer.receive(remaining))
                 output = "".join(state.output).strip()
                 if state.terminal_status != "completed" or output != "DEVSQUAD_M1_NATIVE_OK":
                     raise RuntimeError(f"native verdict was not successful: status={state.terminal_status!r}, output={output!r}")
