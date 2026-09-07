@@ -16,6 +16,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   `/Users/Dikshant/.devsquad/private-probes/native-codex-20260907T025419Z-97a10f0ae1e8`.
 - M1 is accepted for its bounded invocation/preparation scope. The next
   milestone is M2.
+- M2 store foundation checkpoint: `0c2929c`. M2 remains in progress; its
+  supervisor, service operations and recovery slices are not implemented.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 has not started.
@@ -50,10 +52,10 @@ The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed e
 ## Exact next work
 
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
-2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md) and the
-   corresponding contracts before editing. Implement the bounded M2 store
-   foundation assigned by root, then the supervisor/recovery slices in their
-   dependency order.
+2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md),
+   [M2-STATUS.md](M2-STATUS.md), and the corresponding contracts before
+   editing. Continue with the bounded supervisor/recovery assignment from
+   root; do not redo the accepted store foundation.
 3. Preserve M1 limitations and process-ownership boundaries. M1 acceptance is
    not a claim that the full product exists, and no additional native probe is
    needed for the accepted gate.

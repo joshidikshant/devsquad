@@ -36,9 +36,19 @@
       "id": "M2",
       "title": "Durable runs, cancellation and recovery",
       "depends_on": ["M1"],
-      "status": "pending",
+      "status": "in_progress",
       "acceptance_section": "M2 — Persist jobs and own their processes",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "0c2929c",
+          "command_or_action": "46 core tests, 202 shell assertions, concurrent SQLite process tests and temporary installed-wheel migration",
+          "outcome": "Store foundation passes; supervisor, service API and recovery remain pending",
+          "artifact": "M2-STATUS.md",
+          "recorded_at": "2026-09-07T13:30:00+05:30",
+          "availability": "tracked tests"
+        }
+      ],
       "blocker": null
     },
     {
