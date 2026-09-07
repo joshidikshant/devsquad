@@ -2,42 +2,48 @@
   "schema_version": 1,
   "milestone": "M1",
   "status": "in_progress",
-  "implementation_revision": "572e452",
-  "implementation_tree": "26abe92ee4c89dbd481ada20ebd02fb9d6898f51",
-  "recorded_at": "2026-09-06T13:02:37Z",
+  "implementation_revision": "a67ab58",
+  "recorded_at": "2026-09-07T08:20:00+05:30",
   "evidence": [
     {
       "kind": "offline_test",
       "command_or_action": "/bin/bash test/run.sh",
-      "outcome": "10 test files passed; 192 shell assertions passed including Bash 3.2 portable timeout and descendant cleanup",
+      "outcome": "10 test files passed; 202 shell assertions passed, including forced portable timeout, fast cleanup, descendant cleanup and TERM-ignoring-root escalation",
       "availability": "tracked tests"
     },
     {
       "kind": "offline_test",
       "command_or_action": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s test/core -v",
-      "outcome": "13 tests passed",
+      "outcome": "32 tests passed, including six independent reviewer regressions",
       "availability": "tracked tests"
     },
     {
       "kind": "package_test",
-      "command_or_action": "bundled Python 3.12: pip wheel --no-build-isolation --no-deps plugin/core; install into temporary venv; squad --version; squad doctor --json",
-      "outcome": "wheel built and installed; packaged adapter resources resolved outside checkout; squad 0.1.0 reported installed harnesses",
+      "command_or_action": "bundled Python 3.12: pip wheel --no-deps plugin/core; install into temporary venv; import packaged classifier and resolve shared policy resource",
+      "outcome": "wheel built and installed; shared taxonomy loaded outside the checkout",
       "availability": "reproducible locally"
     },
     {
       "kind": "live_metadata",
-      "command_or_action": "Codex 0.135.0 app-server initialize then model/list with limit 100",
+      "command_or_action": "Codex 0.135.0 app-server initialize then model/list with limit 100 on 2026-09-06",
       "outcome": "initialized; complete single page with 5 account-visible models and model-scoped reasoning efforts; default gpt-5.5/medium",
       "availability": "redacted portable summary"
     },
     {
       "kind": "live_smoke",
-      "command_or_action": "codex exec --json --sandbox read-only --ephemeral --model gpt-5.5 with model_reasoning_effort=low and a no-tools response probe",
+      "command_or_action": "codex exec --json --sandbox read-only --ephemeral --model gpt-5.5 with model_reasoning_effort=low and a no-tools response probe on 2026-09-06",
       "outcome": "exit 0; thread.started, turn.started, item.completed and turn.completed observed; final message DEVSQUAD_M1_PROBE_OK",
       "availability": "redacted portable summary"
+    },
+    {
+      "kind": "live_integrated_probe",
+      "command_or_action": "production preparation and JSON-line peer: initialize response, initialized notification, then model/list or prepared thread/start; bounded per-process low-effort override",
+      "outcome": "Earlier inline attempt initialized, then did not receive model/list or thread/start within its bound. Root is rerunning a saved diagnostic probe, including stderr draining; no integrated success is claimed yet",
+      "availability": "pending saved diagnostic evidence"
     }
   ],
   "residual_blockers": [
-    "Independent M1 gate review is not yet complete."
+    "The integrated native app-server path has not yet completed a saved real turn probe.",
+    "Independent final M1 gate review is pending."
   ]
 }

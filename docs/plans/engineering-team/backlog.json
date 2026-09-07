@@ -22,15 +22,15 @@
       "evidence": [
         {
           "kind": "implementation_checkpoint",
-          "revision": "572e452",
-          "command_or_action": "offline core/legacy suites, temporary wheel install, live Codex app-server metadata and read-only invocation probe",
-          "outcome": "M1 implementation and stated probes pass; independent gate review remains open",
+          "revision": "a67ab58",
+          "command_or_action": "32 core tests, 202 shell assertions, temporary wheel install, prior live Codex metadata and read-only CLI smoke",
+          "outcome": "All enumerated offline M1 gates pass; saved integrated native live probe and independent final review remain open",
           "artifact": "evidence/M1-invocation-core-2026-09-06.json",
-          "recorded_at": "2026-09-06T13:02:37Z",
+          "recorded_at": "2026-09-07T08:20:00+05:30",
           "availability": "portable_redacted"
         }
       ],
-      "blocker": null
+      "blocker": "Integrated native app-server probe and independent final M1 review are pending."
     },
     {
       "id": "M2",
