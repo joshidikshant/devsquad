@@ -9,7 +9,9 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 - Last verified implementation checkpoint: `a67ab58`.
 - Last evidence/status checkpoint before this recovery note: `cc98ce7`.
 - Recovery checkpoint: `ad46b2f`. The opt-in saved probe is
-  `test/core/probes/native_codex_smoke.py`; commit it before its first live run.
+  `test/core/probes/native_codex_smoke.py`. Probe checkpoints `aa3fe1c`,
+  `e6b9752`, `5a373eb` and `314c8ec` preserve the script and bounded process
+  ownership repairs; the next checkpoint adds strict native event correlation.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 has not started.
@@ -24,18 +26,28 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 32 tests passed |
+| Python core discovery | 34 tests passed |
 | Bash 3.2 regression suite | 10 test files, 202 assertions passed |
 | Wheel installation | Temporary venv resolves packaged schemas, adapters and shared taxonomy |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
 | Integrated native adapter proof | **Still pending** |
+
+The first two saved-probe invocations failed before `Popen` because of
+probe-only path/field defects, so neither launched Codex nor consumed a model
+turn. Their private receipts remain under `~/.devsquad/private-probes`. The
+probe now uses a dedicated process session, bounded group TERM/KILL cleanup,
+an explicit terminal deadline, and retains early notifications for correlation.
+After the latest native-state reviewer regressions, core discovery contains 34
+passing tests; update the authoritative evidence count with the eventual live
+result.
 
 The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed evidence is [M1-invocation-core-2026-09-06.json](evidence/M1-invocation-core-2026-09-06.json). [backlog.json](backlog.json) retains M1 as `in_progress`. Grok workspace-write and unprobed Antigravity/Grok settings are not advertised as verified.
 
 ## Exact next work
 
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
-2. Run the committed opt-in probe once with `--run-live`. It writes stdout
+2. After committing the current protocol/probe/reviewer regression checkpoint,
+   run the opt-in probe once with `--run-live`. It writes stdout
    protocol frames and stderr to separate private files under
    `~/.devsquad/private-probes`, uses bounded deadlines, and records cleanup and
    hashes in its private receipt. Previous inline probes have no raw logs.

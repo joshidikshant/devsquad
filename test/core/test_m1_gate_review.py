@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "core" / "src"))
 
 from devsquad.adapters import classify_cli
-from devsquad.codex_protocol import JsonLinePeer
+from devsquad.codex_protocol import JsonLinePeer, NativeTurnState
 from devsquad.contracts import (
     ContractError, ExecutionIdentity, LaunchSpec, validate_launch_payload,
 )
@@ -97,6 +97,47 @@ class UntrustedInputReview(unittest.TestCase):
 
 
 class NativeFramingReview(unittest.TestCase):
+    def test_native_state_rejects_malformed_notification_values(self):
+        cases = [
+            {"method": "turn/completed", "params": 42},
+            {"method": "turn/completed", "params": {"turn": "invalid"}},
+            {"method": "item/agentMessage/delta", "params": {
+                "threadId": "expected-thread", "turnId": "expected-turn", "delta": 42,
+            }},
+        ]
+        for message in cases:
+            with self.subTest(message=message):
+                state = NativeTurnState(thread_id="expected-thread", turn_id="expected-turn")
+                with self.assertRaises(ContractError):
+                    state.consume(message)
+
+    def test_native_state_keeps_bound_identity_and_requires_correlation(self):
+        state = NativeTurnState(thread_id="expected-thread", turn_id="expected-turn")
+        for message in [
+            {"method": "thread/started", "params": {"thread": {"id": "unrelated"}}},
+            {"method": "item/agentMessage/delta", "params": {"delta": "no identities"}},
+            {"method": "item/agentMessage/delta", "params": {
+                "threadId": "unrelated", "turnId": "expected-turn", "delta": "wrong thread",
+            }},
+            {"method": "turn/completed", "params": {
+                "turn": {"id": "expected-turn", "status": "completed"},
+            }},
+        ]:
+            state.consume(message)
+        self.assertEqual(state.thread_id, "expected-thread")
+        self.assertEqual(state.turn_id, "expected-turn")
+        self.assertEqual(state.output, [])
+        self.assertFalse(state.terminal)
+        state.consume({"method": "item/agentMessage/delta", "params": {
+            "threadId": "expected-thread", "turnId": "expected-turn", "delta": "valid",
+        }})
+        state.consume({"method": "turn/completed", "params": {
+            "threadId": "expected-thread", "turn": {"id": "expected-turn", "status": "completed"},
+        }})
+        self.assertEqual(state.output, ["valid"])
+        self.assertEqual(state.terminal_status, "completed")
+        self.assertTrue(state.terminal)
+
     def test_two_frames_in_one_write_are_both_available(self):
         read_fd, write_fd = os.pipe()
         with os.fdopen(read_fd, "r") as reader, os.fdopen(write_fd, "w") as writer:

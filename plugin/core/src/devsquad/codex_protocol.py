@@ -125,12 +125,30 @@ class NativeTurnState:
             raise ContractError("native message must be an object")
         self.events.append(message)
         method = message.get("method", "")
-        params = message.get("params") or message.get("result") or {}
+        params = message.get("params", message.get("result", {}))
+        if method in {"thread/started", "thread/start/completed", "turn/started", "item/agentMessage/delta", "turn/output/delta", "turn/completed", "error"} and not isinstance(params, dict):
+            raise ContractError("native event params must be an object")
+        if not isinstance(params, dict):
+            return
         if method in {"thread/started", "thread/start/completed"}:
-            self.thread_id = params.get("thread", {}).get("id") or params.get("threadId") or self.thread_id
+            thread = params.get("thread", {})
+            if not isinstance(thread, dict):
+                raise ContractError("native thread must be an object")
+            candidate = thread.get("id") or params.get("threadId")
+            if candidate is not None and not isinstance(candidate, str):
+                raise ContractError("native thread id must be a string")
+            if self.thread_id and candidate and candidate != self.thread_id:
+                return
+            self.thread_id = candidate or self.thread_id
         message_thread = params.get("threadId")
         turn = params.get("turn") or {}
+        if not isinstance(turn, dict):
+            raise ContractError("native turn must be an object")
         message_turn = turn.get("id") or params.get("turnId")
+        if message_thread is not None and not isinstance(message_thread, str):
+            raise ContractError("native thread id must be a string")
+        if message_turn is not None and not isinstance(message_turn, str):
+            raise ContractError("native turn id must be a string")
         if self.thread_id and message_thread and message_thread != self.thread_id:
             return
         if self.turn_id and message_turn and message_turn != self.turn_id:
@@ -139,11 +157,15 @@ class NativeTurnState:
             self.thread_id = message_thread or self.thread_id
             self.turn_id = message_turn or self.turn_id
         if method in {"item/agentMessage/delta", "turn/output/delta"}:
-            self.output.append(params.get("delta", ""))
-        if method == "turn/completed" and self.turn_id and message_turn == self.turn_id:
+            delta = params.get("delta", "")
+            if not isinstance(delta, str):
+                raise ContractError("native output delta must be a string")
+            if self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
+                self.output.append(delta)
+        if method == "turn/completed" and self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
             self.terminal = True
             self.terminal_status = turn.get("status")
-        if method == "error" and self.turn_id and message_turn == self.turn_id and not params.get("willRetry", False):
+        if method == "error" and self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id and not params.get("willRetry", False):
             self.terminal = True
             self.terminal_status = "failed"
             self.error = params.get("error")

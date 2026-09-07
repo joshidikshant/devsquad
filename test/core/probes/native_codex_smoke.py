@@ -169,13 +169,16 @@ def main() -> int:
                 if not isinstance(thread_id, str) or not thread_id:
                     raise RuntimeError(f"thread/start returned no thread id: {thread_response}")
                 peer.send(turn_start_request(21, thread_id=thread_id, prompt="Reply with exactly DEVSQUAD_M1_NATIVE_OK. Do not use tools.", model=selected["id"], effort=effort, cwd=str(workspace), permission="read_only"))
-                turn_response = receive_response(peer, 21, timeout_seconds=args.timeout)
+                early_notifications: list[dict[str, Any]] = []
+                turn_response = receive_response(peer, 21, timeout_seconds=args.timeout, on_notification=early_notifications.append)
                 turn_result = turn_response.get("result", {})
                 turn = turn_result.get("turn", {}) if isinstance(turn_result, dict) else {}
                 turn_id = turn.get("id") or turn_result.get("turnId")
                 if not isinstance(turn_id, str) or not turn_id:
                     raise RuntimeError(f"turn/start returned no turn id: {turn_response}")
                 state = NativeTurnState(thread_id=thread_id, turn_id=turn_id)
+                for notification in early_notifications:
+                    state.consume(notification)
                 deadline = time.monotonic() + args.timeout
                 while not state.terminal:
                     remaining = deadline - time.monotonic()
