@@ -8,6 +8,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 - Build branch: `codex/engineering-team`. `main` is the published runtime baseline.
 - Last verified implementation checkpoint: `a67ab58`.
 - Last evidence/status checkpoint before this recovery note: `cc98ce7`.
+- Recovery checkpoint: `ad46b2f`. The opt-in saved probe is
+  `test/core/probes/native_codex_smoke.py`; commit it before its first live run.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 has not started.
@@ -33,8 +35,11 @@ The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed e
 ## Exact next work
 
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
-2. Save a reproducible, explicitly opt-in native probe script **before** running it. Previous integrated probes were inline scripts and have no retained raw logs, so their reported failures cannot yet be independently diagnosed.
-3. Exercise the actual path: initialized app-server → complete model discovery → saved snapshot → prepared LaunchSpec → native thread/turn → correlated terminal result. Use one bounded read-only inference, temporary workspace and existing subscription authentication. Save a redacted result plus private local diagnostic files.
+2. Run the committed opt-in probe once with `--run-live`. It writes stdout
+   protocol frames and stderr to separate private files under
+   `~/.devsquad/private-probes`, uses bounded deadlines, and records cleanup and
+   hashes in its private receipt. Previous inline probes have no raw logs.
+3. The probe exercises the actual path: initialized app-server → complete model discovery → saved snapshot → prepared LaunchSpec → native thread/turn → correlated terminal result. It uses one bounded read-only inference, a temporary Git workspace and existing subscription authentication.
 4. Investigate the nonresponse before declaring an external blocker. Prior probes reported successful initialization but no `model/list` or `thread/start` reply after bounded waits, despite sending the required `initialized` notification. They reported an installed Codex 0.135.0 warning about the global `ultra` effort value. Per-process overrides were attempted; global settings were not changed. **A new hypothesis to test is blocked stderr output from an undrained subprocess PIPE.** Redirect stderr to a private file or drain it concurrently; a full stderr pipe can stall a child. This cause is not yet established.
 5. If the actual adapter path succeeds, record the exact revision/commands/outcome and complete the remaining independent M1 review. Only then close M1 and proceed to M2. If it fails, retain the exact diagnostics and keep the live gate open; distinguish implementation defects from provider/configuration limitations.
 
