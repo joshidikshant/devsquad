@@ -71,7 +71,7 @@ def _server(spec: Any, stderr_path: Path, transcript_path: Path):
     stderr_stream = stderr_path.open("w", encoding="utf-8")
     transcript = transcript_path.open("w", encoding="utf-8")
     environment = os.environ.copy()
-    environment.update(spec.env)
+    environment.update(spec.environment)
     process = subprocess.Popen(
         list(spec.argv), cwd=spec.cwd, env=environment, stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=stderr_stream, text=True, bufsize=1,
