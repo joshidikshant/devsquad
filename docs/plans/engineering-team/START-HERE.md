@@ -1,6 +1,9 @@
 # DevSquad: coding-agent entry point
 
-**Build status: planned, not implemented.** This packet follows the local/GitHub review and Dikshant's September 6 brief. Start with M1; do not run another open-ended architecture exercise.
+**Build status: implementation in progress.** After an interruption, read
+[RESUME.md](RESUME.md) first and compare it with current Git state. M1 has code
+and passing offline evidence; its remaining gates are recorded in
+[M1-STATUS.md](M1-STATUS.md). Do not restart the architecture exercise.
 
 **Full-build assignment:** Use [SOL-HANDOFF.md](SOL-HANDOFF.md) for the user's request to have Sol execute everything, test thoroughly and make normal use simple. It includes M1–M7 plus the opt-in Council feature, and adds guided task entry over the same contracts.
 
@@ -23,7 +26,7 @@ flowchart LR
 
 1. Read [ADR-002](../../adr/ADR-002-surface-independent-engineering-team.md) for boundaries and decisions.
 2. Implement the [contracts](CONTRACTS.md), using the [examples](examples/branch-review.json) as fixtures, not live model configuration.
-3. Work through [IMPLEMENTATION](IMPLEMENTATION.md), one milestone at a time. [backlog.json](backlog.json) is the completion record; all milestones initially have `status: pending` and empty evidence.
+3. Work through [IMPLEMENTATION](IMPLEMENTATION.md), one milestone at a time. [backlog.json](backlog.json) is the current completion record; resume the earliest unfinished requirement whose dependencies are ready.
 4. Consult the [assessment](../../audits/2026-09-06-engineering-team-assessment.md) for verified defects and history, and [ADR-001](../../adr/ADR-001-contract-and-ledger-core.md) for legacy constraints retained by ADR-002.
 
 Selection is automatic by default, with validated per-role profile overrides. Read the [selection and LLM Council amendment](SELECTION-AND-COUNCIL.md) for the clarified contract. Its optional C1 extension follows M6 and does not block the seven core milestones.
@@ -34,7 +37,8 @@ Also read the [native adapters and model lifecycle amendment](MODEL-LIFECYCLE-AN
 
 ```text
 Implement DevSquad's September engineering-team plan in this repository.
-Read docs/plans/engineering-team/START-HERE.md and its contracts first.
+Read docs/plans/engineering-team/RESUME.md, current Git state,
+START-HERE.md and its contracts first. Preserve existing implementation.
 Start at the earliest pending milestone whose dependencies are complete.
 Implement M1 and pass its gate, then continue through M2–M7 and C1.
 Preserve existing Bash 3.2 wrapper callers and their four error prefixes.
@@ -68,4 +72,6 @@ First usable product: **a saved branch review**. Next: **one bounded code change
 
 Defer a dashboard, universal DAG builder, remote execution service, automatic model training/router, plugin marketplace, autonomous merges and scheduled documentation jobs. Existing plugin behavior remains available while the new runner is opt-in; switching hook suggestions to the new route source happens only after its gate passes.
 
-No new runtime, host registration, provider call, deployment or automation was created by this architecture packet.
+This packet began as architecture only. Current implementation and live-probe
+evidence are tracked in RESUME.md, the milestone status and backlog; they do
+not yet establish that the full engineering-team product is usable.

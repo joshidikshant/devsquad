@@ -22,6 +22,12 @@
 
 ---
 
+**Engineering-team build in progress:** continuing after an interrupted AI
+session? Read the [recovery checkpoint](docs/plans/engineering-team/RESUME.md)
+for saved work, verified results and the next action. The product described
+below is the existing plugin; the new runner's status is tracked in the
+[implementation plan](docs/plans/engineering-team/START-HERE.md).
+
 ## The 30-second version
 
 You told Claude to delegate the boring stuff. It nodded. Then it read 40 files itself, blew through its context window, and you paid for every token.
