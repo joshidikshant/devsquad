@@ -25,6 +25,13 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   point are pending.
 - Cleanup-race hardening checkpoint: `df955f4`. Cleanup inventory fails closed,
   timeout/cancel identity races retain ownership fencing, and 62 core tests pass.
+- Service/CLI draft is currently uncommitted WIP. It adds strict public
+  start/status/events/result/cancel/resume shapes and a detached entrypoint,
+  but must be redesigned before acceptance: worker output needs durable spool
+  files, launch needs an exec gate tied to persisted identity, detached wait
+  must observe cancel intent, and migration discovery must be ordered rather
+  than filename-hardcoded. Preflight failure, predecessor validation, event
+  cursors and recovery-file semantics also remain open.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 is in progress.

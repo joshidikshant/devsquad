@@ -460,6 +460,35 @@ class Store:
         row = self.connection.execute("SELECT * FROM attempts WHERE run_id=? AND status IN ('reserved','running','cancelling','ownership_ambiguous') ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
         return dict(row) if row else None
 
+    def cancel_queued(self, run_id: str) -> int:
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute("SELECT state,phase,version FROM runs WHERE id=?", (run_id,)).fetchone()
+            if not row:
+                raise ContractError("run does not exist")
+            if row["state"] in TERMINAL_STATES:
+                self.connection.execute("COMMIT"); return row["version"]
+            if row["state"] != "queued" or row["phase"] is not None:
+                raise ConflictError("queued run is owned by another operation")
+            version, now = row["version"] + 1, _utc_now()
+            self.connection.execute("UPDATE runs SET state='cancelled',version=?,updated_at=? WHERE id=?", (version, now, run_id))
+            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.cancelled','{}',?)", (run_id, version, now))
+            self.connection.execute("COMMIT"); return version
+        except Exception:
+            self.connection.execute("ROLLBACK"); raise
+
+    def events_page(self, run_id: str, after: int = 0, limit: int = 100) -> dict[str, Any]:
+        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
+            raise ContractError("event cursor/limit is invalid")
+        if not self.connection.execute("SELECT 1 FROM runs WHERE id=?", (run_id,)).fetchone():
+            raise ContractError("run does not exist")
+        rows = self.connection.execute("SELECT id,run_version,type,payload,created_at FROM events WHERE run_id=? AND id>? ORDER BY id LIMIT ?", (run_id, after, limit + 1)).fetchall()
+        page, more = rows[:limit], len(rows) > limit
+        return {"events": [{**dict(row), "payload": json.loads(row["payload"])} for row in page], "next_cursor": page[-1]["id"] if more and page else None}
+
+    def artifacts_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        return [dict(row) for row in self.connection.execute("SELECT id,name,path,sha256,byte_size,created_at FROM artifacts WHERE run_id=? ORDER BY created_at,id", (run_id,))]
+
     def run(self, run_id: str) -> dict[str, Any]:
         row = self.connection.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
         if not row: raise ContractError("run does not exist")
