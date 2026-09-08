@@ -1,8 +1,8 @@
 # M2 implementation status
 
-M2 is **in progress**. The first store checkpoint is `0c2929c`; process
-supervision, recovery and public start/status/cancel/resume service behavior
-have not started.
+M2 is **in progress**. The store checkpoint is `0c2929c`; the bounded
+supervisor lifecycle checkpoints are `0ee4cc0` and `df955f4`. Public detached service
+operations and end-to-end shell persistence have not started.
 
 | Store requirement | Evidence | Status |
 |---|---|---|
@@ -12,13 +12,17 @@ have not started.
 | Preparing-owner fencing and cancellation | Runs remain `queued` with a private `preparing` phase; stale completion after cancel conflicts; generic events cannot bypass the fence | verified offline |
 | Transactional projections and events | Compare-and-swap run version and append-only event commit together under concurrent writers | verified offline |
 | Atomic hash-verified artifacts | Content-addressed files finalize before reference; references increment run version with an event; duplicates and terminal mutation cannot clobber prior content | verified offline |
-| Unsupported future schema refusal | A database newer than migration version 1 is rejected | verified offline |
+| Schema migration and future refusal | A real version-1 fixture upgrades to version 2; newer unsupported versions are rejected | verified offline |
+| Supervisor and writer fencing | Transactional claims allow one supervisor and one active writer per worktree; ambiguous ownership retains the database fence | verified offline |
+| Strong process identity and recovery | Darwin start second+microsecond identity is stable; live children remain owned without relaunch; dead and reused identities receive distinct recovery dispositions and reused IDs are never signalled | verified offline |
+| Bounded process lifecycle | Direct argv runs in a new session; heartbeat, PID/PGID/start identity, token and package digest persist; stdout/stderr drain continuously with truncation and full-stream hashes | verified offline |
+| Timeout and cancellation | Intent precedes verified TERM/KILL; TERM-resistant root and descendant disappear before completion; repeated terminal cancel is harmless | verified offline |
 
-Verification at this checkpoint: 46 core tests, including six independent M2
-review regressions; 10 legacy shell files with 202 assertions; and a temporary
-wheel installation that applied the packaged migration.
+Verification at this checkpoint: 62 core tests, including fourteen supervisor
+tests and seven independent supervisor regressions; 10 legacy shell files with
+202 assertions; and a temporary wheel installation that applied migration 2
+and imported the supervisor.
 
-The next slice is the M2 supervisor and recovery foundation: durable service
-operations, one supervisor claim and one active writer, process identity,
-bounded output, cancellation/reaping, and crash reconciliation. This checkpoint
-does not claim those behaviors or a working engineering workflow.
+The next slice is durable start/status/events/result/cancel/resume service
+behavior and a supervisor process that survives the launching shell. This
+checkpoint does not claim those behaviors or a working engineering workflow.

@@ -2,7 +2,7 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 7, 2026
+## Current position — September 8, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` is the published runtime baseline.
@@ -18,11 +18,13 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   milestone is M2.
 - M2 store foundation checkpoint: `0c2929c`. M2 remains in progress; its
   supervisor, service operations and recovery slices are not accepted yet.
-- Interrupted supervisor draft checkpoint: `ffc78e7`. It adds migration 002,
-  store-side attempt/claim operations and an initial supervisor, but has no
-  supervisor acceptance tests yet. The required shell suite passed before the
-  checkpoint. Core discovery had one expected failure: the store migration
-  test still asserted schema version 1 after the draft introduced version 2.
+- Supervisor lifecycle checkpoint: `0ee4cc0`. It completes migration 002,
+  fenced supervisor/writer ownership, strong process identity, bounded output,
+  heartbeat, timeout/cancel cleanup and conservative recovery. M2 remains in
+  progress because durable service operations and a detached supervisor entry
+  point are pending.
+- Cleanup-race hardening checkpoint: `df955f4`. Cleanup inventory fails closed,
+  timeout/cancel identity races retain ownership fencing, and 62 core tests pass.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 is in progress.
@@ -59,12 +61,9 @@ The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed e
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
 2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md),
    [M2-STATUS.md](M2-STATUS.md), and the corresponding contracts before
-   editing. Continue from `ffc78e7`: first repair the schema-version test and
-   add adversarial supervisor lifecycle tests. Review the draft for launch
-   failure rollback, crash/live-child recovery, identity ambiguity, bounded
-   output, TERM/KILL descendant cleanup, repeated cancellation and the
-   database-enforced single-writer rule. Do not redo the accepted store
-   foundation.
+   editing. Continue from `df955f4` with only the bounded durable service and
+   detached-supervisor assignment supplied by root. Do not redo the accepted
+   store or supervisor lifecycle foundations.
 3. Preserve M1 limitations and process-ownership boundaries. M1 acceptance is
    not a claim that the full product exists, and no additional native probe is
    needed for the accepted gate.
