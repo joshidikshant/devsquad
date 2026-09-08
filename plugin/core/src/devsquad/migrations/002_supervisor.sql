@@ -30,6 +30,6 @@ CREATE TABLE attempts (
 
 CREATE UNIQUE INDEX one_active_writer_per_worktree
 ON attempts(worktree_path)
-WHERE status IN ('reserved', 'running', 'cancelling');
+WHERE status IN ('reserved', 'running', 'cancelling', 'ownership_ambiguous');
 
 CREATE INDEX attempts_run ON attempts(run_id, created_at);

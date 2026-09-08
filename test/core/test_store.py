@@ -109,12 +109,24 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(row[1], 13)
 
     def test_migration_records_version_and_refuses_newer_database(self):
-        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 1)
-        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(2,'future')")
+        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 2)
+        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(3,'future')")
         self.store.close()
         with self.assertRaises(SchemaVersionError):
             Store(self.database, self.artifacts)
         self.store = sqlite3.connect(":memory:")  # tearDown-compatible close
+
+    def test_version_one_fixture_migrates_to_version_two(self):
+        old_db = self.root / "old.sqlite3"
+        connection = sqlite3.connect(old_db)
+        sql = (ROOT / "plugin/core/src/devsquad/migrations/001_initial.sql").read_text()
+        connection.executescript(sql)
+        connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(1,'fixture')")
+        connection.commit(); connection.close()
+        upgraded = Store(old_db, self.root / "old-artifacts")
+        self.addCleanup(upgraded.close)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 2)
+        self.assertTrue(upgraded.connection.execute("SELECT 1 FROM sqlite_master WHERE name='attempts'").fetchone())
 
 
 if __name__ == "__main__":

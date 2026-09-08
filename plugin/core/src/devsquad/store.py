@@ -82,11 +82,15 @@ class Store:
         artifacts.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(database, timeout=10, isolation_level=None)
         self.connection.row_factory = sqlite3.Row
-        self.connection.execute("PRAGMA busy_timeout=10000")
-        self.connection.execute("PRAGMA foreign_keys=ON")
-        self.migrate()
-        self.connection.execute("PRAGMA journal_mode=WAL")
-        self.connection.execute("PRAGMA synchronous=FULL")
+        try:
+            self.connection.execute("PRAGMA busy_timeout=10000")
+            self.connection.execute("PRAGMA foreign_keys=ON")
+            self.migrate()
+            self.connection.execute("PRAGMA journal_mode=WAL")
+            self.connection.execute("PRAGMA synchronous=FULL")
+        except Exception:
+            self.connection.close()
+            raise
 
     def close(self) -> None:
         self.connection.close()
@@ -228,7 +232,8 @@ class Store:
         digest = hashlib.sha256(content).hexdigest()
         directory = self.artifacts / run_id
         directory.mkdir(parents=True, exist_ok=True)
-        destination = directory / f"{digest}.blob"
+        name_key = hashlib.sha256(name.encode()).hexdigest()[:16]
+        destination = directory / f"{digest}.{name_key}.blob"
         descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", dir=directory)
         try:
             with os.fdopen(descriptor, "wb") as stream:
@@ -413,7 +418,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
-    def block_recovery(self, run_id: str, attempt_token: str, reason: str) -> int:
+    def block_recovery(self, run_id: str, attempt_token: str, reason: str, *, release_writer: bool = False) -> int:
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             run = self.connection.execute("SELECT state,version FROM runs WHERE id=?", (run_id,)).fetchone()
@@ -421,7 +426,8 @@ class Store:
             if not run or not attempt or attempt["status"] not in {"running", "cancelling"}:
                 raise ConflictError("recovery disposition is fenced")
             version, now = run["version"] + 1, _utc_now()
-            self.connection.execute("UPDATE attempts SET status='recovery_required',finished_at=? WHERE id=?", (now, attempt["id"]))
+            status = "recovery_required" if release_writer else "ownership_ambiguous"
+            self.connection.execute("UPDATE attempts SET status=?,finished_at=? WHERE id=?", (status, now, attempt["id"]))
             self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,))
             self.connection.execute("UPDATE runs SET state='blocked',phase='recovery_required',version=?,updated_at=? WHERE id=?", (version, now, run_id))
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.blocked',?,?)", (run_id, version, canonical_json({"reason": reason, "next_action": "RECOVERY_REQUIRED"}), now))
@@ -431,8 +437,27 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def fail_launch(self, reservation: AttemptReservation, reason: str) -> int:
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute("SELECT phase,version FROM runs WHERE id=?", (reservation.run_id,)).fetchone()
+            attempt = self.connection.execute("SELECT status,attempt_token FROM attempts WHERE id=?", (reservation.attempt_id,)).fetchone()
+            if not run or run["phase"] != "launching" or not attempt or attempt["status"] != "reserved" or attempt["attempt_token"] != reservation.attempt_token:
+                raise ConflictError("launch failure disposition is fenced")
+            version, now = run["version"] + 1, _utc_now()
+            self.connection.execute("UPDATE attempts SET status='recovery_required',finished_at=? WHERE id=?", (now, reservation.attempt_id))
+            self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=? AND fencing_token=?", (reservation.run_id, reservation.supervisor_token))
+            self.connection.execute("UPDATE runs SET state='blocked',phase='recovery_required',version=?,updated_at=? WHERE id=?", (version, now, reservation.run_id))
+            payload = canonical_json({"reason": reason, "next_action": "RECOVERY_REQUIRED"})
+            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.blocked',?,?)", (reservation.run_id, version, payload, now))
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def active_attempt(self, run_id: str) -> dict[str, Any] | None:
-        row = self.connection.execute("SELECT * FROM attempts WHERE run_id=? AND status IN ('reserved','running','cancelling') ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
+        row = self.connection.execute("SELECT * FROM attempts WHERE run_id=? AND status IN ('reserved','running','cancelling','ownership_ambiguous') ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
         return dict(row) if row else None
 
     def run(self, run_id: str) -> dict[str, Any]:
