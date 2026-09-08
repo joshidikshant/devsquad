@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ExecutionIdentity, LaunchSpec
 from devsquad.store import ConflictError, Store
-from devsquad.supervisor import Supervisor, inspect_process, process_start_identity
+from devsquad.supervisor import Supervisor, _live_group_exists, inspect_process, process_start_identity
 
 
 class SupervisorTest(unittest.TestCase):
@@ -56,6 +56,11 @@ class SupervisorTest(unittest.TestCase):
         self.assertIsNotNone(first)
         self.assertEqual(first, process_start_identity(os.getpid()))
         self.assertEqual(inspect_process(os.getpid(), os.getpgrp(), first), "live")
+
+    def test_process_inventory_failure_never_means_absence(self):
+        failed = subprocess.CompletedProcess(["/bin/ps"], 1, "", "denied")
+        with mock.patch("devsquad.supervisor.subprocess.run", return_value=failed), self.assertRaises(RuntimeError):
+            _live_group_exists(123)
 
     def test_normal_and_fast_completion_persist_bounded_output(self):
         run_id, handle = self.launch("output", "import sys; print('o'*100); print('e'*100,file=sys.stderr)")

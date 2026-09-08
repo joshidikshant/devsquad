@@ -57,11 +57,19 @@ def inspect_process(pid: int, pgid: int, expected_start: str) -> str:
 
 
 def _live_group_exists(pgid: int) -> bool:
-    result = subprocess.run(["ps", "-axo", "pgid=,stat="], text=True, capture_output=True, check=False)
+    result = subprocess.run(["/bin/ps", "-axo", "pgid=,stat="], text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError("process-group inventory failed")
+    parsed = 0
     for line in result.stdout.splitlines():
         fields = line.split()
-        if len(fields) >= 2 and fields[0].isdigit() and int(fields[0]) == pgid and not fields[1].startswith("Z"):
+        if len(fields) < 2 or not fields[0].isdigit():
+            raise RuntimeError("process-group inventory was malformed")
+        parsed += 1
+        if int(fields[0]) == pgid and not fields[1].startswith("Z"):
             return True
+    if parsed == 0:
+        raise RuntimeError("process-group inventory was empty")
     return False
 
 
@@ -175,7 +183,11 @@ class Supervisor:
                 self.store.heartbeat_attempt(handle.reservation.run_id, handle.reservation.attempt_token, handle.reservation.supervisor_token)
                 time.sleep(min(0.2, max(0, deadline - time.monotonic())))
         if returncode is None:
-            self._terminate(handle)
+            try:
+                self._terminate(handle)
+            except ConflictError:
+                self.store.block_recovery(handle.reservation.run_id, handle.reservation.attempt_token, "timeout raced with process identity change")
+                raise
             metadata = self._persist_output(handle)
             self.store.finish_attempt(handle.reservation.run_id, handle.reservation.attempt_token, "failed", {"error": "TIMEOUT", "output": metadata})
             return 124
@@ -235,7 +247,10 @@ class Supervisor:
             return self.store.block_recovery(run_id, attempt["attempt_token"], "process identity is ambiguous or reused")
         if handle is None or handle.reservation.attempt_token != attempt["attempt_token"]:
             return self.store.block_recovery(run_id, attempt["attempt_token"], "live child requires owner reconciliation before cancellation")
-        self._terminate(handle)
+        try:
+            self._terminate(handle)
+        except ConflictError:
+            return self.store.block_recovery(run_id, attempt["attempt_token"], "cancellation raced with process identity change")
         metadata = self._persist_output(handle)
         return self.store.finish_attempt(run_id, attempt["attempt_token"], "cancelled", {"output": metadata})
 
