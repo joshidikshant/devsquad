@@ -42,8 +42,8 @@ class ServiceTest(unittest.TestCase):
         self.fail(f"run did not reach {states}: {self.service.status(run_id)}")
 
     def test_start_is_idempotent_and_result_events_are_durable(self):
-        first=self.service.start(self.task,"same")
-        second=self.service.start(self.task,"same")
+        first=self.service.start(self.task,"same",_internal_fake_delay=.01)
+        second=self.service.start(self.task,"same",_internal_fake_delay=.01)
         self.assertEqual(first["run_id"],second["run_id"]); self.assertFalse(second["created"])
         self.wait_state(first["run_id"],{"succeeded"})
         result=self.service.result(first["run_id"])
@@ -61,7 +61,7 @@ class ServiceTest(unittest.TestCase):
         status_command=[sys.executable,"-m","devsquad.cli","status",run_id,"--runtime-dir",str(self.runtime),"--json"]
         observed=subprocess.run(status_command,text=True,capture_output=True,env=env,check=True)
         self.assertEqual(json.loads(observed.stdout)["data"]["run_id"],run_id)
-        self.wait_state(run_id,{"succeeded"})
+        self.assertEqual(self.service.status(run_id)["state"],"failed")
 
     def test_enqueue_crash_resumes_once_and_cancel_is_prompt(self):
         with mock.patch.object(self.service,"_spawn_daemon",return_value=0):

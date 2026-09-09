@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import ContractError
 
-SUPPORTED_SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSION = 3
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 
 
@@ -104,7 +104,10 @@ class Store:
                 raise SchemaVersionError(f"database schema {current} is newer than supported {SUPPORTED_SCHEMA_VERSION}")
             while current < SUPPORTED_SCHEMA_VERSION:
                 next_version = current + 1
-                sql = files("devsquad.migrations").joinpath(f"{next_version:03d}_" + ("initial.sql" if next_version == 1 else "supervisor.sql")).read_text()
+                candidates = [entry for entry in files("devsquad.migrations").iterdir() if entry.name.startswith(f"{next_version:03d}_") and entry.name.endswith(".sql")]
+                if len(candidates) != 1:
+                    raise SchemaVersionError(f"migration {next_version} is missing or ambiguous")
+                sql = candidates[0].read_text()
                 for statement in sql.split(";"):
                     if statement.strip():
                         self.connection.execute(statement)
@@ -174,6 +177,26 @@ class Store:
             self.connection.execute("UPDATE runs SET mutable_snapshot=?,phase=NULL,version=?,updated_at=? WHERE id=?", (snapshot, version, now, run_id))
             self.connection.execute("UPDATE claims SET active=0 WHERE run_id=?", (run_id,))
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.queued','{}',?)", (run_id, version, now))
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def fail_preparation(self, run_id: str, fencing_token: int, error: Any) -> int:
+        encoded = canonical_json(error)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,c.fencing_token,c.active FROM runs r JOIN claims c ON c.run_id=r.id WHERE r.id=?",
+                (run_id,),
+            ).fetchone()
+            if not row or row["state"] != "queued" or row["phase"] != "preparing" or not row["active"] or row["fencing_token"] != fencing_token:
+                raise ConflictError("preparation failure is stale or cancelled")
+            version, now = row["version"] + 1, _utc_now()
+            self.connection.execute("UPDATE runs SET state='failed',phase=NULL,version=?,updated_at=? WHERE id=?", (version, now, run_id))
+            self.connection.execute("UPDATE claims SET active=0 WHERE run_id=?", (run_id,))
+            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.failed',?,?)", (run_id, version, encoded, now))
             self.connection.execute("COMMIT")
             return version
         except Exception:
@@ -316,7 +339,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
-    def mark_attempt_running(self, reservation: AttemptReservation, pid: int, pgid: int, process_start_id: str) -> int:
+    def mark_attempt_running(self, reservation: AttemptReservation, pid: int, pgid: int, process_start_id: str, durable_paths: dict[str, str] | None = None) -> int:
         if any(type(value) is not int or value <= 0 for value in (pid, pgid)) or not process_start_id:
             raise ContractError("valid process identity is required")
         self.connection.execute("BEGIN IMMEDIATE")
@@ -325,7 +348,8 @@ class Store:
             if not row or row["version"] != reservation.version or row["phase"] != "launching" or row["status"] != "reserved" or row["attempt_token"] != reservation.attempt_token or row["fencing_token"] != reservation.supervisor_token or not row["active"]:
                 raise ConflictError("attempt reservation is stale")
             version, now = row["version"] + 1, _utc_now()
-            self.connection.execute("UPDATE attempts SET status='running',pid=?,pgid=?,process_start_id=?,heartbeat_at=? WHERE id=?", (pid, pgid, process_start_id, now, reservation.attempt_id))
+            durable_paths = durable_paths or {}
+            self.connection.execute("UPDATE attempts SET status='running',pid=?,pgid=?,process_start_id=?,heartbeat_at=?,stdout_spool=?,stderr_spool=?,stdout_meta=?,stderr_meta=?,exit_record=?,child_record=? WHERE id=?", (pid, pgid, process_start_id, now, durable_paths.get("stdout_spool"), durable_paths.get("stderr_spool"), durable_paths.get("stdout_meta"), durable_paths.get("stderr_meta"), durable_paths.get("exit_record"), durable_paths.get("child_record"), reservation.attempt_id))
             self.connection.execute("UPDATE runs SET state='running',phase=NULL,version=?,updated_at=? WHERE id=?", (version, now, reservation.run_id))
             event = canonical_json({"attempt_id": reservation.attempt_id, "pid": pid, "pgid": pgid, "process_start_id": process_start_id})
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.running',?,?)", (reservation.run_id, version, event, now))
@@ -484,7 +508,21 @@ class Store:
             raise ContractError("run does not exist")
         rows = self.connection.execute("SELECT id,run_version,type,payload,created_at FROM events WHERE run_id=? AND id>? ORDER BY id LIMIT ?", (run_id, after, limit + 1)).fetchall()
         page, more = rows[:limit], len(rows) > limit
-        return {"events": [{**dict(row), "payload": json.loads(row["payload"])} for row in page], "next_cursor": page[-1]["id"] if more and page else None}
+        consumed = page[-1]["id"] if page else after
+        return {"events": [{**dict(row), "payload": json.loads(row["payload"])} for row in page], "next_cursor": consumed, "has_more": more}
+
+    def status_snapshot(self, run_id: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        self.connection.execute("BEGIN")
+        try:
+            run = self.connection.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+            if not run:
+                raise ContractError("run does not exist")
+            attempt = self.connection.execute("SELECT * FROM attempts WHERE run_id=? ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
+            self.connection.execute("COMMIT")
+            return dict(run), dict(attempt) if attempt else None
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def artifacts_for_run(self, run_id: str) -> list[dict[str, Any]]:
         return [dict(row) for row in self.connection.execute("SELECT id,name,path,sha256,byte_size,created_at FROM artifacts WHERE run_id=? ORDER BY created_at,id", (run_id,))]

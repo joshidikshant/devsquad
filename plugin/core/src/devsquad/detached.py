@@ -25,9 +25,9 @@ def main(argv=None):
         if "internal_fake_delay" in snapshot: command += ["--delay", str(snapshot["internal_fake_delay"])]
         spec = LaunchSpec(1, "devsquad-fake-step", "cli_exec", tuple(command), run["worktree_path"], None, snapshot["task"]["budget"]["wall_seconds"], identity, environment)
         supervisor = Supervisor(store)
-        try: handle = supervisor.launch(args.run_id, args.expected_version, spec, f"daemon:{os.getpid()}", args.package_digest)
+        try: handle = supervisor.launch_durable(args.run_id, args.expected_version, spec, f"daemon:{os.getpid()}", args.package_digest)
         except ConflictError: return 0
-        return 0 if supervisor.wait(handle, spec.timeout_seconds) == 0 else 1
+        return 0 if supervisor.wait_durable(handle, spec.timeout_seconds) == 0 else 1
     finally: store.close()
 
 if __name__ == "__main__": raise SystemExit(main())

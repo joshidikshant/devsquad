@@ -12,6 +12,8 @@ import sys
 import threading
 import time
 from typing import Any, BinaryIO
+from pathlib import Path
+import json
 
 from .contracts import ContractError, LaunchSpec
 from .store import AttemptReservation, ConflictError, Store
@@ -112,6 +114,13 @@ class RunningAttempt:
     stderr: BoundedDrain
 
 
+@dataclass
+class DurableAttempt:
+    reservation: AttemptReservation
+    process: subprocess.Popen[bytes]
+    paths: dict[str, str]
+
+
 class Supervisor:
     def __init__(self, store: Store, *, output_limit: int = 1024 * 1024, grace_seconds: float = 5.0):
         if output_limit <= 0 or grace_seconds < 0:
@@ -164,6 +173,69 @@ class Supervisor:
         stdout, stderr = BoundedDrain(process.stdout, self.output_limit), BoundedDrain(process.stderr, self.output_limit)
         stdout.start(); stderr.start()
         return RunningAttempt(reservation, process, started, stdout, stderr)
+
+    def launch_durable(self, run_id: str, expected_version: int, spec: LaunchSpec, owner_id: str, package_digest: str) -> DurableAttempt:
+        reservation = self.store.reserve_attempt(run_id, expected_version, owner_id, package_digest)
+        directory = self.store.artifacts / run_id / f".{reservation.attempt_id}.spool"
+        directory.mkdir(parents=True, exist_ok=False)
+        paths = {name: str(directory / filename) for name, filename in {
+            "stdout_spool":"stdout.capture", "stderr_spool":"stderr.capture", "stdout_meta":"stdout.meta.json", "stderr_meta":"stderr.meta.json", "exit_record":"exit.json", "child_record":"child.json"}.items()}
+        gate_read, gate_write = os.pipe()
+        process = None
+        try:
+            command=[sys.executable,"-m","devsquad.attempt_runner","--gate-fd",str(gate_read),
+                "--database",str(self.store.database),"--artifacts",str(self.store.artifacts),
+                "--run-id",run_id,"--attempt-token",reservation.attempt_token,
+                "--supervisor-token",str(reservation.supervisor_token),"--stdout",paths["stdout_spool"],
+                "--stderr",paths["stderr_spool"],"--exit-record",paths["exit_record"],
+                "--child-record",paths["child_record"],"--limit",str(self.output_limit),"--",*spec.argv]
+            environment=os.environ.copy(); environment.update(spec.environment)
+            process=subprocess.Popen(command,cwd=spec.cwd,env=environment,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,pass_fds=(gate_read,),start_new_session=True)
+            os.close(gate_read)
+            started=process_start_identity(process.pid)
+            if started is None: raise RuntimeError("gated child has no strong process identity")
+            self.store.mark_attempt_running(reservation,process.pid,process.pid,started,paths)
+            os.write(gate_write,b"1"); os.close(gate_write)
+            return DurableAttempt(reservation,process,paths)
+        except Exception:
+            try: os.close(gate_write)
+            except OSError: pass
+            for fd in (gate_read,):
+                try: os.close(fd)
+                except OSError: pass
+            if process and process.poll() is None:
+                try: os.killpg(process.pid,signal.SIGKILL)
+                except ProcessLookupError: pass
+                process.wait(timeout=2)
+            self.store.fail_launch(reservation,"durable gated launch failed")
+            raise
+
+    def wait_durable(self, handle: DurableAttempt, timeout_seconds: float) -> int:
+        deadline=time.monotonic()+timeout_seconds + self.grace_seconds + 5
+        while handle.process.poll() is None and time.monotonic()<deadline:
+            time.sleep(.1)
+        if handle.process.poll() is None:
+            self.store.request_cancel(handle.reservation.run_id)
+            handle.process.wait(timeout=self.grace_seconds+5)
+        returncode=handle.process.wait(timeout=2)
+        receipt=json.loads(Path(handle.paths["exit_record"]).read_text())
+        metadata={"stdout":receipt["stdout"],"stderr":receipt["stderr"]}
+        run_id=handle.reservation.run_id; token=handle.reservation.attempt_token
+        stdout_id=self.store.store_artifact(run_id,f"{handle.reservation.attempt_id}.stdout",Path(handle.paths["stdout_spool"]).read_bytes())
+        stderr_id=self.store.store_artifact(run_id,f"{handle.reservation.attempt_id}.stderr",Path(handle.paths["stderr_spool"]).read_bytes())
+        self.store.record_attempt_output(run_id,token,stdout_id,stderr_id,metadata)
+        terminal="cancelled" if receipt["cancelled"] else ("succeeded" if returncode==0 else "failed")
+        self.store.finish_attempt(run_id,token,terminal,{"returncode":returncode,"output":metadata})
+        return returncode
+
+    def _terminate_durable(self, handle: DurableAttempt) -> None:
+        attempt=self.store.active_attempt(handle.reservation.run_id)
+        if not attempt or inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"])!="live":
+            raise ConflictError("durable process identity is unsafe to signal")
+        os.killpg(attempt["pgid"],signal.SIGTERM)
+        deadline=time.monotonic()+self.grace_seconds
+        while handle.process.poll() is None and time.monotonic()<deadline: time.sleep(.05)
+        if handle.process.poll() is None: os.killpg(attempt["pgid"],signal.SIGKILL)
 
     def _persist_output(self, handle: RunningAttempt) -> dict[str, Any]:
         stdout_meta, stderr_meta = handle.stdout.finish(), handle.stderr.finish()

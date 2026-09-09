@@ -25,13 +25,18 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   point are pending.
 - Cleanup-race hardening checkpoint: `df955f4`. Cleanup inventory fails closed,
   timeout/cancel identity races retain ownership fencing, and 62 core tests pass.
-- Service/CLI draft is currently uncommitted WIP. It adds strict public
-  start/status/events/result/cancel/resume shapes and a detached entrypoint,
-  but must be redesigned before acceptance: worker output needs durable spool
-  files, launch needs an exec gate tied to persisted identity, detached wait
-  must observe cancel intent, and migration discovery must be ordered rather
-  than filename-hardcoded. Preflight failure, predecessor validation, event
-  cursors and recovery-file semantics also remain open.
+- Durable service checkpoint `cefd193` is explicit WIP. The following local
+  checkpoint replaces the unsafe anonymous-pipe launch with a persisted,
+  gated attempt runner and migration 003 durable paths. The runner cannot
+  launch the internal fixture worker until its strong identity and spool paths
+  are committed; it owns output drains, heartbeat, cancel polling and an
+  atomic exit record. Ordered migration discovery, transactional status,
+  stable event cursors and fenced preparation failure are implemented.
+  Recovery/import of a runner exit record, predecessor validation, package
+  pin verification, result-receipt barrier and the full cross-process crash
+  matrix remain open. Public branch-review execution is explicitly failed as
+  `CAPABILITY_UNAVAILABLE` until M3; only the internal test hook can run the
+  fake step. M2 remains in progress.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 is in progress.
@@ -68,9 +73,9 @@ The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed e
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
 2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md),
    [M2-STATUS.md](M2-STATUS.md), and the corresponding contracts before
-   editing. Continue from `df955f4` with only the bounded durable service and
-   detached-supervisor assignment supplied by root. Do not redo the accepted
-   store or supervisor lifecycle foundations.
+   editing. Continue by implementing durable receipt import/recovery without
+   relaunch, then package/predecessor/result invariants and the cross-process
+   crash tests. Do not redo the accepted store or supervisor foundations.
 3. Preserve M1 limitations and process-ownership boundaries. M1 acceptance is
    not a claim that the full product exists, and no additional native probe is
    needed for the accepted gate.

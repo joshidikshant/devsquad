@@ -73,7 +73,14 @@ class Service:
             claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}")
             if not claim.created:
                 return {"run_id": claim.run_id, "state": store.run(claim.run_id)["state"], "created": False}
-            snapshot = self._resolve_snapshot(task, _internal_fake_delay)
+            try:
+                snapshot = self._resolve_snapshot(task, _internal_fake_delay)
+            except Exception as exc:
+                store.fail_preparation(claim.run_id, claim.fencing_token or 0, {"error": "PREPARATION_FAILED", "message": str(exc)})
+                raise
+            if _internal_fake_delay is None:
+                store.fail_preparation(claim.run_id, claim.fencing_token or 0, {"error": "CAPABILITY_UNAVAILABLE", "message": "branch-review workflow is introduced in M3"})
+                return {"run_id": claim.run_id, "state": "failed", "created": True}
             version = store.complete_preparation(claim.run_id, claim.fencing_token or 0, snapshot)
         finally:
             store.close()
@@ -90,7 +97,7 @@ class Service:
     def status(self, run_id: str) -> dict[str, Any]:
         store = self._store()
         try:
-            run = store.run(run_id); attempt = store.active_attempt(run_id)
+            run, attempt = store.status_snapshot(run_id)
             return {"run_id": run_id, "state": run["state"], "phase": run["phase"], "version": run["version"], "active_attempt": {k: attempt.get(k) for k in ("id","status","pid","pgid","heartbeat_at")} if attempt else None, "next_action": "recovery_file_required" if run["state"] == "blocked" else None}
         finally: store.close()
 
