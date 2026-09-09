@@ -25,7 +25,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   point are pending.
 - Cleanup-race hardening checkpoint: `df955f4`. Cleanup inventory fails closed,
   timeout/cancel identity races retain ownership fencing, and 62 core tests pass.
-- Durable service checkpoint `cefd193` is explicit WIP. The following local
+- Durable service checkpoint `cefd193` is explicit WIP and gated-runner
+  checkpoint `a0794a9` passed 67 core tests plus 202 shell assertions. The current local
   checkpoint replaces the unsafe anonymous-pipe launch with a persisted,
   gated attempt runner and migration 003 durable paths. The runner cannot
   launch the internal fixture worker until its strong identity and spool paths
@@ -33,8 +34,10 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   atomic exit record. Ordered migration discovery, transactional status,
   stable event cursors and fenced preparation failure are implemented.
   Recovery/import of a runner exit record, predecessor validation, package
-  pin verification, result-receipt barrier and the full cross-process crash
-  matrix remain open. Public branch-review execution is explicitly failed as
+  pin verification, and the result-receipt barrier are now implemented and
+  covered by 69 core tests. The independent adversarial service gate,
+  cross-process race expansion, CLI envelopes and wheel migration-3 check
+  remain open. Public branch-review execution is explicitly failed as
   `CAPABILITY_UNAVAILABLE` until M3; only the internal test hook can run the
   fake step. M2 remains in progress.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.

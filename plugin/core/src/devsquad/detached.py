@@ -18,7 +18,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     store = Store(Path(args.database), Path(args.artifacts))
     try:
-        run = store.run(args.run_id); snapshot = json.loads(run["mutable_snapshot"])
+        run = store.run(args.run_id)
+        if run.get("package_digest") != args.package_digest:
+            raise ConflictError("detached package digest does not match prepared run")
+        snapshot = json.loads(run["mutable_snapshot"])
         environment = {"DEVSQUAD_WORKER": "1", "DEVSQUAD_RUN_ID": args.run_id}
         identity = ExecutionIdentity("devsquad-fake-step", "1", None, None, None, None)
         command = [sys.executable, "-m", "devsquad.fake_step"]

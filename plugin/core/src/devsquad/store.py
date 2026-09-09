@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import ContractError
 
-SUPPORTED_SCHEMA_VERSION = 3
+SUPPORTED_SCHEMA_VERSION = 4
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 
 
@@ -163,7 +163,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
-    def complete_preparation(self, run_id: str, fencing_token: int, mutable_snapshot: Any) -> int:
+    def complete_preparation(self, run_id: str, fencing_token: int, mutable_snapshot: Any, *, package_path: str | None = None, package_digest: str | None = None, supersedes_run_id: str | None = None) -> int:
         snapshot = canonical_json(mutable_snapshot)
         self.connection.execute("BEGIN IMMEDIATE")
         try:
@@ -173,8 +173,13 @@ class Store:
             ).fetchone()
             if not row or row["state"] != "queued" or row["phase"] != "preparing" or not row["active"] or row["fencing_token"] != fencing_token:
                 raise ConflictError("preparation claim is stale or cancelled")
+            if supersedes_run_id is not None:
+                predecessor = self.connection.execute("SELECT project_id,state FROM runs WHERE id=?", (supersedes_run_id,)).fetchone()
+                project = self.connection.execute("SELECT project_id FROM runs WHERE id=?", (run_id,)).fetchone()
+                if not predecessor or predecessor["project_id"] != project["project_id"] or predecessor["state"] not in TERMINAL_STATES:
+                    raise ConflictError("superseded run must be terminal and belong to the same project")
             version, now = row["version"] + 1, _utc_now()
-            self.connection.execute("UPDATE runs SET mutable_snapshot=?,phase=NULL,version=?,updated_at=? WHERE id=?", (snapshot, version, now, run_id))
+            self.connection.execute("UPDATE runs SET mutable_snapshot=?,package_path=?,package_digest=?,supersedes_run_id=?,phase=NULL,version=?,updated_at=? WHERE id=?", (snapshot, package_path, package_digest, supersedes_run_id, version, now, run_id))
             self.connection.execute("UPDATE claims SET active=0 WHERE run_id=?", (run_id,))
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.queued','{}',?)", (run_id, version, now))
             self.connection.execute("COMMIT")
@@ -416,6 +421,7 @@ class Store:
             version, now = run["version"] + 1, _utc_now()
             self.connection.execute("UPDATE attempts SET status='finished',finished_at=? WHERE id=?", (now, attempt["id"]))
             self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,))
+            terminal_state = "cancelled" if run["state"] == "cancelling" else terminal_state
             self.connection.execute("UPDATE runs SET state=?,phase=NULL,version=?,updated_at=? WHERE id=?", (terminal_state, version, now, run_id))
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,?,?,?)", (run_id, version, f"run.{terminal_state}", encoded, now))
             self.connection.execute("COMMIT")
@@ -501,6 +507,19 @@ class Store:
         except Exception:
             self.connection.execute("ROLLBACK"); raise
 
+    def cancel_launching(self, run_id: str) -> int:
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row=self.connection.execute("SELECT state,phase,version FROM runs WHERE id=?",(run_id,)).fetchone()
+            if not row or row["state"]!="queued" or row["phase"]!="launching": raise ConflictError("run is not launching")
+            version,now=row["version"]+1,_utc_now()
+            self.connection.execute("UPDATE attempts SET status='recovery_required',finished_at=? WHERE run_id=? AND status='reserved'",(now,run_id))
+            self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=?",(run_id,))
+            self.connection.execute("UPDATE runs SET state='cancelled',phase=NULL,version=?,updated_at=? WHERE id=?",(version,now,run_id))
+            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.cancelled','{}',?)",(run_id,version,now))
+            self.connection.execute("COMMIT"); return version
+        except Exception: self.connection.execute("ROLLBACK"); raise
+
     def events_page(self, run_id: str, after: int = 0, limit: int = 100) -> dict[str, Any]:
         if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
             raise ContractError("event cursor/limit is invalid")
@@ -524,8 +543,25 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def result_snapshot(self, run_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        self.connection.execute("BEGIN")
+        try:
+            run=self.connection.execute("SELECT * FROM runs WHERE id=?",(run_id,)).fetchone()
+            if not run: raise ContractError("run does not exist")
+            artifacts=self.connection.execute("SELECT id,name,path,sha256,byte_size,created_at FROM artifacts WHERE run_id=? ORDER BY created_at,id",(run_id,)).fetchall()
+            self.connection.execute("COMMIT"); return dict(run),[dict(row) for row in artifacts]
+        except Exception: self.connection.execute("ROLLBACK"); raise
+
     def artifacts_for_run(self, run_id: str) -> list[dict[str, Any]]:
         return [dict(row) for row in self.connection.execute("SELECT id,name,path,sha256,byte_size,created_at FROM artifacts WHERE run_id=? ORDER BY created_at,id", (run_id,))]
+
+    def artifact_named(self, run_id: str, name: str) -> dict[str, Any] | None:
+        row=self.connection.execute("SELECT id,name,path,sha256,byte_size,created_at FROM artifacts WHERE run_id=? AND name=?",(run_id,name)).fetchone()
+        return dict(row) if row else None
+
+    def attempt(self, run_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute("SELECT * FROM attempts WHERE run_id=? ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
+        return dict(row) if row else None
 
     def run(self, run_id: str) -> dict[str, Any]:
         row = self.connection.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()

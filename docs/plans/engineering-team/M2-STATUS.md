@@ -1,8 +1,8 @@
 # M2 implementation status
 
 M2 is **in progress**. The store checkpoint is `0c2929c`; the bounded
-supervisor lifecycle checkpoints are `0ee4cc0` and `df955f4`. Public detached service
-operations and end-to-end shell persistence have not started.
+supervisor lifecycle checkpoints are `0ee4cc0` and `df955f4`; the first
+service checkpoint is `a0794a9`.
 
 | Store requirement | Evidence | Status |
 |---|---|---|
@@ -17,12 +17,19 @@ operations and end-to-end shell persistence have not started.
 | Strong process identity and recovery | Darwin start second+microsecond identity is stable; live children remain owned without relaunch; dead and reused identities receive distinct recovery dispositions and reused IDs are never signalled | verified offline |
 | Bounded process lifecycle | Direct argv runs in a new session; heartbeat, PID/PGID/start identity, token and package digest persist; stdout/stderr drain continuously with truncation and full-stream hashes | verified offline |
 | Timeout and cancellation | Intent precedes verified TERM/KILL; TERM-resistant root and descendant disappear before completion; repeated terminal cancel is harmless | verified offline |
+| Durable gated launch | A persisted attempt runner and an inner worker gate prevent task execution before strong runner and child identity records; the runner owns timeout, cancel polling, bounded spool files and an fsynced exit receipt | verified offline |
+| Coordinator-loss recovery | A separate coordinator is killed while the runner lives; resume does not relaunch it, and a completed receipt is imported once with one attempt | verified offline |
+| Frozen package | Every regular runtime asset is hashed, copied atomically, fsynced, stored on the run and verified before initial launch or resume | verified offline |
+| Public workflow guard | Public branch-review tasks end with `CAPABILITY_UNAVAILABLE` until M3; only the private test argument can invoke the M2 fake step | verified offline |
+| Result and event reads | Status is a transactional run/attempt snapshot; cursors always report the last consumed position and `has_more`; terminal service results verify referenced blob hashes and require a durable receipt for attempted runs | verified offline |
+| Predecessor link | A superseded run must be terminal and belong to the same canonical Git project; the link is committed with preparation | verified offline |
 
-Verification at this checkpoint: 62 core tests, including fourteen supervisor
-tests and seven independent supervisor regressions; 10 legacy shell files with
-202 assertions; and a temporary wheel installation that applied migration 2
-and imported the supervisor.
+The recovery checkpoint `a0794a9` passed 67 core tests and 202 shell
+assertions. The current service candidate passes 69 core tests, including a
+coordinator-crash receipt-import case. Final shell and wheel evidence will be
+recorded at the acceptance checkpoint.
 
-The next slice is durable start/status/events/result/cancel/resume service
-behavior and a supervisor process that survives the launching shell. This
-checkpoint does not claim those behaviors or a working engineering workflow.
+Remaining acceptance work is the independent service adversarial gate,
+cross-process race expansion, CLI envelope verification and installed-wheel
+migration 3 check. This is not a claim of a working engineering workflow;
+branch-review execution begins in M3.

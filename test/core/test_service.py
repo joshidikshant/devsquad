@@ -47,7 +47,7 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(first["run_id"],second["run_id"]); self.assertFalse(second["created"])
         self.wait_state(first["run_id"],{"succeeded"})
         result=self.service.result(first["run_id"])
-        self.assertTrue(result["ready"]); self.assertEqual(len(result["artifacts"]),2)
+        self.assertTrue(result["ready"]); self.assertEqual(len(result["artifacts"]),3)
         page=self.service.events(first["run_id"],0,2)
         self.assertEqual(len(page["events"]),2); self.assertIsNotNone(page["next_cursor"])
         with self.assertRaises(ConflictError): self.service.resume(first["run_id"])
@@ -83,7 +83,7 @@ class ServiceTest(unittest.TestCase):
             daemon_pid=int(owner.split(":",1)[1]); os.kill(daemon_pid,signal.SIGKILL)
             time.sleep(.1)
             resumed=self.service.resume(started["run_id"])
-            self.assertFalse(resumed["launched"]); self.assertEqual(resumed["disposition"],"live_owned")
+            self.assertFalse(resumed["launched"]); self.assertEqual(resumed["disposition"],"live")
             self.assertEqual(store.connection.execute("SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],)).fetchone()[0],1)
             os.killpg(attempt["pgid"],signal.SIGKILL)
         finally: store.close()
@@ -95,6 +95,31 @@ class ServiceTest(unittest.TestCase):
         try: store.finalize_artifact(started["run_id"],"orphan",b"bytes")
         finally: store.close()
         self.assertEqual(self.service.result(started["run_id"])["artifacts"],[])
+
+    def test_coordinator_crash_imports_runner_receipt_once(self):
+        started=self.service.start(self.task,"receipt-recovery",_internal_fake_delay=.3)
+        self.wait_state(started["run_id"],{"running"})
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            owner=store.connection.execute("SELECT owner_id FROM supervisor_claims WHERE run_id=?",(started["run_id"],)).fetchone()[0]
+            os.kill(int(owner.split(":",1)[1]),signal.SIGKILL)
+        finally: store.close()
+        time.sleep(.6)
+        first=self.service.resume(started["run_id"])
+        self.assertIn(first["disposition"],{"succeeded","already_finalized"})
+        self.assertTrue(self.service.result(started["run_id"])["ready"])
+        with self.assertRaises(ConflictError): self.service.resume(started["run_id"])
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try: self.assertEqual(store.connection.execute("SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],)).fetchone()[0],1)
+        finally: store.close()
+
+    def test_supersedes_requires_terminal_same_project(self):
+        predecessor=self.service.start(self.task,"predecessor")
+        replacement=self.service.start(self.task,"replacement",predecessor["run_id"],_internal_fake_delay=.01)
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try: self.assertEqual(store.run(replacement["run_id"])["supersedes_run_id"],predecessor["run_id"])
+        finally: store.close()
+        self.wait_state(replacement["run_id"],{"succeeded"})
 
 
 if __name__=="__main__": unittest.main()

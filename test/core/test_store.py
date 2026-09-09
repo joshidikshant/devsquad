@@ -109,8 +109,8 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(row[1], 13)
 
     def test_migration_records_version_and_refuses_newer_database(self):
-        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 3)
-        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(4,'future')")
+        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 4)
+        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(5,'future')")
         self.store.close()
         with self.assertRaises(SchemaVersionError):
             Store(self.database, self.artifacts)
@@ -125,8 +125,19 @@ class StoreTest(unittest.TestCase):
         connection.commit(); connection.close()
         upgraded = Store(old_db, self.root / "old-artifacts")
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 3)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 4)
         self.assertTrue(upgraded.connection.execute("SELECT 1 FROM sqlite_master WHERE name='attempts'").fetchone())
+
+    def test_version_three_fixture_adds_run_snapshot_columns(self):
+        old_db=self.root/"v3.sqlite3"; connection=sqlite3.connect(old_db)
+        for version,name in ((1,"001_initial.sql"),(2,"002_supervisor.sql"),(3,"003_durable_io.sql")):
+            connection.executescript((ROOT/"plugin/core/src/devsquad/migrations"/name).read_text())
+            connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",(version,"fixture"))
+        connection.commit(); connection.close()
+        upgraded=Store(old_db,self.root/"v3-artifacts"); self.addCleanup(upgraded.close)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],4)
+        columns={row[1] for row in upgraded.connection.execute("PRAGMA table_info(runs)")}
+        self.assertTrue({"package_path","package_digest","supersedes_run_id"} <= columns)
 
 
 if __name__ == "__main__":

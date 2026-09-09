@@ -16,7 +16,7 @@ from pathlib import Path
 import json
 
 from .contracts import ContractError, LaunchSpec
-from .store import AttemptReservation, ConflictError, Store
+from .store import AttemptReservation, ConflictError, Store, canonical_json
 
 
 def process_start_identity(pid: int) -> str | None:
@@ -188,7 +188,8 @@ class Supervisor:
                 "--run-id",run_id,"--attempt-token",reservation.attempt_token,
                 "--supervisor-token",str(reservation.supervisor_token),"--stdout",paths["stdout_spool"],
                 "--stderr",paths["stderr_spool"],"--exit-record",paths["exit_record"],
-                "--child-record",paths["child_record"],"--limit",str(self.output_limit),"--",*spec.argv]
+                "--child-record",paths["child_record"],"--limit",str(self.output_limit),
+                "--timeout",str(spec.timeout_seconds),"--grace",str(self.grace_seconds),"--",*spec.argv]
             environment=os.environ.copy(); environment.update(spec.environment)
             process=subprocess.Popen(command,cwd=spec.cwd,env=environment,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,pass_fds=(gate_read,),start_new_session=True)
             os.close(gate_read)
@@ -218,15 +219,55 @@ class Supervisor:
             self.store.request_cancel(handle.reservation.run_id)
             handle.process.wait(timeout=self.grace_seconds+5)
         returncode=handle.process.wait(timeout=2)
-        receipt=json.loads(Path(handle.paths["exit_record"]).read_text())
-        metadata={"stdout":receipt["stdout"],"stderr":receipt["stderr"]}
-        run_id=handle.reservation.run_id; token=handle.reservation.attempt_token
-        stdout_id=self.store.store_artifact(run_id,f"{handle.reservation.attempt_id}.stdout",Path(handle.paths["stdout_spool"]).read_bytes())
-        stderr_id=self.store.store_artifact(run_id,f"{handle.reservation.attempt_id}.stderr",Path(handle.paths["stderr_spool"]).read_bytes())
-        self.store.record_attempt_output(run_id,token,stdout_id,stderr_id,metadata)
-        terminal="cancelled" if receipt["cancelled"] else ("succeeded" if returncode==0 else "failed")
-        self.store.finish_attempt(run_id,token,terminal,{"returncode":returncode,"output":metadata})
+        self.import_durable(handle.reservation.run_id)
         return returncode
+
+    def import_durable(self, run_id: str) -> str:
+        attempt=self.store.attempt(run_id)
+        if not attempt or attempt["status"] not in {"running","cancelling"}:
+            return "already_finalized"
+        identity=inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"])
+        if identity=="live": return "live"
+        receipt_path=Path(attempt["exit_record"] or "")
+        if identity=="ambiguous":
+            self.store.block_recovery(run_id,attempt["attempt_token"],"attempt runner identity is ambiguous")
+            return "ownership_ambiguous"
+        if not receipt_path.is_file():
+            child_path=Path(attempt["child_record"] or "")
+            if child_path.is_file():
+                try:
+                    child=json.loads(child_path.read_text())
+                    if inspect_process(child["pid"],child["pgid"],child["process_start_id"])!="dead":
+                        self.store.block_recovery(run_id,attempt["attempt_token"],"runner died while its child may still be live")
+                        return "ownership_ambiguous"
+                except (OSError,ValueError,KeyError,TypeError):
+                    self.store.block_recovery(run_id,attempt["attempt_token"],"child identity record is invalid")
+                    return "ownership_ambiguous"
+            self.store.block_recovery(run_id,attempt["attempt_token"],"runner died without an exit receipt",release_writer=True)
+            return "recovery_required"
+        try:
+            receipt=json.loads(receipt_path.read_text())
+            if type(receipt.get("returncode")) is not int or type(receipt.get("cancelled")) is not bool:
+                raise ValueError("invalid receipt")
+            metadata={name:receipt[name] for name in ("stdout","stderr")}
+            ids=[]
+            for stream,column in (("stdout","stdout_spool"),("stderr","stderr_spool")):
+                data=Path(attempt[column]).read_bytes(); meta=metadata[stream]
+                if hashlib.sha256(data).hexdigest()!=meta["captured_sha256"] or len(data)!=meta["captured_bytes"]:
+                    raise ValueError("capture hash mismatch")
+                logical=f"{attempt['id']}.{stream}"; existing=self.store.artifact_named(run_id,logical)
+                ids.append(existing["id"] if existing else self.store.store_artifact(run_id,logical,data))
+            if not attempt.get("output_metadata"):
+                self.store.record_attempt_output(run_id,attempt["attempt_token"],ids[0],ids[1],metadata)
+            receipt_bytes=canonical_json(receipt).encode()
+            if not self.store.artifact_named(run_id,"result-receipt.json"):
+                self.store.store_artifact(run_id,"result-receipt.json",receipt_bytes)
+            terminal="cancelled" if receipt["cancelled"] else ("succeeded" if receipt["returncode"]==0 else "failed")
+            self.store.finish_attempt(run_id,attempt["attempt_token"],terminal,{"returncode":receipt["returncode"],"receipt":"result-receipt.json"})
+            return terminal
+        except (OSError,ValueError,KeyError,TypeError,json.JSONDecodeError):
+            self.store.block_recovery(run_id,attempt["attempt_token"],"durable receipt or capture is invalid")
+            return "ownership_ambiguous"
 
     def _terminate_durable(self, handle: DurableAttempt) -> None:
         attempt=self.store.active_attempt(handle.reservation.run_id)
