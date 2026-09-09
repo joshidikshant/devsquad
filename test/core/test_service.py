@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 import os
 from pathlib import Path
 import signal
@@ -14,6 +15,20 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store
+from devsquad.supervisor import Supervisor, inspect_process
+
+
+def concurrent_receipt_import(database, artifacts, run_id, barrier, results):
+    store = None
+    try:
+        store = Store(Path(database), Path(artifacts))
+        barrier.wait(timeout=10)
+        results.put(Supervisor(store).import_durable(run_id))
+    except Exception as exc:
+        results.put(f"{type(exc).__name__}: {exc}")
+    finally:
+        if store is not None:
+            store.close()
 
 
 class ServiceTest(unittest.TestCase):
@@ -112,6 +127,62 @@ class ServiceTest(unittest.TestCase):
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
         try: self.assertEqual(store.connection.execute("SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],)).fetchone()[0],1)
         finally: store.close()
+
+    def test_two_processes_import_one_runner_receipt_atomically(self):
+        started=self.service.start(self.task,"receipt-race",_internal_fake_delay=.3)
+        self.wait_state(started["run_id"],{"running"})
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            attempt=store.attempt(started["run_id"])
+            owner=store.connection.execute("SELECT owner_id FROM supervisor_claims WHERE run_id=?",(started["run_id"],)).fetchone()[0]
+            os.kill(int(owner.split(":",1)[1]),signal.SIGKILL)
+            receipt=Path(attempt["exit_record"])
+            deadline=time.monotonic()+5
+            while not receipt.is_file() and time.monotonic()<deadline: time.sleep(.02)
+            self.assertTrue(receipt.is_file())
+            while inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"])=="live" and time.monotonic()<deadline: time.sleep(.02)
+            self.assertNotEqual(inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"]),"live")
+        finally: store.close()
+
+        context=multiprocessing.get_context("spawn")
+        barrier,results=context.Barrier(2),context.Queue()
+        processes=[context.Process(target=concurrent_receipt_import,args=(str(self.runtime/"state.sqlite3"),str(self.runtime/"artifacts"),started["run_id"],barrier,results)) for _ in range(2)]
+        try:
+            for process in processes: process.start()
+            outcomes=[results.get(timeout=15) for _ in processes]
+            for process in processes: process.join(timeout=2)
+            self.assertTrue(all(outcome in {"succeeded","already_finalized"} for outcome in outcomes),outcomes)
+            self.assertTrue(all(process.exitcode==0 for process in processes))
+        finally:
+            for process in processes:
+                if process.is_alive(): process.terminate()
+                process.join(timeout=2)
+            results.close(); results.join_thread()
+
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(started["run_id"])
+            self.assertEqual(run["state"],"succeeded")
+            self.assertEqual(store.attempt(started["run_id"])["status"],"finished")
+            self.assertEqual(len(store.artifacts_for_run(started["run_id"])),3)
+            events=store.connection.execute("SELECT run_version,type FROM events WHERE run_id=?",(started["run_id"],)).fetchall()
+            event_types=[row["type"] for row in events]
+            self.assertEqual(event_types.count("attempt.output"),1)
+            self.assertEqual(event_types.count("run.succeeded"),1)
+            self.assertNotIn("run.blocked",event_types)
+            self.assertEqual(run["version"],max(row["run_version"] for row in events))
+        finally: store.close()
+
+    def test_repository_devsquad_package_cannot_shadow_frozen_gate_modules(self):
+        marker=self.root/"SHADOW_EXECUTED"
+        shadow=self.repo/"devsquad"; shadow.mkdir()
+        sentinel=f"from pathlib import Path\nPath({str(marker)!r}).write_text('shadowed')\n"
+        (shadow/"__init__.py").write_text(sentinel)
+        for module in ("attempt_runner.py","worker_gate.py","fake_step.py"):
+            (shadow/module).write_text(sentinel+"raise SystemExit(91)\n")
+        started=self.service.start(self.task,"repo-shadow",_internal_fake_delay=.01)
+        self.wait_state(started["run_id"],{"succeeded"})
+        self.assertFalse(marker.exists())
 
     def test_supersedes_requires_terminal_same_project(self):
         predecessor=self.service.start(self.task,"predecessor")

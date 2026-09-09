@@ -30,7 +30,7 @@ def main(argv=None):
     with os.fdopen(a.gate_fd,"rb",closefd=True) as gate:
         if gate.read(1)!=b"1": return 125
     child_gate_read,child_gate_write=os.pipe()
-    gated=[os.sys.executable,"-m","devsquad.worker_gate","--gate-fd",str(child_gate_read),"--",*command]
+    gated=[os.sys.executable,"-P","-m","devsquad.worker_gate","--gate-fd",str(child_gate_read),"--",*command]
     child=subprocess.Popen(gated,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True,pass_fds=(child_gate_read,))
     os.close(child_gate_read)
     started=process_start_identity(child.pid)
@@ -67,6 +67,8 @@ def main(argv=None):
     for thread in threads: thread.join(timeout=a.grace+1)
     if any(thread.is_alive() for thread in threads): raise RuntimeError("durable output drain did not finish")
     child.stdout.close(); child.stderr.close()
-    _atomic(a.exit_record,{"returncode":returncode,"cancelled":cancelled,"timed_out":timed_out,"stdout":out,"stderr":err,"finished_at":time.time()})
-    return returncode
+    receipt={"returncode":returncode,"cancelled":cancelled,"timed_out":timed_out,"stdout":out,"stderr":err,"finished_at":time.time()}
+    if timed_out: receipt["error"]="TIMEOUT"
+    _atomic(a.exit_record,receipt)
+    return 124 if timed_out else returncode
 if __name__=="__main__": raise SystemExit(main())

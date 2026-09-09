@@ -114,6 +114,33 @@ class SupervisorGateReview(unittest.TestCase):
         self.supervisor.cancel(first_run, handle)
         self.assertEqual(self.store.run(first_run)["state"], "cancelled")
 
+    def test_durable_timeout_is_failure_when_term_handler_exits_zero(self):
+        run_id, version = self._ready_run("timeout-zero")
+        code = (
+            "import signal,sys,time;"
+            "signal.signal(signal.SIGTERM,lambda *_:sys.exit(0));"
+            "time.sleep(30)"
+        )
+        spec = LaunchSpec(
+            1, "fake", "cli_exec", (sys.executable, "-c", code), str(self.repo), None, 1,
+            ExecutionIdentity("fake", "1", "fixture", "fixture", "fixture", "low"),
+        )
+        source = str(ROOT / "plugin" / "core" / "src")
+        with mock.patch.dict(os.environ, {"PYTHONPATH": source}):
+            handle = self.supervisor.launch_durable(run_id, version, spec, "owner", "package")
+        self.assertEqual(self.supervisor.wait_durable(handle, 1), 124)
+        self.assertEqual(self.store.run(run_id)["state"], "failed")
+        receipt_artifact = self.store.artifact_named(run_id, "result-receipt.json")
+        receipt = json.loads(Path(receipt_artifact["path"]).read_text())
+        self.assertTrue(receipt["timed_out"])
+        self.assertEqual(receipt["returncode"], 0)
+        self.assertEqual(receipt["error"], "TIMEOUT")
+        terminal = self.store.connection.execute(
+            "SELECT payload FROM events WHERE run_id=? AND type='run.failed'", (run_id,),
+        ).fetchone()
+        self.assertEqual(json.loads(terminal["payload"])["error"], "TIMEOUT")
+        self.assertEqual(self.store.attempt(run_id)["status"], "finished")
+
     def test_recovery_never_signals_an_ambiguous_identity(self):
         run_id, version = self._ready_run("ambiguous")
         handle = self.supervisor.launch(

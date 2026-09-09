@@ -183,7 +183,7 @@ class Supervisor:
         gate_read, gate_write = os.pipe()
         process = None
         try:
-            command=[sys.executable,"-m","devsquad.attempt_runner","--gate-fd",str(gate_read),
+            command=[sys.executable,"-P","-m","devsquad.attempt_runner","--gate-fd",str(gate_read),
                 "--database",str(self.store.database),"--artifacts",str(self.store.artifacts),
                 "--run-id",run_id,"--attempt-token",reservation.attempt_token,
                 "--supervisor-token",str(reservation.supervisor_token),"--stdout",paths["stdout_spool"],
@@ -229,7 +229,7 @@ class Supervisor:
         identity=inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"])
         if identity=="live": return "live"
         receipt_path=Path(attempt["exit_record"] or "")
-        if identity=="ambiguous":
+        if identity=="ambiguous" and not receipt_path.is_file():
             self.store.block_recovery(run_id,attempt["attempt_token"],"attempt runner identity is ambiguous")
             return "ownership_ambiguous"
         if not receipt_path.is_file():
@@ -247,27 +247,38 @@ class Supervisor:
             return "recovery_required"
         try:
             receipt=json.loads(receipt_path.read_text())
-            if type(receipt.get("returncode")) is not int or type(receipt.get("cancelled")) is not bool:
+            if (type(receipt.get("returncode")) is not int
+                    or type(receipt.get("cancelled")) is not bool
+                    or type(receipt.get("timed_out")) is not bool
+                    or (receipt["cancelled"] and receipt["timed_out"])):
                 raise ValueError("invalid receipt")
             metadata={name:receipt[name] for name in ("stdout","stderr")}
-            ids=[]
+            artifacts=[]
             for stream,column in (("stdout","stdout_spool"),("stderr","stderr_spool")):
                 data=Path(attempt[column]).read_bytes(); meta=metadata[stream]
                 if hashlib.sha256(data).hexdigest()!=meta["captured_sha256"] or len(data)!=meta["captured_bytes"]:
                     raise ValueError("capture hash mismatch")
-                logical=f"{attempt['id']}.{stream}"; existing=self.store.artifact_named(run_id,logical)
-                ids.append(existing["id"] if existing else self.store.store_artifact(run_id,logical,data))
-            if not attempt.get("output_metadata"):
-                self.store.record_attempt_output(run_id,attempt["attempt_token"],ids[0],ids[1],metadata)
+                logical=f"{attempt['id']}.{stream}"
+                path,digest,size=self.store.finalize_artifact(run_id,logical,data)
+                artifacts.append({"name":logical,"path":path,"sha256":digest,"byte_size":size})
             receipt_bytes=canonical_json(receipt).encode()
-            if not self.store.artifact_named(run_id,"result-receipt.json"):
-                self.store.store_artifact(run_id,"result-receipt.json",receipt_bytes)
-            terminal="cancelled" if receipt["cancelled"] else ("succeeded" if receipt["returncode"]==0 else "failed")
-            self.store.finish_attempt(run_id,attempt["attempt_token"],terminal,{"returncode":receipt["returncode"],"receipt":"result-receipt.json"})
-            return terminal
+            path,digest,size=self.store.finalize_artifact(run_id,"result-receipt.json",receipt_bytes)
+            artifacts.append({"name":"result-receipt.json","path":path,"sha256":digest,"byte_size":size})
+            terminal="cancelled" if receipt["cancelled"] else ("failed" if receipt["timed_out"] or receipt["returncode"]!=0 else "succeeded")
+            payload={"returncode":receipt["returncode"],"receipt":"result-receipt.json"}
+            if receipt["timed_out"]: payload["error"]="TIMEOUT"
+            return self.store.commit_durable_import(
+                run_id,attempt["attempt_token"],artifacts,metadata,terminal,payload,
+            )
         except (OSError,ValueError,KeyError,TypeError,json.JSONDecodeError):
-            self.store.block_recovery(run_id,attempt["attempt_token"],"durable receipt or capture is invalid")
-            return "ownership_ambiguous"
+            try:
+                self.store.block_recovery(run_id,attempt["attempt_token"],"durable receipt or capture is invalid")
+                return "ownership_ambiguous"
+            except ConflictError:
+                current=self.store.attempt(run_id); run=self.store.run(run_id)
+                if current and current["attempt_token"]==attempt["attempt_token"] and current["status"]=="finished" and run["state"] in {"succeeded","failed","cancelled"}:
+                    return run["state"]
+                raise
 
     def _terminate_durable(self, handle: DurableAttempt) -> None:
         attempt=self.store.active_attempt(handle.reservation.run_id)

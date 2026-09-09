@@ -116,7 +116,7 @@ class Service:
         return {"run_id": claim.run_id, "state": "queued", "created": True}
 
     def _spawn_daemon(self, run_id: str, expected_version: int, package: Path, digest: str) -> int:
-        command = [sys.executable, "-m", "devsquad.detached", "--database", str(self.database), "--artifacts", str(self.artifacts), "--run-id", run_id, "--expected-version", str(expected_version), "--package-digest", digest]
+        command = [sys.executable, "-P", "-m", "devsquad.detached", "--database", str(self.database), "--artifacts", str(self.artifacts), "--run-id", run_id, "--expected-version", str(expected_version), "--package-digest", digest]
         environment = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(package)}
         log_dir=self.runtime/"private-logs"; log_dir.mkdir(parents=True,exist_ok=True)
         with (log_dir/f"{run_id}.supervisor.log").open("ab",buffering=0) as diagnostic:
