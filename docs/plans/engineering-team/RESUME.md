@@ -26,18 +26,25 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 - Cleanup-race hardening checkpoint: `df955f4`. Cleanup inventory fails closed,
   timeout/cancel identity races retain ownership fencing, and 62 core tests pass.
 - Durable service checkpoint `cefd193` is explicit WIP and gated-runner
-  checkpoint `a0794a9` passed 67 core tests plus 202 shell assertions. The current local
+  checkpoint `a0794a9` passed 67 core tests plus 202 shell assertions. The
+  preserved recovery candidate is `f76df41`. Adversarial hardening checkpoint
+  `5aa2e74` and CLI/wheel checkpoint `f0d29a7` pass 82 core tests plus all 202
+  shell assertions. The current implementation
   checkpoint replaces the unsafe anonymous-pipe launch with a persisted,
   gated attempt runner and migration 003 durable paths. The runner cannot
   launch the internal fixture worker until its strong identity and spool paths
   are committed; it owns output drains, heartbeat, cancel polling and an
   atomic exit record. Ordered migration discovery, transactional status,
   stable event cursors and fenced preparation failure are implemented.
-  Recovery/import of a runner exit record, predecessor validation, package
-  pin verification, and the result-receipt barrier are now implemented and
-  covered by 69 core tests. The independent adversarial service gate,
-  cross-process race expansion, CLI envelopes and wheel migration-3 check
-  remain open. Public branch-review execution is explicitly failed as
+  Recovery/import of a runner exit record is transactionally idempotent under
+  two-process races; timeouts cannot become success after a clean TERM exit;
+  repository-local Python packages cannot shadow the frozen internal runner.
+  Exact CLI envelopes, `start --wait`, and an installed-wheel schema-3-to-4
+  migration gate are covered. Remaining M2 work includes crashed preparation
+  and launch recovery, pre-attempt terminal receipts, complete predecessor
+  validation, durable stdin/cancel cleanup races, cross-process start/writer
+  coverage, host-handoff claim fencing, the detached-process ResourceWarnings,
+  and a post-fix Astra gate. Public branch-review execution is explicitly failed as
   `CAPABILITY_UNAVAILABLE` until M3; only the internal test hook can run the
   fake step. M2 remains in progress.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
@@ -76,9 +83,11 @@ The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed e
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
 2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md),
    [M2-STATUS.md](M2-STATUS.md), and the corresponding contracts before
-   editing. Continue by implementing durable receipt import/recovery without
-   relaunch, then package/predecessor/result invariants and the cross-process
-   crash tests. Do not redo the accepted store or supervisor foundations.
+   editing. Continue with crashed `preparing`/`launching` reconciliation and
+   durable receipts for every terminal path, then predecessor/cancel/stdin
+   invariants, the cross-process crash matrix, and host-handoff claim fencing.
+   Do not redo the accepted store or supervisor foundations or the fixes in
+   `5aa2e74`/`f0d29a7`.
 3. Preserve M1 limitations and process-ownership boundaries. M1 acceptance is
    not a claim that the full product exists, and no additional native probe is
    needed for the accepted gate.

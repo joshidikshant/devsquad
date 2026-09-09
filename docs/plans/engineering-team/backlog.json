@@ -47,6 +47,15 @@
           "artifact": "M2-STATUS.md",
           "recorded_at": "2026-09-08T00:00:00+05:30",
           "availability": "tracked tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "f0d29a7",
+          "command_or_action": "82 core tests, 202 shell assertions, installed-wheel schema-3-to-4 migration, two-process receipt import, repository-shadow and timeout adversarial regressions",
+          "outcome": "Durable import and CLI/wheel slices pass; M2 remains in progress for crash-phase recovery, all-terminal receipts, cancellation/stdin races, host claims and independent re-review",
+          "artifact": "M2-STATUS.md",
+          "recorded_at": "2026-09-09T21:58:27+05:30",
+          "availability": "tracked tests"
         }
       ],
       "blocker": null

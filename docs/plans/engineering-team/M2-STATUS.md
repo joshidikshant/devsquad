@@ -12,24 +12,28 @@ service checkpoint is `a0794a9`.
 | Preparing-owner fencing and cancellation | Runs remain `queued` with a private `preparing` phase; stale completion after cancel conflicts; generic events cannot bypass the fence | verified offline |
 | Transactional projections and events | Compare-and-swap run version and append-only event commit together under concurrent writers | verified offline |
 | Atomic hash-verified artifacts | Content-addressed files finalize before reference; references increment run version with an event; duplicates and terminal mutation cannot clobber prior content | verified offline |
-| Schema migration and future refusal | A real version-1 fixture upgrades to version 2; newer unsupported versions are rejected | verified offline |
+| Schema migration and future refusal | Source fixtures upgrade from versions 1 and 3; an installed wheel applies migration 004 from a schema-3 fixture; newer unsupported versions are rejected | verified offline |
 | Supervisor and writer fencing | Transactional claims allow one supervisor and one active writer per worktree; ambiguous ownership retains the database fence | verified offline |
 | Strong process identity and recovery | Darwin start second+microsecond identity is stable; live children remain owned without relaunch; dead and reused identities receive distinct recovery dispositions and reused IDs are never signalled | verified offline |
 | Bounded process lifecycle | Direct argv runs in a new session; heartbeat, PID/PGID/start identity, token and package digest persist; stdout/stderr drain continuously with truncation and full-stream hashes | verified offline |
-| Timeout and cancellation | Intent precedes verified TERM/KILL; TERM-resistant root and descendant disappear before completion; repeated terminal cancel is harmless | verified offline |
+| Timeout and cancellation | Intent precedes verified TERM/KILL; TERM-resistant root and descendant disappear before completion; durable timeout remains failed when TERM exits 0 | partial: pre-attempt receipts and cross-process cancel cleanup remain |
 | Durable gated launch | A persisted attempt runner and an inner worker gate prevent task execution before strong runner and child identity records; the runner owns timeout, cancel polling, bounded spool files and an fsynced exit receipt | verified offline |
-| Coordinator-loss recovery | A separate coordinator is killed while the runner lives; resume does not relaunch it, and a completed receipt is imported once with one attempt | verified offline |
-| Frozen package | Every regular runtime asset is hashed, copied atomically, fsynced, stored on the run and verified before initial launch or resume | verified offline |
+| Coordinator-loss recovery | A separate coordinator is killed while the runner lives; two processes import one completed receipt atomically without relaunch or duplicate events | partial: preparing/launching and orphan-child recovery remain |
+| Frozen package | Every regular runtime asset is hashed, copied atomically, fsynced, stored on the run and verified before initial launch or resume; `-P` regressions prevent repository shadowing of internal modules | verified offline |
 | Public workflow guard | Public branch-review tasks end with `CAPABILITY_UNAVAILABLE` until M3; only the private test argument can invoke the M2 fake step | verified offline |
-| Result and event reads | Status is a transactional run/attempt snapshot; cursors always report the last consumed position and `has_more`; terminal service results verify referenced blob hashes and require a durable receipt for attempted runs | verified offline |
-| Predecessor link | A superseded run must be terminal and belong to the same canonical Git project; the link is committed with preparation | verified offline |
+| Result and event reads | Status is a transactional run/attempt snapshot; cursors always report the last consumed position and `has_more`; attempted-run receipts and hashes are checked | partial: failed-preflight/pre-attempt cancellation receipts remain |
+| Predecessor link | Fixture execution validates terminal same-project predecessors and stores the link | partial: public capability-failure path still bypasses validation |
+| CLI envelope and wait behavior | Exact v1 envelopes/exit codes, M2 operation dispatch, observation-only Ctrl-C, and terminal `start --wait` mappings | verified offline |
 
-The recovery checkpoint `a0794a9` passed 67 core tests and 202 shell
-assertions. The current service candidate passes 69 core tests, including a
-coordinator-crash receipt-import case. Final shell and wheel evidence will be
-recorded at the acceptance checkpoint.
+Checkpoints `5aa2e74` and `f0d29a7` pass 82 core tests and 202 shell
+assertions. The core suite includes an installed-wheel schema-3-to-4 migration,
+a two-process receipt-import race, repository-shadow resistance, and a timeout
+whose TERM handler exits zero. Several service tests still emit detached
+subprocess `ResourceWarning`s; M2 is not accepted while those ownership and
+recovery gaps remain.
 
-Remaining acceptance work is the independent service adversarial gate,
-cross-process race expansion, CLI envelope verification and installed-wheel
-migration 3 check. This is not a claim of a working engineering workflow;
-branch-review execution begins in M3.
+Remaining acceptance work is crashed preparation/launch reconciliation,
+receipts for every terminal path, predecessor/stdin/cancel invariants,
+cross-process start/writer/crash races, host-handoff storage and claim fencing,
+ResourceWarning cleanup, and a post-fix independent Astra gate. This is not a
+claim of a working engineering workflow; branch-review execution begins in M3.
