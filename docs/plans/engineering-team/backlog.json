@@ -56,6 +56,15 @@
           "artifact": "M2-STATUS.md",
           "recorded_at": "2026-09-09T21:58:27+05:30",
           "availability": "tracked tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "f9f2ffa",
+          "command_or_action": "94 core tests with warnings enabled, 202 shell assertions, independent preparation-recovery review, real reservation-process crash, durable stdin and project-retarget regressions",
+          "outcome": "Preparing and pre-gate launching recovery, pre-attempt receipts, predecessor validation, exact durable stdin and detached-process reaping pass; M2 remains in progress for host claims and remaining process races",
+          "artifact": "M2-STATUS.md",
+          "recorded_at": "2026-09-15T11:06:00+05:30",
+          "availability": "tracked tests"
         }
       ],
       "blocker": null

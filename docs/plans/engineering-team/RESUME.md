@@ -2,7 +2,7 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 8, 2026
+## Current position — September 15, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` is the published runtime baseline.
@@ -29,7 +29,9 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   checkpoint `a0794a9` passed 67 core tests plus 202 shell assertions. The
   preserved recovery candidate is `f76df41`. Adversarial hardening checkpoint
   `5aa2e74` and CLI/wheel checkpoint `f0d29a7` pass 82 core tests plus all 202
-  shell assertions. The current implementation
+  shell assertions. Preparation/receipt checkpoint `144b0b2`, reviewed
+  project-identity fix `c6a7a23`, and gated-launch/stdin checkpoint `f9f2ffa`
+  now pass 94 core tests plus all 202 shell assertions. The current implementation
   checkpoint replaces the unsafe anonymous-pipe launch with a persisted,
   gated attempt runner and migration 003 durable paths. The runner cannot
   launch the internal fixture worker until its strong identity and spool paths
@@ -40,13 +42,19 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   two-process races; timeouts cannot become success after a clean TERM exit;
   repository-local Python packages cannot shadow the frozen internal runner.
   Exact CLI envelopes, `start --wait`, and an installed-wheel schema-3-to-4
-  migration gate are covered. Remaining M2 work includes crashed preparation
-  and launch recovery, pre-attempt terminal receipts, complete predecessor
-  validation, durable stdin/cancel cleanup races, cross-process start/writer
-  coverage, host-handoff claim fencing, the detached-process ResourceWarnings,
-  and a post-fix Astra gate. Public branch-review execution is explicitly failed as
-  `CAPABILITY_UNAVAILABLE` until M3; only the internal test hook can run the
-  fake step. M2 remains in progress.
+  migration gate are covered. Interrupted preparation rotates its fencing token
+  and replays the canonical submitted request without permitting repository
+  retargeting. Every public pre-attempt terminal path publishes a durable
+  receipt; public/fixture predecessor validation covers valid, missing, active
+  and foreign-project links, including unrelated failure and repository-loss
+  cases. A real crash after gated-launch reservation is recoverable, durable
+  stdin preserves exact bytes, and detached supervisor handles are reaped.
+  Independent review found and drove the project-identity/lineage regressions.
+  Remaining M2 work includes post-identity/pre-gate and orphan-child recovery,
+  cross-process cancellation/start/writer races, host-handoff claim fencing,
+  and a final post-fix M2 gate. Public branch-review execution is explicitly
+  failed as `CAPABILITY_UNAVAILABLE` until M3; only the internal test hook can
+  run the fake step. M2 remains in progress.
 - GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
 - User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
 - Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 is in progress.
@@ -83,9 +91,9 @@ The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed e
 1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
 2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md),
    [M2-STATUS.md](M2-STATUS.md), and the corresponding contracts before
-   editing. Continue with crashed `preparing`/`launching` reconciliation and
-   durable receipts for every terminal path, then predecessor/cancel/stdin
-   invariants, the cross-process crash matrix, and host-handoff claim fencing.
+   editing. Continue with migration 005 host-handoff storage and claim fencing,
+   then post-identity/pre-gate and orphan-child recovery plus the remaining
+   cross-process cancellation/start/writer crash matrix.
    Do not redo the accepted store or supervisor foundations or the fixes in
    `5aa2e74`/`f0d29a7`.
 3. Preserve M1 limitations and process-ownership boundaries. M1 acceptance is
