@@ -708,20 +708,19 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
-    def commit_durable_import(self, run_id: str, attempt_token: str, artifacts: list[dict[str, Any]], metadata: Any, terminal_state: str, payload: Any) -> str:
-        """Atomically import one durable receipt, or observe its prior import.
-
-        Content-addressed files are finalized before this call. All database
-        references, output projection fields, and terminal state then cross a
-        single write fence so competing recovery processes cannot partially
-        import or downgrade a valid completion.
-        """
-        if terminal_state not in TERMINAL_STATES:
-            raise ContractError("invalid terminal state")
+    def _prepare_durable_artifacts(
+        self,
+        run_id: str,
+        artifacts: list[dict[str, Any]],
+        *,
+        require_result_receipt: bool,
+    ) -> tuple[list[tuple[str, str, str, int]], str, str]:
         expected_parent = (self.artifacts / run_id).resolve()
         prepared = []
         names = set()
         for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                raise ContractError("durable artifacts must be objects")
             name = artifact.get("name")
             path = Path(artifact.get("path", ""))
             digest = artifact.get("sha256")
@@ -735,10 +734,104 @@ class Store:
             if hashlib.sha256(content).hexdigest() != digest or len(content) != size:
                 raise ConflictError("durable artifact changed before database import")
             prepared.append((name, str(path), digest, size))
-        stdout_name = next((name for name in names if name.endswith(".stdout")), None)
-        stderr_name = next((name for name in names if name.endswith(".stderr")), None)
-        if stdout_name is None or stderr_name is None or "result-receipt.json" not in names:
-            raise ContractError("durable import requires stdout, stderr, and result receipt artifacts")
+        stdout_names = [name for name in names if name.endswith(".stdout")]
+        stderr_names = [name for name in names if name.endswith(".stderr")]
+        if (len(stdout_names) != 1 or len(stderr_names) != 1
+                or (require_result_receipt and "result-receipt.json" not in names)):
+            requirement = "stdout, stderr, and result receipt" if require_result_receipt else "stdout and stderr"
+            raise ContractError(f"durable import requires exactly one {requirement}")
+        return prepared, stdout_names[0], stderr_names[0]
+
+    def _reference_prepared_artifacts(
+        self,
+        run_id: str,
+        version: int,
+        prepared: list[tuple[str, str, str, int]],
+    ) -> tuple[int, dict[str, str]]:
+        artifact_ids = {}
+        for name, path, digest, size in prepared:
+            existing = self.connection.execute(
+                "SELECT id,path,sha256,byte_size FROM artifacts WHERE run_id=? AND name=?",
+                (run_id, name),
+            ).fetchone()
+            if existing:
+                if (existing["path"] != path or existing["sha256"] != digest
+                        or existing["byte_size"] != size):
+                    raise ConflictError("durable artifact conflicts with an existing reference")
+                artifact_ids[name] = existing["id"]
+                continue
+            artifact_id, now = str(uuid.uuid4()), _utc_now()
+            self.connection.execute(
+                "INSERT INTO artifacts(id,run_id,name,path,sha256,byte_size,created_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (artifact_id, run_id, name, path, digest, size, now),
+            )
+            artifact_ids[name] = artifact_id
+            version += 1
+            event = canonical_json({
+                "artifact_id": artifact_id,
+                "name": name,
+                "sha256": digest,
+                "byte_size": size,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'artifact.recorded',?,?)",
+                (run_id, version, event, now),
+            )
+            self.connection.execute(
+                "UPDATE runs SET version=?,updated_at=? WHERE id=?",
+                (version, now, run_id),
+            )
+        return version, artifact_ids
+
+    def _record_prepared_output(
+        self,
+        run_id: str,
+        version: int,
+        attempt: sqlite3.Row,
+        artifact_ids: dict[str, str],
+        stdout_name: str,
+        stderr_name: str,
+        encoded_metadata: str,
+    ) -> int:
+        stdout_id, stderr_id = artifact_ids[stdout_name], artifact_ids[stderr_name]
+        if attempt["output_metadata"] is None:
+            now = _utc_now()
+            version += 1
+            self.connection.execute(
+                "UPDATE attempts SET stdout_artifact_id=?,stderr_artifact_id=?,"
+                "output_metadata=? WHERE id=?",
+                (stdout_id, stderr_id, encoded_metadata, attempt["id"]),
+            )
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'attempt.output',?,?)",
+                (run_id, version, encoded_metadata, now),
+            )
+            self.connection.execute(
+                "UPDATE runs SET version=?,updated_at=? WHERE id=?",
+                (version, now, run_id),
+            )
+        elif (attempt["stdout_artifact_id"] != stdout_id
+                or attempt["stderr_artifact_id"] != stderr_id
+                or attempt["output_metadata"] != encoded_metadata):
+            raise ConflictError("durable output conflicts with its prior import")
+        return version
+
+    def commit_durable_import(self, run_id: str, attempt_token: str, artifacts: list[dict[str, Any]], metadata: Any, terminal_state: str, payload: Any) -> str:
+        """Atomically import one durable receipt, or observe its prior import.
+
+        Content-addressed files are finalized before this call. All database
+        references, output projection fields, and terminal state then cross a
+        single write fence so competing recovery processes cannot partially
+        import or downgrade a valid completion.
+        """
+        if terminal_state not in TERMINAL_STATES:
+            raise ContractError("invalid terminal state")
+        prepared, stdout_name, stderr_name = self._prepare_durable_artifacts(
+            run_id, artifacts, require_result_receipt=True,
+        )
         encoded_metadata, encoded_payload = canonical_json(metadata), canonical_json(payload)
 
         self.connection.execute("BEGIN IMMEDIATE")
@@ -756,51 +849,18 @@ class Store:
             if attempt["status"] not in {"running", "cancelling"} or run["state"] not in {"running", "cancelling"}:
                 raise ConflictError("durable import is fenced")
 
-            version = run["version"]
-            artifact_ids = {}
-            for name, path, digest, size in prepared:
-                existing = self.connection.execute(
-                    "SELECT id,path,sha256,byte_size FROM artifacts WHERE run_id=? AND name=?", (run_id, name),
-                ).fetchone()
-                if existing:
-                    if existing["path"] != path or existing["sha256"] != digest or existing["byte_size"] != size:
-                        raise ConflictError("durable artifact conflicts with an existing reference")
-                    artifact_ids[name] = existing["id"]
-                    continue
-                artifact_id, now = str(uuid.uuid4()), _utc_now()
-                self.connection.execute(
-                    "INSERT INTO artifacts(id,run_id,name,path,sha256,byte_size,created_at) VALUES(?,?,?,?,?,?,?)",
-                    (artifact_id, run_id, name, path, digest, size, now),
-                )
-                artifact_ids[name] = artifact_id
-                version += 1
-                event = canonical_json({"artifact_id": artifact_id, "name": name, "sha256": digest, "byte_size": size})
-                self.connection.execute(
-                    "INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'artifact.recorded',?,?)",
-                    (run_id, version, event, now),
-                )
-                self.connection.execute(
-                    "UPDATE runs SET version=?,updated_at=? WHERE id=?", (version, now, run_id),
-                )
-
-            stdout_id, stderr_id = artifact_ids[stdout_name], artifact_ids[stderr_name]
-            if attempt["output_metadata"] is None:
-                now = _utc_now(); version += 1
-                self.connection.execute(
-                    "UPDATE attempts SET stdout_artifact_id=?,stderr_artifact_id=?,output_metadata=? WHERE id=?",
-                    (stdout_id, stderr_id, encoded_metadata, attempt["id"]),
-                )
-                self.connection.execute(
-                    "INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'attempt.output',?,?)",
-                    (run_id, version, encoded_metadata, now),
-                )
-                self.connection.execute(
-                    "UPDATE runs SET version=?,updated_at=? WHERE id=?", (version, now, run_id),
-                )
-            elif (attempt["stdout_artifact_id"] != stdout_id
-                    or attempt["stderr_artifact_id"] != stderr_id
-                    or attempt["output_metadata"] != encoded_metadata):
-                raise ConflictError("durable output conflicts with its prior import")
+            version, artifact_ids = self._reference_prepared_artifacts(
+                run_id, run["version"], prepared,
+            )
+            version = self._record_prepared_output(
+                run_id,
+                version,
+                attempt,
+                artifact_ids,
+                stdout_name,
+                stderr_name,
+                encoded_metadata,
+            )
 
             now = _utc_now(); version += 1
             effective_state = "cancelled" if run["state"] == "cancelling" else terminal_state
@@ -816,6 +876,113 @@ class Store:
             )
             self.connection.execute("COMMIT")
             return effective_state
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def commit_durable_handoff(
+        self,
+        run_id: str,
+        attempt_token: str,
+        artifacts: list[dict[str, Any]],
+        metadata: Any,
+        packet: dict[str, Any],
+    ) -> str:
+        """Atomically import one completed attempt and publish its host packet."""
+        prepared, stdout_name, stderr_name = self._prepare_durable_artifacts(
+            run_id, artifacts, require_result_receipt=False,
+        )
+        encoded_metadata = canonical_json(metadata)
+        frozen_packet = json.loads(canonical_json(packet))
+        packet_artifacts = frozen_packet.get("artifacts")
+        if not isinstance(packet_artifacts, list) or not packet_artifacts:
+            raise ContractError("handoff packet must reference evidence artifacts")
+        prepared_hashes = {name: digest for name, _, digest, _ in prepared}
+        referenced_names = set()
+        for reference in packet_artifacts:
+            if not isinstance(reference, dict) or set(reference) != {"name", "sha256"}:
+                raise ContractError("handoff artifact references are invalid")
+            name, digest = reference["name"], reference["sha256"]
+            if (not isinstance(name, str) or name in referenced_names
+                    or prepared_hashes.get(name) != digest):
+                raise ContractError("handoff artifact does not match durable evidence")
+            referenced_names.add(name)
+
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status,stdout_artifact_id,stderr_artifact_id,output_metadata "
+                "FROM attempts WHERE run_id=? AND attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            if not run or not attempt:
+                raise ConflictError("durable handoff import is fenced")
+            if attempt["status"] == "finished" and run["state"] == "awaiting_host":
+                self.connection.execute("COMMIT")
+                return "awaiting_host"
+            if (attempt["status"] != "running" or run["state"] != "running"
+                    or run["phase"] is not None):
+                raise ConflictError("durable handoff import is fenced")
+
+            version, artifact_ids = self._reference_prepared_artifacts(
+                run_id, run["version"], prepared,
+            )
+            version = self._record_prepared_output(
+                run_id,
+                version,
+                attempt,
+                artifact_ids,
+                stdout_name,
+                stderr_name,
+                encoded_metadata,
+            )
+            for reference in packet_artifacts:
+                reference["artifact_id"] = artifact_ids[reference["name"]]
+            packet_json = canonical_json(frozen_packet)
+            packet_sha256 = hashlib.sha256(packet_json.encode()).hexdigest()
+            if self.connection.execute(
+                "SELECT 1 FROM handoffs WHERE run_id=? AND status IN ('open','submitted')",
+                (run_id,),
+            ).fetchone():
+                raise ConflictError("run already has a pending handoff")
+            sequence = self.connection.execute(
+                "SELECT COALESCE(MAX(sequence),0)+1 FROM handoffs WHERE run_id=?",
+                (run_id,),
+            ).fetchone()[0]
+            handoff_id, now = str(uuid.uuid4()), _utc_now()
+            version += 1
+            self.connection.execute(
+                "INSERT INTO handoffs(id,run_id,sequence,packet_json,packet_sha256,status,"
+                "created_run_version,created_at) VALUES(?,?,?,?,?,'open',?,?)",
+                (handoff_id, run_id, sequence, packet_json, packet_sha256, version, now),
+            )
+            self.connection.execute(
+                "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
+                (now, attempt["id"]),
+            )
+            self.connection.execute(
+                "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='awaiting_host',phase=NULL,version=?,updated_at=? "
+                "WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({
+                "handoff_id": handoff_id,
+                "packet_sha256": packet_sha256,
+                "sequence": sequence,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.awaiting_host',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return "awaiting_host"
         except Exception:
             self.connection.execute("ROLLBACK")
             raise

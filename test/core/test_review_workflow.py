@@ -14,6 +14,8 @@ from devsquad.workflows import (
     build_review_prompt,
     decode_review_document,
     evaluate_branch_review,
+    make_branch_review_evidence,
+    validate_branch_review_evidence,
     validate_check_results,
     validate_review_document,
 )
@@ -50,6 +52,23 @@ class BranchReviewWorkflowTest(unittest.TestCase):
             }],
         }
         self.check = self.check_result("failed", returncode=1)
+        self.snapshot = {
+            "task": self.task,
+            "workspace": self.workspace,
+            "routing": {
+                "roles": {
+                    "reviewer": {
+                        "selected": {
+                            "profile_id": "fixture-reviewer",
+                            "profile_sha256": "1" * 64,
+                            "profile": {"harness": "fixture"},
+                            "reference": {"kind": "profile", "id": "fixture-reviewer"},
+                            "binding": None,
+                        },
+                    },
+                },
+            },
+        }
 
     def stream(self, content=""):
         encoded = content.encode()
@@ -242,6 +261,29 @@ class BranchReviewWorkflowTest(unittest.TestCase):
         self.assertIn('"review_mode":"adversarial"', prompt)
         self.assertIn('"focus":"trust boundaries"', prompt)
         self.assertNotEqual(prompt, first)
+
+    def test_combined_evidence_recomputes_gates_profile_and_accounting(self):
+        evidence = make_branch_review_evidence(
+            self.snapshot, self.review, [self.check],
+        )
+        self.assertEqual(
+            validate_branch_review_evidence(evidence, self.snapshot), evidence,
+        )
+        for mutate, message in (
+            (lambda value: value["evaluation"].__setitem__("accept_allowed", False),
+             "derived gates"),
+            (lambda value: value["attempt"].__setitem__(
+                "selected_profile", {"profile_id": "substituted"}),
+             "frozen selected profile"),
+            (lambda value: value["attempt"].__setitem__("worker_invocations", 2),
+             "invocation accounting"),
+            (lambda value: value["attempt"]["usage"].__setitem__("total_tokens", 0),
+             "cannot invent token counts"),
+        ):
+            invalid = copy.deepcopy(evidence)
+            mutate(invalid)
+            with self.assertRaisesRegex(ContractError, message):
+                validate_branch_review_evidence(invalid, self.snapshot)
 
 
 if __name__ == "__main__":

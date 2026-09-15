@@ -24,9 +24,11 @@ from .store import (
     canonical_json,
 )
 from .validation import validate_task
+from .workflows import review_mode, validate_review_document
 from .workspaces import (
     assert_clean_inputs,
     committed_regular_file,
+    prepare_check_workspace,
     prepare_review_workspace,
     repo_relative_config,
     resolve_commit,
@@ -162,6 +164,7 @@ class Service:
         *,
         project_id: str | None = None,
         run_id: str | None = None,
+        internal_review_fixture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
         base_oid = resolve_commit(repo, task["project"]["base_ref"])
@@ -214,6 +217,31 @@ class Service:
                 scope_paths,
                 required_clean_paths=config_paths.values(),
             )
+            snapshot["check_workspace"] = prepare_check_workspace(
+                repo,
+                self.runtime,
+                project_id,
+                run_id,
+                target_oid,
+                scope_paths,
+                required_clean_paths=config_paths.values(),
+            )
+            if internal_review_fixture is not None:
+                if (not isinstance(internal_review_fixture, dict)
+                        or set(internal_review_fixture)
+                        != {"verdict", "summary", "findings"}):
+                    raise ContractError("internal review fixture fields are invalid")
+                fixture_document = {
+                    "schema_version": 1,
+                    "candidate_sha256": snapshot["workspace"]["candidate_sha256"],
+                    "base_oid": base_oid,
+                    "target_oid": target_oid,
+                    "review_mode": review_mode(task),
+                    **internal_review_fixture,
+                }
+                snapshot["internal_review_fixture"] = validate_review_document(
+                    fixture_document, task, snapshot["workspace"],
+                )
         return snapshot
 
     def _continue_preparation(
@@ -229,6 +257,7 @@ class Service:
         try:
             task = submitted["task"]
             internal_delay = submitted.get("_internal_fake_delay")
+            internal_review_fixture = submitted.get("_internal_review_fixture")
             store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
             validated_supersedes_run_id = supersedes_run_id
             validate_task(task, require_existing_repo=True)
@@ -242,8 +271,9 @@ class Service:
                 worktree,
                 project_id=project_id,
                 run_id=run_id,
+                internal_review_fixture=internal_review_fixture,
             )
-            if internal_delay is None:
+            if internal_delay is None and internal_review_fixture is None:
                 error = {
                     "error": "CAPABILITY_UNAVAILABLE",
                     "message": "branch-review workflow is introduced in M3",
@@ -264,6 +294,10 @@ class Service:
                 package_path=str(package),
                 package_digest=digest,
                 supersedes_run_id=supersedes_run_id,
+                worktree_path=(
+                    snapshot["workspace"]["path"]
+                    if internal_review_fixture is not None else None
+                ),
             )
             return (version, package, digest), None
         except Exception as exc:
@@ -283,11 +317,23 @@ class Service:
                 raise exc
             return None, error
 
-    def start(self, task: dict[str, Any], idempotency_key: str, supersedes_run_id: str | None = None, *, _internal_fake_delay: float | None = None) -> dict[str, Any]:
+    def start(
+        self,
+        task: dict[str, Any],
+        idempotency_key: str,
+        supersedes_run_id: str | None = None,
+        *,
+        _internal_fake_delay: float | None = None,
+        _internal_review_fixture: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         validate_task(task, require_existing_repo=True)
+        if _internal_fake_delay is not None and _internal_review_fixture is not None:
+            raise ContractError("internal lifecycle fixtures are mutually exclusive")
         submitted = {"task": task, "supersedes_run_id": supersedes_run_id}
         if _internal_fake_delay is not None:
             submitted["_internal_fake_delay"] = _internal_fake_delay
+        if _internal_review_fixture is not None:
+            submitted["_internal_review_fixture"] = _internal_review_fixture
         store = self._store()
         try:
             claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}")

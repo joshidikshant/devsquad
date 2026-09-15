@@ -189,25 +189,21 @@ def _validate_workspace(
                 raise ContractError(f"scoped symlink escapes the review workspace: {name}")
 
 
-def prepare_review_workspace(
+def _prepare_detached_workspace(
     source_repo: Path,
     runtime: Path,
     project_id: str,
     run_id: str,
-    base_oid: str,
     target_oid: str,
     scope_paths: Iterable[str],
-    *,
-    required_clean_paths: Iterable[str] = (),
-) -> dict[str, object]:
-    """Create or validate one detached, run-owned worktree at the target commit."""
+    name: str,
+) -> tuple[Path, tuple[str, ...]]:
     repo = source_repo.resolve(strict=True)
     scopes = tuple(_normalized_relative(path, "scope path") for path in scope_paths)
-    assert_clean_inputs(repo, scopes, required_clean_paths)
     project = _validate_segment(project_id, "project id")
     run = _validate_segment(run_id, "run id")
     workspace = (
-        runtime.resolve() / "projects" / project / "runs" / run / "review-worktree"
+        runtime.resolve() / "projects" / project / "runs" / run / name
     )
     workspace.parent.mkdir(parents=True, exist_ok=True)
     if not workspace.exists():
@@ -225,8 +221,30 @@ def prepare_review_workspace(
             ) from exc
         if result.returncode != 0 and not workspace.exists():
             detail = result.stderr.decode("utf-8", "replace").strip()
-            raise ContractError(f"could not create frozen review workspace: {detail}")
+            label = name.replace("-", " ")
+            raise ContractError(f"could not create frozen {label}: {detail}")
     _validate_workspace(repo, workspace, target_oid, scopes)
+    return workspace.resolve(), scopes
+
+
+def prepare_review_workspace(
+    source_repo: Path,
+    runtime: Path,
+    project_id: str,
+    run_id: str,
+    base_oid: str,
+    target_oid: str,
+    scope_paths: Iterable[str],
+    *,
+    required_clean_paths: Iterable[str] = (),
+) -> dict[str, object]:
+    """Create or validate one detached, run-owned worktree at the target commit."""
+    repo = source_repo.resolve(strict=True)
+    scopes = tuple(_normalized_relative(path, "scope path") for path in scope_paths)
+    assert_clean_inputs(repo, scopes, required_clean_paths)
+    workspace, scopes = _prepare_detached_workspace(
+        repo, runtime, project_id, run_id, target_oid, scopes, "review-worktree",
+    )
     changed = _decode_paths(
         _git(
             repo, "diff", "--no-renames", "--name-only", "-z",
@@ -244,5 +262,30 @@ def prepare_review_workspace(
         **identity,
         "path": str(workspace.resolve()),
         "candidate_sha256": hashlib.sha256(canonical_json(identity).encode()).hexdigest(),
+        "scope": list(scopes),
+    }
+
+
+def prepare_check_workspace(
+    source_repo: Path,
+    runtime: Path,
+    project_id: str,
+    run_id: str,
+    target_oid: str,
+    scope_paths: Iterable[str],
+    *,
+    required_clean_paths: Iterable[str] = (),
+) -> dict[str, object]:
+    """Create an independent candidate worktree for trusted declared checks."""
+    repo = source_repo.resolve(strict=True)
+    scopes = tuple(_normalized_relative(path, "scope path") for path in scope_paths)
+    assert_clean_inputs(repo, scopes, required_clean_paths)
+    workspace, scopes = _prepare_detached_workspace(
+        repo, runtime, project_id, run_id, target_oid, scopes, "check-worktree",
+    )
+    return {
+        "schema_version": 1,
+        "path": str(workspace),
+        "target_oid": target_oid,
         "scope": list(scopes),
     }

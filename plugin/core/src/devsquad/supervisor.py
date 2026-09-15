@@ -18,6 +18,7 @@ import json
 
 from .contracts import ContractError, LaunchSpec
 from .store import AttemptReservation, ConflictError, Store, canonical_json
+from .workflows import decode_branch_review_evidence
 
 
 def _open_stdin_artifact(path: str) -> BinaryIO:
@@ -284,6 +285,63 @@ class Supervisor:
         self.import_durable(handle.reservation.run_id)
         return returncode
 
+    def _commit_review_handoff(
+        self,
+        run_id: str,
+        attempt: dict[str, Any],
+        stream_artifacts: list[dict[str, Any]],
+        metadata: dict[str, Any],
+        snapshot: dict[str, Any],
+        stdout: bytes,
+    ) -> str:
+        evidence = decode_branch_review_evidence(stdout, snapshot)
+        documents = {
+            "review.json": evidence["review"],
+            "checks.json": {
+                "schema_version": 1,
+                "candidate_sha256": evidence["candidate_sha256"],
+                "target_oid": evidence["target_oid"],
+                "results": evidence["checks"],
+            },
+            "evaluation.json": evidence["evaluation"],
+            "review-attempt.json": evidence["attempt"],
+        }
+        artifacts = list(stream_artifacts)
+        evidence_references = []
+        for name, document in documents.items():
+            content = (canonical_json(document) + "\n").encode()
+            path, digest, size = self.store.finalize_artifact(run_id, name, content)
+            artifacts.append({
+                "name": name,
+                "path": path,
+                "sha256": digest,
+                "byte_size": size,
+            })
+            evidence_references.append({"name": name, "sha256": digest})
+        packet = {
+            "schema_version": 1,
+            "workflow": "branch-review",
+            "candidate_sha256": evidence["candidate_sha256"],
+            "base_oid": evidence["base_oid"],
+            "target_oid": evidence["target_oid"],
+            "review": evidence["review"],
+            "checks": evidence["checks"],
+            "evaluation": evidence["evaluation"],
+            "attempt": evidence["attempt"],
+            "artifacts": evidence_references,
+            "instructions": (
+                "Inspect the bound review and check evidence, then submit exactly one "
+                "accept, revise, or reject disposition."
+            ),
+        }
+        return self.store.commit_durable_handoff(
+            run_id,
+            attempt["attempt_token"],
+            artifacts,
+            metadata,
+            packet,
+        )
+
     def import_durable(self, run_id: str) -> str:
         attempt=self.store.attempt(run_id)
         if not attempt or attempt["status"] not in {"running","cancelling"}:
@@ -333,19 +391,37 @@ class Supervisor:
                 raise ValueError("invalid receipt")
             metadata={name:receipt[name] for name in ("stdout","stderr")}
             artifacts=[]
+            captures={}
             for stream,column in (("stdout","stdout_spool"),("stderr","stderr_spool")):
                 data=Path(attempt[column]).read_bytes(); meta=metadata[stream]
                 if hashlib.sha256(data).hexdigest()!=meta["captured_sha256"] or len(data)!=meta["captured_bytes"]:
                     raise ValueError("capture hash mismatch")
+                captures[stream]=data
                 logical=f"{attempt['id']}.{stream}"
                 path,digest,size=self.store.finalize_artifact(run_id,logical,data)
                 artifacts.append({"name":logical,"path":path,"sha256":digest,"byte_size":size})
+            snapshot=json.loads(self.store.run(run_id)["mutable_snapshot"])
+            workflow_review="internal_review_fixture" in snapshot
+            semantic_error=None
+            if (workflow_review and not receipt["cancelled"]
+                    and not receipt["timed_out"] and receipt["returncode"]==0):
+                try:
+                    return self._commit_review_handoff(
+                        run_id, attempt, artifacts, metadata, snapshot, captures["stdout"],
+                    )
+                except ContractError as exc:
+                    semantic_error=str(exc)
+                    receipt["error"]="WORKFLOW_OUTPUT_INVALID"
+                    receipt["message"]=semantic_error
             receipt_bytes=canonical_json(receipt).encode()
             path,digest,size=self.store.finalize_artifact(run_id,"result-receipt.json",receipt_bytes)
             artifacts.append({"name":"result-receipt.json","path":path,"sha256":digest,"byte_size":size})
-            terminal="cancelled" if receipt["cancelled"] else ("failed" if receipt["timed_out"] or receipt["returncode"]!=0 else "succeeded")
+            terminal="cancelled" if receipt["cancelled"] else ("failed" if receipt["timed_out"] or receipt["returncode"]!=0 or semantic_error else "succeeded")
             payload={"returncode":receipt["returncode"],"receipt":"result-receipt.json"}
             if receipt["timed_out"]: payload["error"]="TIMEOUT"
+            if semantic_error:
+                payload["error"]="WORKFLOW_OUTPUT_INVALID"
+                payload["message"]=semantic_error
             return self.store.commit_durable_import(
                 run_id,attempt["attempt_token"],artifacts,metadata,terminal,payload,
             )

@@ -51,6 +51,15 @@ class AdversarialValidationTest(unittest.TestCase):
             lambda t: t["origin"].__setitem__("session_ref", []),
             lambda t: t["acceptance"].append(copy.deepcopy(t["acceptance"][0])),
             lambda t: t["checks"].append(copy.deepcopy(t["checks"][0])),
+            lambda t: t.__setitem__(
+                "acceptance", [copy.deepcopy(t["acceptance"][0])] * 101,
+            ),
+            lambda t: t.__setitem__(
+                "checks", [copy.deepcopy(t["checks"][0])] * 17,
+            ),
+            lambda t: t["scope"].__setitem__(
+                "read_paths", [f"path-{i}" for i in range(257)],
+            ),
         ]
         for mutate in mutations:
             value = copy.deepcopy(self.task); mutate(value)

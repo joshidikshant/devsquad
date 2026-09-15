@@ -5,8 +5,8 @@
   "properties": {
     "schema_version": {"const": 1}, "workflow": {"enum": ["branch-review", "issue-delivery"]},
     "goal": {"type": "string", "minLength": 1}, "task_class": {"type": "string", "minLength": 1},
-    "project": {"$ref": "#/$defs/project"}, "acceptance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/acceptance"}},
-    "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}}, "scope": {"$ref": "#/$defs/scope"},
+    "project": {"$ref": "#/$defs/project"}, "acceptance": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/acceptance"}},
+    "checks": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/check"}}, "scope": {"$ref": "#/$defs/scope"},
     "lead": {"$ref": "#/$defs/lead"}, "routing": {"$ref": "#/$defs/routing"}, "budget": {"$ref": "#/$defs/budget"},
     "origin": {"$ref": "#/$defs/origin"}, "review": {"$ref": "#/$defs/review"}
   },
@@ -14,7 +14,7 @@
     "project": {"type":"object","additionalProperties":false,"required":["repo_path","base_ref","target_ref"],"properties":{"repo_path":{"type":"string","pattern":"^/"},"base_ref":{"type":"string","minLength":1},"target_ref":{"type":"string","minLength":1}}},
     "acceptance": {"type":"object","additionalProperties":false,"required":["id","description","evidence_kind"],"properties":{"id":{"type":"string","minLength":1},"description":{"type":"string","minLength":1},"evidence_kind":{"enum":["review","check","artifact","host"]}}},
     "check": {"type":"object","additionalProperties":false,"required":["id","argv","cwd","timeout_seconds","required_to_pass"],"properties":{"id":{"type":"string","minLength":1},"argv":{"type":"array","minItems":1,"items":{"type":"string","minLength":1}},"cwd":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1},"required_to_pass":{"type":"boolean"}}},
-    "scope": {"type":"object","additionalProperties":false,"required":["read_paths","write_paths"],"properties":{"read_paths":{"type":"array","uniqueItems":true,"items":{"type":"string","minLength":1}},"write_paths":{"type":"array","uniqueItems":true,"items":{"type":"string","minLength":1}}}},
+    "scope": {"type":"object","additionalProperties":false,"required":["read_paths","write_paths"],"properties":{"read_paths":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","minLength":1}},"write_paths":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","minLength":1}}}},
     "lead": {"type":"object","additionalProperties":false,"required":["mode"],"properties":{"mode":{"enum":["host","headless"]}}},
     "override": {"type":"object","additionalProperties":false,"required":["profile_id"],"properties":{"profile_id":{"type":"string","minLength":1},"fallback":{"enum":["none","policy"]}}},
     "routing": {"type":"object","additionalProperties":false,"required":["profiles_file","policy_file"],"properties":{"profiles_file":{"type":"string","minLength":1},"policy_file":{"type":"string","minLength":1},"overrides":{"type":"object","propertyNames":{"enum":["implementer","reviewer","lead","researcher"]},"additionalProperties":{"$ref":"#/$defs/override"}}}},

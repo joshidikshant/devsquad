@@ -565,7 +565,11 @@ class ServiceTest(unittest.TestCase):
             hashlib.sha256(canonical_json(identity).encode()).hexdigest(),
         )
         frozen=Path(workspace["path"])
+        check_workspace=Path(snapshot["check_workspace"]["path"])
+        self.assertNotEqual(check_workspace,frozen)
+        self.assertEqual(snapshot["check_workspace"]["target_oid"],target_oid)
         self.assertEqual((frozen/"src/app.py").read_text(),"VALUE = 'candidate'\n")
+        self.assertEqual((check_workspace/"src/app.py").read_text(),"VALUE = 'candidate'\n")
         self.assertEqual(
             subprocess.run(
                 ["git","-C",str(frozen),"rev-parse","--abbrev-ref","HEAD"],

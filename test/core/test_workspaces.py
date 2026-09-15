@@ -12,6 +12,7 @@ from devsquad.contracts import ContractError
 from devsquad.workspaces import (
     assert_clean_inputs,
     committed_regular_file,
+    prepare_check_workspace,
     prepare_review_workspace,
     repo_relative_config,
     resolve_commit,
@@ -103,6 +104,27 @@ class ReviewWorkspaceTest(unittest.TestCase):
         second = self.prepare()
         self.assertEqual(second, first)
         self.assertEqual((workspace / "src/app.py").read_text(), "VALUE = 'candidate'\n")
+
+    def test_checks_get_a_separate_detached_candidate_workspace(self):
+        review = self.prepare()
+        check = prepare_check_workspace(
+            self.repo,
+            self.runtime,
+            "project-1",
+            "run-1",
+            self.target,
+            ("src", "tests"),
+            required_clean_paths=("devsquad/profiles.json", "devsquad/policy.json"),
+        )
+        review_path, check_path = Path(review["path"]), Path(check["path"])
+        self.assertNotEqual(review_path, check_path)
+        self.assertEqual((check_path / "src/app.py").read_text(), "VALUE = 'candidate'\n")
+        self.assertEqual(
+            self.git("-C", str(check_path), "rev-parse", "--abbrev-ref", "HEAD").strip(),
+            b"HEAD",
+        )
+        (check_path / "src/app.py").write_text("check side effect\n")
+        self.assertEqual((review_path / "src/app.py").read_text(), "VALUE = 'candidate'\n")
 
     def test_dirty_scoped_tracked_path_is_rejected(self):
         (self.repo / "src/app.py").write_text("dirty\n")

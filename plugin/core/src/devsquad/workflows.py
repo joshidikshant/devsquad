@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import PurePosixPath
 import re
@@ -13,9 +14,10 @@ from .validation import validate_task
 
 
 MAX_REVIEW_BYTES = 512 * 1024
+MAX_EVIDENCE_BYTES = 1024 * 1024
 MAX_FINDINGS = 100
 MAX_TEXT_CHARS = 20_000
-MAX_PREVIEW_CHARS = 64 * 1024
+MAX_PREVIEW_CHARS = 1024
 FINDING_SEVERITIES = {"critical", "high", "medium", "low"}
 CHECK_STATUSES = {"passed", "failed", "timed_out", "launch_failed"}
 REVIEW_MODES = {"standard", "adversarial"}
@@ -79,14 +81,19 @@ def _inside_scope(path: str, scopes: list[str]) -> bool:
     return False
 
 
-def _strict_json_object(payload: bytes | str, label: str) -> dict[str, Any]:
+def _strict_json_object(
+    payload: bytes | str,
+    label: str,
+    *,
+    maximum: int = MAX_REVIEW_BYTES,
+) -> dict[str, Any]:
     if isinstance(payload, str):
         encoded = payload.encode()
     elif isinstance(payload, bytes):
         encoded = payload
     else:
         raise ContractError(f"{label} must be UTF-8 JSON bytes or text")
-    if len(encoded) > MAX_REVIEW_BYTES:
+    if len(encoded) > maximum:
         raise ContractError(f"{label} exceeds its byte limit")
 
     def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -392,3 +399,131 @@ def build_review_prompt(task: dict[str, Any], workspace: dict[str, Any]) -> str:
         "Frozen assignment:",
         canonical_json(assignment),
     ])
+
+
+def validate_branch_review_evidence(
+    value: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Recompute all derived gates before a worker result can become evidence."""
+    document = _exact(value, {
+        "schema_version", "workflow", "candidate_sha256", "base_oid", "target_oid",
+        "review", "checks", "evaluation", "attempt",
+    }, "branch review evidence")
+    if document["schema_version"] != 1 or type(document["schema_version"]) is not int:
+        raise ContractError("branch review evidence schema_version is invalid")
+    if document["workflow"] != "branch-review":
+        raise ContractError("branch review evidence workflow is invalid")
+    if not isinstance(snapshot, dict):
+        raise ContractError("frozen workflow snapshot must be an object")
+    task, workspace = snapshot.get("task"), snapshot.get("workspace")
+    if not isinstance(task, dict) or not isinstance(workspace, dict):
+        raise ContractError("frozen workflow snapshot is incomplete")
+    candidate_sha256, base_oid, target_oid = _workspace_identity(workspace)
+    for field, expected, validator in (
+        ("candidate_sha256", candidate_sha256, _sha256),
+        ("base_oid", base_oid, _commit_oid),
+        ("target_oid", target_oid, _commit_oid),
+    ):
+        if validator(document[field], f"evidence {field}") != expected:
+            raise ContractError(f"branch review evidence changes frozen {field}")
+    review = validate_review_document(document["review"], task, workspace)
+    checks = validate_check_results(document["checks"], task, workspace)
+    expected_evaluation = evaluate_branch_review(task, workspace, review, checks)
+    if canonical_json(document["evaluation"]) != canonical_json(expected_evaluation):
+        raise ContractError("branch review evaluation does not match derived gates")
+    attempt = _exact(document["attempt"], {
+        "role", "selected_profile", "prompt_sha256", "review_sha256",
+        "worker_invocations", "native_model_requests", "usage",
+    }, "review attempt evidence")
+    if attempt["role"] != "reviewer":
+        raise ContractError("review attempt role is invalid")
+    try:
+        frozen_reviewer = snapshot["routing"]["roles"]["reviewer"]["selected"]
+    except (KeyError, TypeError) as exc:
+        raise ContractError("frozen reviewer selection is missing") from exc
+    if canonical_json(attempt["selected_profile"]) != canonical_json(frozen_reviewer):
+        raise ContractError("review attempt changes the frozen selected profile")
+    prompt_sha256 = hashlib.sha256(build_review_prompt(task, workspace).encode()).hexdigest()
+    if _sha256(attempt["prompt_sha256"], "review prompt_sha256") != prompt_sha256:
+        raise ContractError("review prompt hash does not match the frozen prompt")
+    review_sha256 = hashlib.sha256(canonical_json(review).encode()).hexdigest()
+    if _sha256(attempt["review_sha256"], "review document sha256") != review_sha256:
+        raise ContractError("review document hash is invalid")
+    if attempt["worker_invocations"] != 1 or type(attempt["worker_invocations"]) is not int:
+        raise ContractError("review worker invocation accounting is invalid")
+    if attempt["worker_invocations"] > task["budget"]["max_worker_invocations"]:
+        raise ContractError("review exceeds max_worker_invocations")
+    native_requests = attempt["native_model_requests"]
+    if native_requests is not None and (
+            type(native_requests) is not int or native_requests < 0):
+        raise ContractError("native model request count must be non-negative or unknown")
+    usage = _exact(attempt["usage"], {
+        "input_tokens", "output_tokens", "total_tokens", "source",
+    }, "review usage")
+    for field in ("input_tokens", "output_tokens", "total_tokens"):
+        if usage[field] is not None and (
+                type(usage[field]) is not int or usage[field] < 0):
+            raise ContractError("review token usage must be non-negative or unknown")
+    if usage["source"] not in {"native_reported", "unavailable"}:
+        raise ContractError("review usage source is invalid")
+    if usage["source"] == "unavailable" and any(
+            usage[field] is not None
+            for field in ("input_tokens", "output_tokens", "total_tokens")
+    ):
+        raise ContractError("unavailable usage cannot invent token counts")
+    return json.loads(canonical_json(document))
+
+
+def make_branch_review_evidence(
+    snapshot: dict[str, Any],
+    review: dict[str, Any],
+    checks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    task, workspace = snapshot["task"], snapshot["workspace"]
+    normalized_review = validate_review_document(review, task, workspace)
+    normalized_checks = validate_check_results(checks, task, workspace)
+    candidate_sha256, base_oid, target_oid = _workspace_identity(workspace)
+    document = {
+        "schema_version": 1,
+        "workflow": "branch-review",
+        "candidate_sha256": candidate_sha256,
+        "base_oid": base_oid,
+        "target_oid": target_oid,
+        "review": normalized_review,
+        "checks": normalized_checks,
+        "evaluation": evaluate_branch_review(
+            task, workspace, normalized_review, normalized_checks,
+        ),
+        "attempt": {
+            "role": "reviewer",
+            "selected_profile": snapshot["routing"]["roles"]["reviewer"]["selected"],
+            "prompt_sha256": hashlib.sha256(
+                build_review_prompt(task, workspace).encode()
+            ).hexdigest(),
+            "review_sha256": hashlib.sha256(
+                canonical_json(normalized_review).encode()
+            ).hexdigest(),
+            "worker_invocations": 1,
+            "native_model_requests": None,
+            "usage": {
+                "input_tokens": None,
+                "output_tokens": None,
+                "total_tokens": None,
+                "source": "unavailable",
+            },
+        },
+    }
+    return validate_branch_review_evidence(document, snapshot)
+
+
+def decode_branch_review_evidence(
+    payload: bytes | str,
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    return validate_branch_review_evidence(
+        _strict_json_object(
+            payload, "branch review evidence", maximum=MAX_EVIDENCE_BYTES,
+        ),
+        snapshot,
+    )

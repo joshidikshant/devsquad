@@ -21,6 +21,7 @@ from devsquad.store import (
     Store,
     request_hash,
 )
+from devsquad.contracts import ContractError
 
 
 class HandoffStoreTest(unittest.TestCase):
@@ -262,6 +263,81 @@ class HandoffStoreTest(unittest.TestCase):
         )
         with self.assertRaises(ConflictError):
             self.store.handoff_snapshot(run_id)
+
+    def test_durable_evidence_and_handoff_cross_one_atomic_fence(self):
+        run_id, reservation, _ = self.running_run("durable-handoff")
+        artifacts = []
+        for name, content in (
+            (f"{reservation.attempt_id}.stdout", b'{"workflow":"review"}\n'),
+            (f"{reservation.attempt_id}.stderr", b""),
+            ("review.json", b'{"verdict":"clean"}\n'),
+        ):
+            path, digest, size = self.store.finalize_artifact(run_id, name, content)
+            artifacts.append({
+                "name": name,
+                "path": path,
+                "sha256": digest,
+                "byte_size": size,
+            })
+        review = next(item for item in artifacts if item["name"] == "review.json")
+        packet = {
+            "schema_version": 1,
+            "candidate_sha256": "c" * 64,
+            "artifacts": [{"name": review["name"], "sha256": review["sha256"]}],
+        }
+        outcome = self.store.commit_durable_handoff(
+            run_id,
+            reservation.attempt_token,
+            artifacts,
+            {"stdout": {"captured_bytes": 22}, "stderr": {"captured_bytes": 0}},
+            packet,
+        )
+        self.assertEqual(outcome, "awaiting_host")
+        snapshot = self.store.handoff_snapshot(run_id)
+        self.assertEqual(snapshot.packet["candidate_sha256"], "c" * 64)
+        reference = snapshot.packet["artifacts"][0]
+        self.assertEqual(set(reference), {"artifact_id", "name", "sha256"})
+        artifact = self.store.connection.execute(
+            "SELECT name,sha256 FROM artifacts WHERE id=?", (reference["artifact_id"],),
+        ).fetchone()
+        self.assertEqual((artifact["name"], artifact["sha256"]), (
+            "review.json", review["sha256"],
+        ))
+        self.assertEqual(
+            self.store.commit_durable_handoff(
+                run_id,
+                reservation.attempt_token,
+                artifacts,
+                {"stdout": {"captured_bytes": 22}, "stderr": {"captured_bytes": 0}},
+                packet,
+            ),
+            "awaiting_host",
+        )
+
+        invalid_run, invalid_reservation, _ = self.running_run("invalid-evidence")
+        invalid_artifacts = []
+        for name, content in (
+            (f"{invalid_reservation.attempt_id}.stdout", b"output"),
+            (f"{invalid_reservation.attempt_id}.stderr", b""),
+        ):
+            path, digest, size = self.store.finalize_artifact(
+                invalid_run, name, content,
+            )
+            invalid_artifacts.append({
+                "name": name, "path": path, "sha256": digest, "byte_size": size,
+            })
+        with self.assertRaisesRegex(ContractError, "does not match durable evidence"):
+            self.store.commit_durable_handoff(
+                invalid_run,
+                invalid_reservation.attempt_token,
+                invalid_artifacts,
+                {},
+                {
+                    "schema_version": 1,
+                    "artifacts": [{"name": "missing.json", "sha256": "0" * 64}],
+                },
+            )
+        self.assertEqual(self.store.run(invalid_run)["state"], "running")
 
     def test_claim_cas_renewal_and_expired_takeover(self):
         run_id, _, snapshot = self.waiting_run()

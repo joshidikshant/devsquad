@@ -6,6 +6,9 @@ from typing import Any
 from .contracts import ContractError
 
 TASK_FIELDS = {"schema_version", "project", "workflow", "goal", "task_class", "acceptance", "checks", "scope", "lead", "routing", "budget", "origin", "review"}
+MAX_ACCEPTANCE_CRITERIA = 100
+MAX_CHECKS = 16
+MAX_SCOPE_PATHS = 256
 
 
 def _exact(value: dict[str, Any], allowed: set[str], required: set[str], label: str) -> None:
@@ -34,8 +37,9 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
         raise ContractError("project.repo_path must be an existing absolute Git repository")
     if not isinstance(value["goal"], str) or not value["goal"].strip() or not isinstance(value["task_class"], str) or not value["task_class"].strip():
         raise ContractError("goal and task_class must be non-empty strings")
-    if not isinstance(value["acceptance"], list) or not value["acceptance"]:
-        raise ContractError("acceptance must be non-empty")
+    if (not isinstance(value["acceptance"], list) or not value["acceptance"]
+            or len(value["acceptance"]) > MAX_ACCEPTANCE_CRITERIA):
+        raise ContractError("acceptance must be a non-empty bounded array")
     acceptance_ids = set()
     for item in value["acceptance"]:
         _exact(item, {"id", "description", "evidence_kind"}, {"id", "description", "evidence_kind"}, "acceptance item")
@@ -46,7 +50,8 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
         if item["id"] in acceptance_ids:
             raise ContractError("acceptance ids must be unique")
         acceptance_ids.add(item["id"])
-    if not isinstance(value["checks"], list): raise ContractError("checks must be an array")
+    if not isinstance(value["checks"], list) or len(value["checks"]) > MAX_CHECKS:
+        raise ContractError("checks must be a bounded array")
     check_ids = set()
     for check in value["checks"]:
         _exact(check, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass"}, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass"}, "check")
@@ -59,6 +64,7 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
         if type(check["required_to_pass"]) is not bool: raise ContractError("required_to_pass must be boolean")
     scope = value["scope"]; _exact(scope, {"read_paths", "write_paths"}, {"read_paths", "write_paths"}, "scope")
     if not isinstance(scope["read_paths"], list) or not isinstance(scope["write_paths"], list) or not all(isinstance(p, str) and p for p in scope["read_paths"] + scope["write_paths"]): raise ContractError("scope paths must be non-empty string arrays")
+    if len(scope["read_paths"]) + len(scope["write_paths"]) > MAX_SCOPE_PATHS: raise ContractError("scope paths exceed their bound")
     if len(set(scope["read_paths"])) != len(scope["read_paths"]) or len(set(scope["write_paths"])) != len(scope["write_paths"]): raise ContractError("scope paths must be unique")
     for p in scope["read_paths"] + scope["write_paths"]: _relative(p, "scope path")
     if value["workflow"] == "branch-review" and scope["write_paths"]: raise ContractError("branch review cannot write")

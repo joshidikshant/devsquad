@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 from .contracts import ExecutionIdentity, LaunchSpec
-from .store import ConflictError, Store
+from .store import ConflictError, Store, canonical_json
 from .supervisor import Supervisor
 
 
@@ -22,11 +22,49 @@ def main(argv=None):
         if run.get("package_digest") != args.package_digest:
             raise ConflictError("detached package digest does not match prepared run")
         snapshot = json.loads(run["mutable_snapshot"])
-        environment = {"DEVSQUAD_WORKER": "1", "DEVSQUAD_RUN_ID": args.run_id}
-        identity = ExecutionIdentity("devsquad-fake-step", "1", None, None, None, None)
-        command = [sys.executable, "-P", "-m", "devsquad.fake_step"]
-        if "internal_fake_delay" in snapshot: command += ["--delay", str(snapshot["internal_fake_delay"])]
-        spec = LaunchSpec(1, "devsquad-fake-step", "cli_exec", tuple(command), run["worktree_path"], None, snapshot["task"]["budget"]["wall_seconds"], identity, environment)
+        environment = {
+            "DEVSQUAD_WORKER": "1",
+            "DEVSQUAD_RUN_ID": args.run_id,
+            "DEVSQUAD_DELEGATION_DEPTH": "1",
+        }
+        stdin_path = None
+        if "internal_review_fixture" in snapshot:
+            selected = snapshot["routing"]["roles"]["reviewer"]["selected"]["profile"]
+            identity = ExecutionIdentity(
+                "devsquad-review-workflow",
+                "1",
+                None,
+                selected["model_family"],
+                selected["model_id"],
+                selected["effort"]["value"],
+                tuple(selected["required_tools"]),
+                selected["permission_policy"],
+                selected["account_pool_id"],
+                "unknown",
+            )
+            command = [sys.executable, "-P", "-m", "devsquad.review_worker"]
+            input_path, _, _ = store.finalize_artifact(
+                args.run_id,
+                "workflow-input.json",
+                canonical_json(snapshot).encode(),
+            )
+            stdin_path = str(input_path)
+        else:
+            identity = ExecutionIdentity("devsquad-fake-step", "1", None, None, None, None)
+            command = [sys.executable, "-P", "-m", "devsquad.fake_step"]
+            if "internal_fake_delay" in snapshot:
+                command += ["--delay", str(snapshot["internal_fake_delay"])]
+        spec = LaunchSpec(
+            1,
+            identity.harness,
+            "cli_exec",
+            tuple(command),
+            run["worktree_path"],
+            stdin_path,
+            snapshot["task"]["budget"]["wall_seconds"],
+            identity,
+            environment,
+        )
         supervisor = Supervisor(store)
         try: handle = supervisor.launch_durable(args.run_id, args.expected_version, spec, f"daemon:{os.getpid()}", args.package_digest)
         except ConflictError: return 0
