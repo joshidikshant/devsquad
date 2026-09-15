@@ -103,6 +103,67 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, response)
         service.resume.assert_called_once_with("run-1", {"attempt_id": "a-1", "disposition": "confirm_dead"})
 
+    def test_handoff_claim_renew_and_complete_dispatch_parsed_objects(self):
+        claim_payload = {
+            "schema_version": 1,
+            "run_id": "run-1",
+            "handoff_id": "handoff-1",
+            "owner": "terminal-a",
+            "fencing_token": 7,
+            "expires_at": "2026-09-15T06:00:00+00:00",
+            "run_version": 11,
+        }
+        claim_file = self.root / "claim.json"
+        claim_file.write_text(json.dumps(claim_payload))
+        decision_payload = {
+            "schema_version": 1,
+            "submission_id": "submission-1",
+            "submission_hash": "a" * 64,
+            "disposition": "accept",
+            "reason": "accepted",
+            "evidence_refs": [],
+        }
+        decision_file = self.root / "decision.json"
+        decision_file.write_text(json.dumps(decision_payload))
+
+        service = mock.Mock()
+        response = {
+            "run_id": "run-1", "state": "awaiting_host", "version": 12,
+            "claim": claim_payload,
+        }
+        service.handoff_claim.return_value = response
+        code, payload, stderr = self.invoke([
+            "handoff", "claim", "run-1", "--expected-version", "11",
+            "--owner", "terminal-a", "--claim-file", str(claim_file),
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.handoff_claim.assert_called_once_with(
+            "run-1", 11, "terminal-a", claim_payload,
+        )
+
+        service = mock.Mock()
+        response = {
+            "run_id": "run-1", "state": "awaiting_host",
+            "phase": "handoff_submitted", "replayed": False,
+        }
+        service.handoff_complete.return_value = response
+        code, payload, stderr = self.invoke([
+            "handoff", "complete", "run-1", "--claim-file", str(claim_file),
+            "--decision-file", str(decision_file),
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.handoff_complete.assert_called_once_with(
+            "run-1", claim_payload, decision_payload,
+        )
+
+        code, payload, _ = self.invoke(["handoff"])
+        self.assertEqual(code, 64)
+        self.assertEqual(payload["error"]["code"], "INPUT_INVALID")
+
     def test_parser_and_json_file_failures_are_input_errors(self):
         code, payload, _ = self.invoke(["status"])
         self.assertEqual(code, 64)

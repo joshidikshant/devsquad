@@ -125,6 +125,19 @@ def command_resume(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).resume(args.run, recovery)), 0
 
 
+def command_handoff_claim(args: argparse.Namespace) -> tuple[dict, int]:
+    prior_claim = _read_json(args.claim_file, "claim file") if args.claim_file else None
+    return envelope(data=_service(args).handoff_claim(
+        args.run, args.expected_version, args.owner, prior_claim,
+    )), 0
+
+
+def command_handoff_complete(args: argparse.Namespace) -> tuple[dict, int]:
+    claim = _read_json(args.claim_file, "claim file")
+    decision = _read_json(args.decision_file, "decision file")
+    return envelope(data=_service(args).handoff_complete(args.run, claim, decision)), 0
+
+
 class ContractParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise ContractError(message)
@@ -159,6 +172,23 @@ def parser() -> argparse.ArgumentParser:
         if name == "resume": cmd.add_argument("--recovery-file")
         cmd.set_defaults(func=fn)
     events=sub.add_parser("events"); events.add_argument("run"); events.add_argument("--after",type=int,default=0); events.add_argument("--limit",type=int,default=100); events.add_argument("--json",action="store_true"); events.add_argument("--runtime-dir",default=runtime_default); events.set_defaults(func=command_events)
+    handoff = sub.add_parser("handoff")
+    handoff_sub = handoff.add_subparsers(dest="handoff_command", required=True)
+    claim = handoff_sub.add_parser("claim")
+    claim.add_argument("run")
+    claim.add_argument("--expected-version", type=int, required=True)
+    claim.add_argument("--owner", required=True)
+    claim.add_argument("--claim-file")
+    claim.add_argument("--json", action="store_true")
+    claim.add_argument("--runtime-dir", default=runtime_default)
+    claim.set_defaults(func=command_handoff_claim)
+    complete = handoff_sub.add_parser("complete")
+    complete.add_argument("run")
+    complete.add_argument("--claim-file", required=True)
+    complete.add_argument("--decision-file", required=True)
+    complete.add_argument("--json", action="store_true")
+    complete.add_argument("--runtime-dir", default=runtime_default)
+    complete.set_defaults(func=command_handoff_complete)
     return p
 
 

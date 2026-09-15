@@ -891,6 +891,43 @@ class Store:
             action=action,
         )
 
+    @classmethod
+    def _handoff_snapshot_from_rows(
+        cls,
+        run_id: str,
+        run: sqlite3.Row,
+        handoff: sqlite3.Row | None,
+        claim_row: sqlite3.Row | None,
+    ) -> HandoffSnapshot | None:
+        if handoff is None:
+            return None
+        packet_json = handoff["packet_json"]
+        if hashlib.sha256(packet_json.encode()).hexdigest() != handoff["packet_sha256"]:
+            raise ConflictError("persisted handoff packet hash does not match")
+        try:
+            packet = json.loads(packet_json)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ConflictError("persisted handoff packet is invalid") from exc
+        if not isinstance(packet, dict) or canonical_json(packet) != packet_json:
+            raise ConflictError("persisted handoff packet is not canonical finite JSON")
+        claim = cls._handoff_claim_from_row(claim_row, "current") if claim_row else None
+        return HandoffSnapshot(
+            run_id=run_id,
+            run_state=run["state"],
+            run_phase=run["phase"],
+            run_version=run["version"],
+            handoff_id=handoff["id"],
+            sequence=handoff["sequence"],
+            status=handoff["status"],
+            packet=packet,
+            packet_sha256=handoff["packet_sha256"],
+            created_run_version=handoff["created_run_version"],
+            submitted_run_version=handoff["submitted_run_version"],
+            created_at=handoff["created_at"],
+            closed_at=handoff["closed_at"],
+            claim=claim,
+        )
+
     def publish_handoff(
         self,
         run_id: str,
@@ -988,7 +1025,7 @@ class Store:
             handoff = self.connection.execute(
                 "SELECT * FROM handoffs WHERE run_id=? ORDER BY sequence DESC LIMIT 1", (run_id,),
             ).fetchone()
-            claim = None
+            claim_row = None
             if handoff:
                 claim_row = self.connection.execute(
                     "SELECT run_id,handoff_id,owner_id,fencing_token,lease_expires_at,"
@@ -996,29 +1033,8 @@ class Store:
                     "AND handoff_id=? AND active=1",
                     (run["version"], run_id, handoff["id"]),
                 ).fetchone()
-                if claim_row:
-                    claim = self._handoff_claim_from_row(claim_row, "current")
-            if not handoff:
-                self.connection.execute("COMMIT")
-                return None
-            packet_json = handoff["packet_json"]
-            if hashlib.sha256(packet_json.encode()).hexdigest() != handoff["packet_sha256"]:
-                raise ConflictError("persisted handoff packet hash does not match")
-            snapshot = HandoffSnapshot(
-                run_id=run_id,
-                run_state=run["state"],
-                run_phase=run["phase"],
-                run_version=run["version"],
-                handoff_id=handoff["id"],
-                sequence=handoff["sequence"],
-                status=handoff["status"],
-                packet=json.loads(packet_json),
-                packet_sha256=handoff["packet_sha256"],
-                created_run_version=handoff["created_run_version"],
-                submitted_run_version=handoff["submitted_run_version"],
-                created_at=handoff["created_at"],
-                closed_at=handoff["closed_at"],
-                claim=claim,
+            snapshot = self._handoff_snapshot_from_rows(
+                run_id, run, handoff, claim_row,
             )
             self.connection.execute("COMMIT")
             return snapshot
@@ -1070,7 +1086,8 @@ class Store:
                         or prior_claim.handoff_id != row["handoff_id"]
                         or prior_claim.owner_id != owner_id
                         or row["owner_id"] != owner_id
-                        or prior_claim.fencing_token != row["fencing_token"]):
+                        or prior_claim.fencing_token != row["fencing_token"]
+                        or prior_claim.expires_at != row["lease_expires_at"]):
                     raise ConflictError("handoff renewal claim is stale or expired")
                 token, action = row["fencing_token"], "renewed"
                 self.connection.execute(
@@ -1429,15 +1446,32 @@ class Store:
         consumed = page[-1]["id"] if page else after
         return {"events": [{**dict(row), "payload": json.loads(row["payload"])} for row in page], "next_cursor": consumed, "has_more": more}
 
-    def status_snapshot(self, run_id: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    def status_snapshot(
+        self, run_id: str,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None, HandoffSnapshot | None]:
         self.connection.execute("BEGIN")
         try:
             run = self.connection.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
             if not run:
                 raise ContractError("run does not exist")
             attempt = self.connection.execute("SELECT * FROM attempts WHERE run_id=? ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
+            handoff = self.connection.execute(
+                "SELECT * FROM handoffs WHERE run_id=? ORDER BY sequence DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            claim_row = None
+            if handoff:
+                claim_row = self.connection.execute(
+                    "SELECT run_id,handoff_id,owner_id,fencing_token,lease_expires_at,"
+                    "? AS run_version FROM claims WHERE run_id=? AND kind='host' "
+                    "AND handoff_id=? AND active=1",
+                    (run["version"], run_id, handoff["id"]),
+                ).fetchone()
+            handoff_snapshot = self._handoff_snapshot_from_rows(
+                run_id, run, handoff, claim_row,
+            )
             self.connection.execute("COMMIT")
-            return dict(run), dict(attempt) if attempt else None
+            return dict(run), dict(attempt) if attempt else None, handoff_snapshot
         except Exception:
             self.connection.execute("ROLLBACK")
             raise

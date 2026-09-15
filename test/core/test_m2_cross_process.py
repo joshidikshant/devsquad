@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "core" / "src"))
 
 from devsquad.service import Service
-from devsquad.store import Store
+from devsquad.store import Store, request_hash
 
 
 def service_start(runtime, task, key, barrier, results):
@@ -30,6 +30,28 @@ def service_cancel(runtime, run_id, barrier, results):
         barrier.wait(timeout=10)
         value = Service(Path(runtime)).cancel(run_id)
         results.put(("ok", value["state"], value["version"]))
+    except Exception as exc:
+        results.put(("error", type(exc).__name__, str(exc)))
+
+
+def service_handoff_claim(runtime, run_id, version, owner, barrier, results):
+    try:
+        barrier.wait(timeout=10)
+        value = Service(Path(runtime)).handoff_claim(run_id, version, owner)
+        results.put((
+            "ok", value["claim"]["owner"], value["claim"]["fencing_token"],
+        ))
+    except Exception as exc:
+        results.put(("error", type(exc).__name__, str(exc)))
+
+
+def service_handoff_complete(runtime, run_id, claim, decision, barrier, results):
+    try:
+        barrier.wait(timeout=10)
+        value = Service(Path(runtime)).handoff_complete(run_id, claim, decision)
+        results.put((
+            "ok", value["replayed"], value["recorded_run_version"],
+        ))
     except Exception as exc:
         results.put(("error", type(exc).__name__, str(exc)))
 
@@ -90,6 +112,34 @@ class CrossProcessServiceTest(unittest.TestCase):
             results.close()
             results.join_thread()
 
+    def waiting_handoff(self, key):
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            claim = store.claim_start(self.repo, key, {"task": key}, "preflight")
+            version = store.complete_preparation(
+                claim.run_id,
+                claim.fencing_token,
+                {"head": "fixed"},
+                package_path="/frozen/package",
+                package_digest="package-digest",
+            )
+            reservation = store.reserve_attempt(
+                claim.run_id, version, "supervisor", "package-digest",
+            )
+            version = store.mark_attempt_running(
+                reservation, 101, 101, "process-start-id",
+            )
+            handoff = store.publish_handoff(
+                claim.run_id,
+                version,
+                reservation.attempt_token,
+                reservation.supervisor_token,
+                {"schema_version": 1, "candidate_sha256": "c" * 64},
+            )
+            return claim.run_id, handoff.run_version
+        finally:
+            store.close()
+
     def test_identical_public_starts_share_one_run_across_processes(self):
         args = (str(self.runtime), self.task, "same-process-key")
         outcomes = self.run_processes([(service_start,args),(service_start,args)])
@@ -149,6 +199,38 @@ class CrossProcessServiceTest(unittest.TestCase):
         self.assertEqual(len({outcome[2] for outcome in outcomes}), 1)
         result = Service(self.runtime).result(claim.run_id)
         self.assertEqual([item["name"] for item in result["artifacts"]], ["result-receipt.json"])
+
+    def test_two_processes_cannot_claim_one_host_handoff(self):
+        run_id, version = self.waiting_handoff("handoff-claim-race")
+        outcomes = self.run_processes([
+            (service_handoff_claim, (str(self.runtime), run_id, version, "host-a")),
+            (service_handoff_claim, (str(self.runtime), run_id, version, "host-b")),
+        ])
+        self.assertEqual(sorted(outcome[0] for outcome in outcomes), ["error", "ok"])
+        self.assertEqual(
+            next(outcome for outcome in outcomes if outcome[0] == "error")[1],
+            "ConflictError",
+        )
+
+    def test_identical_handoff_completions_replay_across_processes(self):
+        run_id, version = self.waiting_handoff("handoff-complete-race")
+        acquired = Service(self.runtime).handoff_claim(run_id, version, "host-a")
+        body = {
+            "schema_version": 1,
+            "submission_id": "submission-1",
+            "disposition": "accept",
+            "reason": "accepted",
+            "evidence_refs": [],
+        }
+        decision = {**body, "submission_hash": request_hash(body)}
+        common = (str(self.runtime), run_id, acquired["claim"], decision)
+        outcomes = self.run_processes([
+            (service_handoff_complete, common),
+            (service_handoff_complete, common),
+        ])
+        self.assertTrue(all(outcome[0] == "ok" for outcome in outcomes), outcomes)
+        self.assertEqual(sorted(outcome[1] for outcome in outcomes), [False, True])
+        self.assertEqual(len({outcome[2] for outcome in outcomes}), 1)
 
 
 if __name__ == "__main__":

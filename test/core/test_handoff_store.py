@@ -200,6 +200,14 @@ class HandoffStoreTest(unittest.TestCase):
             self.store.claim_handoff(
                 run_id,
                 renewed.run_version,
+                "host-a",
+                first,
+                now=first_time + timedelta(minutes=6),
+            )
+        with self.assertRaises(ConflictError):
+            self.store.claim_handoff(
+                run_id,
+                renewed.run_version,
                 "host-b",
                 now=first_time + timedelta(minutes=6),
             )

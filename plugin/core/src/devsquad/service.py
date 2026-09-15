@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,7 +14,14 @@ import threading
 from typing import Any
 
 from .contracts import ContractError
-from .store import ConflictError, Store, TERMINAL_STATES, canonical_json
+from .store import (
+    ConflictError,
+    HandoffClaim,
+    HandoffSnapshot,
+    Store,
+    TERMINAL_STATES,
+    canonical_json,
+)
 from .validation import validate_task
 
 
@@ -73,6 +81,70 @@ class Service:
         if expected_root not in package.parents or self._package_digest(package)!=run["package_digest"]:
             raise ConflictError("pinned package is missing or corrupt")
         return package,run["package_digest"]
+
+    @staticmethod
+    def _claim_payload(claim: HandoffClaim) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "run_id": claim.run_id,
+            "handoff_id": claim.handoff_id,
+            "owner": claim.owner_id,
+            "fencing_token": claim.fencing_token,
+            "expires_at": claim.expires_at,
+            "run_version": claim.run_version,
+        }
+
+    @staticmethod
+    def _decode_claim(value: dict[str, Any]) -> HandoffClaim:
+        fields = {
+            "schema_version", "run_id", "handoff_id", "owner",
+            "fencing_token", "expires_at", "run_version",
+        }
+        if not isinstance(value, dict) or set(value) != fields:
+            raise ContractError("handoff claim fields are invalid")
+        if value["schema_version"] != 1 or type(value["schema_version"]) is not int:
+            raise ContractError("handoff claim schema_version is invalid")
+        for field in ("run_id", "handoff_id", "owner", "expires_at"):
+            if not isinstance(value[field], str) or not value[field]:
+                raise ContractError(f"handoff claim {field} is invalid")
+        for field in ("fencing_token", "run_version"):
+            if type(value[field]) is not int or value[field] < 1:
+                raise ContractError(f"handoff claim {field} is invalid")
+        try:
+            expires_at = datetime.fromisoformat(value["expires_at"])
+        except ValueError as exc:
+            raise ContractError("handoff claim expires_at is invalid") from exc
+        if expires_at.tzinfo is None or expires_at.utcoffset() is None:
+            raise ContractError("handoff claim expires_at is invalid")
+        return HandoffClaim(
+            run_id=value["run_id"],
+            handoff_id=value["handoff_id"],
+            owner_id=value["owner"],
+            fencing_token=value["fencing_token"],
+            expires_at=value["expires_at"],
+            run_version=value["run_version"],
+            action="presented",
+        )
+
+    @staticmethod
+    def _handoff_payload(snapshot: HandoffSnapshot, *, include_packet: bool) -> dict[str, Any]:
+        payload = {
+            "handoff_id": snapshot.handoff_id,
+            "sequence": snapshot.sequence,
+            "status": snapshot.status,
+            "packet_sha256": snapshot.packet_sha256,
+            "created_run_version": snapshot.created_run_version,
+            "submitted_run_version": snapshot.submitted_run_version,
+        }
+        if include_packet:
+            payload["packet"] = snapshot.packet
+        if snapshot.claim is not None:
+            payload["claimed_by"] = snapshot.claim.owner_id
+            payload["claim_expires_at"] = snapshot.claim.expires_at
+        else:
+            payload["claimed_by"] = None
+            payload["claim_expires_at"] = None
+        return payload
 
     @staticmethod
     def _resolve_snapshot(
@@ -194,9 +266,28 @@ class Service:
     def status(self, run_id: str) -> dict[str, Any]:
         store = self._store()
         try:
-            run, attempt = store.status_snapshot(run_id)
+            run, attempt, handoff = store.status_snapshot(run_id)
             active=attempt if attempt and attempt.get("status") in {"reserved","running","cancelling","ownership_ambiguous"} else None
-            return {"run_id": run_id, "state": run["state"], "phase": run["phase"], "version": run["version"], "active_attempt": {k: active.get(k) for k in ("id","status","pid","pgid","heartbeat_at")} if active else None, "next_action": "recovery_file_required" if run["state"] == "blocked" else None}
+            if run["state"] == "blocked":
+                next_action = "recovery_file_required"
+            elif run["state"] == "awaiting_host" and run["phase"] is None:
+                next_action = "claim_handoff"
+            elif run["state"] == "awaiting_host":
+                next_action = "handoff_submission_saved"
+            else:
+                next_action = None
+            return {
+                "run_id": run_id,
+                "state": run["state"],
+                "phase": run["phase"],
+                "version": run["version"],
+                "active_attempt": {
+                    key: active.get(key)
+                    for key in ("id", "status", "pid", "pgid", "heartbeat_at")
+                } if active else None,
+                "handoff": self._handoff_payload(handoff, include_packet=False) if handoff else None,
+                "next_action": next_action,
+            }
         finally: store.close()
 
     def events(self, run_id: str, after: int = 0, limit: int = 100) -> dict[str, Any]:
@@ -227,10 +318,69 @@ class Service:
             elif run["state"] == "queued" and run["phase"] == "launching": version = store.cancel_launching(run_id)
             elif run["state"] == "queued" and run["phase"] is None: version = store.cancel_queued(run_id)
             elif run["state"] in {"running", "cancelling"}: version, _ = store.request_cancel(run_id)
+            elif run["state"] == "awaiting_host": version = store.cancel_host_wait(run_id)
             elif run["state"] in TERMINAL_STATES: version = run["version"]
             else: raise ConflictError("run requires recovery before cancellation")
             return {"run_id": run_id, "state": store.run(run_id)["state"], "version": version}
         finally: store.close()
+
+    def handoff_claim(
+        self,
+        run_id: str,
+        expected_version: int,
+        owner: str,
+        prior_claim: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if type(expected_version) is not int or expected_version < 1:
+            raise ContractError("handoff expected version is invalid")
+        if not isinstance(owner, str) or not owner:
+            raise ContractError("handoff owner is required")
+        decoded = self._decode_claim(prior_claim) if prior_claim is not None else None
+        store = self._store()
+        try:
+            claim = store.claim_handoff(run_id, expected_version, owner, decoded)
+            snapshot = store.handoff_snapshot(run_id)
+            if snapshot is None:  # Defensive: claim_handoff just verified it.
+                raise ConflictError("claimed handoff is missing")
+            return {
+                "run_id": run_id,
+                "state": "awaiting_host",
+                "phase": None,
+                "version": claim.run_version,
+                "action": claim.action,
+                "claim": self._claim_payload(claim),
+                "handoff": self._handoff_payload(snapshot, include_packet=True),
+            }
+        finally:
+            store.close()
+
+    def handoff_complete(
+        self,
+        run_id: str,
+        claim: dict[str, Any],
+        decision: dict[str, Any],
+    ) -> dict[str, Any]:
+        decoded = self._decode_claim(claim)
+        if decoded.run_id != run_id:
+            raise ConflictError("handoff completion claim targets a different run")
+        store = self._store()
+        try:
+            submission = store.record_handoff_submission(run_id, decoded, decision)
+            run = store.run(run_id)
+            return {
+                "run_id": run_id,
+                "state": run["state"],
+                "phase": run["phase"],
+                "version": run["version"],
+                "handoff_id": submission.handoff_id,
+                "submission_id": submission.submission_id,
+                "submission_hash": submission.submission_hash,
+                "disposition": submission.disposition,
+                "recorded_run_version": submission.recorded_run_version,
+                "replayed": submission.replayed,
+            }
+        finally:
+            store.close()
 
     def resume(self, run_id: str, recovery: dict[str, Any] | None = None) -> dict[str, Any]:
         store = self._store()
