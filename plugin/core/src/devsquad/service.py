@@ -319,6 +319,9 @@ class Service:
             elif run["state"] == "queued" and run["phase"] is None: version = store.cancel_queued(run_id)
             elif run["state"] in {"running", "cancelling"}: version, _ = store.request_cancel(run_id)
             elif run["state"] == "awaiting_host": version = store.cancel_host_wait(run_id)
+            elif run["state"] == "blocked":
+                from .supervisor import Supervisor
+                version = Supervisor(store).cancel_orphan(run_id)
             elif run["state"] in TERMINAL_STATES: version = run["version"]
             else: raise ConflictError("run requires recovery before cancellation")
             return {"run_id": run_id, "state": store.run(run_id)["state"], "version": version}
@@ -393,7 +396,10 @@ class Service:
                 from .supervisor import Supervisor
                 attempt=store.attempt(run_id)
                 disposition = Supervisor(store).import_durable(run_id) if attempt and attempt.get("exit_record") else Supervisor(store).recover(run_id)
-                return {"run_id": run_id, "disposition": disposition, "launched": False}
+                if disposition != "requeued":
+                    return {"run_id": run_id, "disposition": disposition, "launched": False}
+                run = store.run(run_id)
+                version = run["version"]
             if run["state"] == "queued" and run["phase"] == "preparing":
                 submitted = json.loads(run["submitted_request"])
                 claim = store.reclaim_preparation(

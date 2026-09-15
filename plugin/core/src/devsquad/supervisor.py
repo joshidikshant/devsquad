@@ -96,6 +96,20 @@ def _live_group_exists(pgid: int) -> bool:
     return False
 
 
+def _read_child_identity(path: Path) -> tuple[int, int, str]:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("child identity record is not a regular file")
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict) or set(value) != {"pid", "pgid", "process_start_id"}:
+        raise ValueError("child identity record fields are invalid")
+    if (type(value["pid"]) is not int or value["pid"] <= 0
+            or type(value["pgid"]) is not int or value["pgid"] <= 0
+            or not isinstance(value["process_start_id"], str)
+            or not value["process_start_id"]):
+        raise ValueError("child identity record values are invalid")
+    return value["pid"], value["pgid"], value["process_start_id"]
+
+
 class BoundedDrain:
     def __init__(self, stream: BinaryIO, limit: int):
         self.stream, self.limit = stream, limit
@@ -201,6 +215,8 @@ class Supervisor:
         gate_read, gate_write = os.pipe()
         process = None
         stdin_stream = None
+        identity_committed = False
+        gate_released = False
         try:
             if spec.stdin_path is not None:
                 stdin_stream = _open_stdin_artifact(spec.stdin_path)
@@ -222,7 +238,10 @@ class Supervisor:
             started=process_start_identity(process.pid)
             if started is None: raise RuntimeError("gated child has no strong process identity")
             self.store.mark_attempt_running(reservation,process.pid,process.pid,started,paths)
-            os.write(gate_write,b"1"); os.close(gate_write)
+            identity_committed = True
+            self._release_runner_gate(gate_write)
+            gate_released = True
+            os.close(gate_write)
             return DurableAttempt(reservation,process,paths)
         except Exception:
             if stdin_stream is not None:
@@ -236,8 +255,23 @@ class Supervisor:
                 try: os.killpg(process.pid,signal.SIGKILL)
                 except ProcessLookupError: pass
                 process.wait(timeout=2)
-            self.store.fail_launch(reservation,"durable gated launch failed")
+            if not identity_committed:
+                self.store.fail_launch(reservation,"durable gated launch failed")
+            elif not gate_released:
+                self.store.recover_unstarted_attempt(
+                    run_id, reservation.attempt_token,
+                    "runner gate could not be released",
+                )
+            else:
+                self.store.block_recovery(
+                    run_id, reservation.attempt_token,
+                    "coordinator failed after releasing the runner gate",
+                )
             raise
+
+    @staticmethod
+    def _release_runner_gate(gate_write: int) -> None:
+        os.write(gate_write, b"1")
 
     def wait_durable(self, handle: DurableAttempt, timeout_seconds: float) -> int:
         deadline=time.monotonic()+timeout_seconds + self.grace_seconds + 5
@@ -262,17 +296,34 @@ class Supervisor:
             return "ownership_ambiguous"
         if not receipt_path.is_file():
             child_path=Path(attempt["child_record"] or "")
-            if child_path.is_file():
+            if child_path.exists() or child_path.is_symlink():
                 try:
-                    child=json.loads(child_path.read_text())
-                    if inspect_process(child["pid"],child["pgid"],child["process_start_id"])!="dead":
+                    child = _read_child_identity(child_path)
+                    if inspect_process(*child)!="dead":
                         self.store.block_recovery(run_id,attempt["attempt_token"],"runner died while its child may still be live")
                         return "ownership_ambiguous"
-                except (OSError,ValueError,KeyError,TypeError):
+                except (OSError, ValueError, TypeError, json.JSONDecodeError):
                     self.store.block_recovery(run_id,attempt["attempt_token"],"child identity record is invalid")
                     return "ownership_ambiguous"
-            self.store.block_recovery(run_id,attempt["attempt_token"],"runner died without an exit receipt",release_writer=True)
-            return "recovery_required"
+                self.store.block_recovery(run_id,attempt["attempt_token"],"runner and child died without an exit receipt",release_writer=True)
+                return "recovery_required"
+            try:
+                _, disposition = self.store.recover_unstarted_attempt(
+                    run_id,
+                    attempt["attempt_token"],
+                    "runner died before publishing the gated child identity",
+                )
+                return disposition
+            except ConflictError:
+                current = self.store.attempt(run_id)
+                run = self.store.run(run_id)
+                if (current and current["attempt_token"] == attempt["attempt_token"]
+                        and current["status"] == "recovery_required"
+                        and run["state"] == "queued"):
+                    return "requeued"
+                if run["state"] in {"succeeded", "failed", "cancelled"}:
+                    return run["state"]
+                raise
         try:
             receipt=json.loads(receipt_path.read_text())
             if (type(receipt.get("returncode")) is not int
@@ -316,6 +367,70 @@ class Supervisor:
         deadline=time.monotonic()+self.grace_seconds
         while handle.process.poll() is None and time.monotonic()<deadline: time.sleep(.05)
         if handle.process.poll() is None: os.killpg(attempt["pgid"],signal.SIGKILL)
+
+    def cancel_orphan(self, run_id: str) -> int:
+        """Cancel a blocked worker whose durable runner is confirmed dead."""
+        attempt = self.store.attempt(run_id)
+        if (not attempt or attempt["status"] not in {
+                "ownership_ambiguous", "recovery_required", "cancelling",
+        }):
+            raise ConflictError("run has no orphaned attempt to cancel")
+        runner_identity = (
+            attempt["pid"], attempt["pgid"], attempt["process_start_id"],
+        )
+        if all(value is None for value in runner_identity):
+            runner = "dead"
+        elif (type(runner_identity[0]) is int and runner_identity[0] > 0
+                and type(runner_identity[1]) is int and runner_identity[1] > 0
+                and isinstance(runner_identity[2], str) and runner_identity[2]):
+            runner = inspect_process(*runner_identity)
+        else:
+            raise ConflictError("orphan runner identity record is invalid")
+        if runner != "dead":
+            raise ConflictError("orphan runner identity is not confirmed dead")
+
+        child = None
+        classification = "dead"
+        child_record = attempt["child_record"]
+        if child_record:
+            child_path = Path(child_record)
+        else:
+            child_path = None
+        if child_path is not None and (child_path.exists() or child_path.is_symlink()):
+            try:
+                child = _read_child_identity(child_path)
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                raise ConflictError("orphan child identity record is invalid") from exc
+            classification = inspect_process(*child)
+        if classification == "ambiguous":
+            raise ConflictError("orphan child identity is ambiguous or reused")
+
+        self.store.request_recovery_cancel(run_id, attempt["attempt_token"])
+        if child is not None and classification == "live":
+            classification = inspect_process(*child)
+            if classification == "ambiguous":
+                raise ConflictError("orphan child identity changed before cancellation")
+            if classification == "live":
+                try:
+                    os.killpg(child[1], signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                deadline = time.monotonic() + self.grace_seconds
+                while _live_group_exists(child[1]) and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                if _live_group_exists(child[1]):
+                    try:
+                        os.killpg(child[1], signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    deadline = time.monotonic() + max(self.grace_seconds, 2.0)
+                    while _live_group_exists(child[1]) and time.monotonic() < deadline:
+                        time.sleep(0.05)
+                if _live_group_exists(child[1]):
+                    raise ConflictError("orphan child survived bounded cancellation")
+        return self.store.finish_recovery_cancel(
+            run_id, attempt["attempt_token"], "orphaned worker cleanup confirmed",
+        )
 
     def _persist_output(self, handle: RunningAttempt) -> dict[str, Any]:
         stdout_meta, stderr_meta = handle.stdout.finish(), handle.stderr.finish()

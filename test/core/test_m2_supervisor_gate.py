@@ -81,6 +81,30 @@ class SupervisorGateReview(unittest.TestCase):
         reservation = self.store.reserve_attempt(second, second_version, "other-owner", "package")
         self.assertTrue(reservation.attempt_token)
 
+    def test_durable_outer_gate_failure_requeues_without_running_command(self):
+        run_id, version = self._ready_run("outer-gate-failure")
+        marker = self.root / "GATE_COMMAND_EXECUTED"
+        code = f"from pathlib import Path;Path({str(marker)!r}).write_text('executed')"
+        source = str(ROOT / "plugin" / "core" / "src")
+        with mock.patch.dict(os.environ, {"PYTHONPATH": source}), \
+             mock.patch.object(
+                 self.supervisor,
+                 "_release_runner_gate",
+                 side_effect=OSError("synthetic gate failure"),
+             ):
+            with self.assertRaisesRegex(OSError, "synthetic gate failure"):
+                self.supervisor.launch_durable(
+                    run_id,
+                    version,
+                    self._spec(sys.executable, "-c", code),
+                    "owner",
+                    "package",
+                )
+        run = self.store.run(run_id)
+        self.assertEqual((run["state"], run["phase"]), ("queued", None))
+        self.assertEqual(self.store.attempt(run_id)["status"], "recovery_required")
+        self.assertFalse(marker.exists())
+
     def test_output_is_bounded_but_full_stream_is_accounted(self):
         run_id, version = self._ready_run("output")
         code = "import sys;sys.stdout.write('o'*1000);sys.stderr.write('e'*2000)"
@@ -167,6 +191,10 @@ class SupervisorGateReview(unittest.TestCase):
                 linked_run,linked_version,linked_spec,"owner","package",
             )
         self.assertEqual(self.store.run(linked_run)["state"],"blocked")
+        version = self.supervisor.cancel_orphan(linked_run)
+        self.assertEqual(self.store.run(linked_run)["state"], "cancelled")
+        self.assertEqual(self.store.run(linked_run)["version"], version)
+        self.assertIsNotNone(self.store.artifact_named(linked_run, "result-receipt.json"))
 
     def test_recovery_never_signals_an_ambiguous_identity(self):
         run_id, version = self._ready_run("ambiguous")

@@ -308,6 +308,7 @@ class Store:
         phase: str,
         payload: Any,
         *,
+        attempt_id: str | None = None,
         now: str | None = None,
     ) -> tuple[Path, str, int, str]:
         finished_at = now or _utc_now()
@@ -316,7 +317,7 @@ class Store:
             "run_id": run_id,
             "state": terminal_state,
             "phase": phase,
-            "attempt_id": None,
+            "attempt_id": attempt_id,
             "returncode": None,
             "cancelled": terminal_state == "cancelled",
             "timed_out": False,
@@ -805,6 +806,200 @@ class Store:
             self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,))
             self.connection.execute("UPDATE runs SET state='blocked',phase='recovery_required',version=?,updated_at=? WHERE id=?", (version, now, run_id))
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.blocked',?,?)", (run_id, version, canonical_json({"reason": reason, "next_action": "RECOVERY_REQUIRED"}), now))
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def recover_unstarted_attempt(
+        self, run_id: str, attempt_token: str, reason: str,
+    ) -> tuple[int, str]:
+        """Recover a dead gated runner that never published a child identity.
+
+        The supervisor must first establish that the runner is dead and the
+        atomic child record is absent. The inner gate cannot open before that
+        record is durable, so no worker command can have executed in this case.
+        """
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status,child_record FROM attempts "
+                "WHERE run_id=? AND attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            if (not run or not attempt or run["state"] not in {"running", "cancelling"}
+                    or run["phase"] is not None
+                    or attempt["status"] not in {"running", "cancelling"}):
+                raise ConflictError("unstarted attempt recovery is fenced")
+            if not attempt["child_record"]:
+                raise ConflictError("unstarted attempt has no durable child-record path")
+            if Path(attempt["child_record"]).exists() or Path(attempt["child_record"]).is_symlink():
+                raise ConflictError("unstarted attempt now has a child identity record")
+            now = _utc_now()
+            if run["state"] == "cancelling":
+                path, digest, size, receipt_time = self._terminal_receipt(
+                    run_id,
+                    "cancelled",
+                    "cancelling",
+                    None,
+                    attempt_id=attempt["id"],
+                    now=now,
+                )
+                version = self._reference_terminal_receipt(
+                    run_id, run["version"], path, digest, size, receipt_time,
+                ) + 1
+                self.connection.execute(
+                    "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
+                    (now, attempt["id"]),
+                )
+                self.connection.execute(
+                    "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+                )
+                self.connection.execute(
+                    "UPDATE runs SET state='cancelled',phase=NULL,version=?,updated_at=? "
+                    "WHERE id=?",
+                    (version, now, run_id),
+                )
+                payload = canonical_json({
+                    "attempt_id": attempt["id"],
+                    "reason": reason,
+                    "receipt": "result-receipt.json",
+                })
+                self.connection.execute(
+                    "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                    "VALUES(?,?,'run.cancelled',?,?)",
+                    (run_id, version, payload, now),
+                )
+                disposition = "cancelled"
+            else:
+                version = run["version"] + 1
+                self.connection.execute(
+                    "UPDATE attempts SET status='recovery_required',finished_at=? WHERE id=?",
+                    (now, attempt["id"]),
+                )
+                self.connection.execute(
+                    "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+                )
+                self.connection.execute(
+                    "UPDATE runs SET state='queued',phase=NULL,version=?,updated_at=? WHERE id=?",
+                    (version, now, run_id),
+                )
+                self.connection.execute(
+                    "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                    "VALUES(?,?,'run.unstarted_attempt_recovered',?,?)",
+                    (run_id, version, canonical_json({
+                        "attempt_id": attempt["id"], "reason": reason,
+                    }), now),
+                )
+                disposition = "requeued"
+            self.connection.execute("COMMIT")
+            return version, disposition
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def request_recovery_cancel(self, run_id: str, attempt_token: str) -> int:
+        """Persist cancellation intent for an ownerless blocked attempt."""
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status FROM attempts WHERE run_id=? AND attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            if not run or not attempt:
+                raise ConflictError("recovery cancellation is fenced")
+            if run["state"] in TERMINAL_STATES:
+                self.connection.execute("COMMIT")
+                return run["version"]
+            if run["state"] == "cancelling" and attempt["status"] == "cancelling":
+                self.connection.execute("COMMIT")
+                return run["version"]
+            if (run["state"] != "blocked" or run["phase"] != "recovery_required"
+                    or attempt["status"] not in {"ownership_ambiguous", "recovery_required"}):
+                raise ConflictError("run is not awaiting recovery cancellation")
+            version, now = run["version"] + 1, _utc_now()
+            self.connection.execute(
+                "UPDATE attempts SET status='cancelling',heartbeat_at=?,finished_at=NULL WHERE id=?",
+                (now, attempt["id"]),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='cancelling',phase='recovery_cleanup',"
+                "version=?,updated_at=? WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({"attempt_id": attempt["id"]})
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.cancelling',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def finish_recovery_cancel(
+        self, run_id: str, attempt_token: str, reason: str,
+    ) -> int:
+        """Finish an ownerless cancellation only after absence is confirmed."""
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status FROM attempts WHERE run_id=? AND attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            if not run or not attempt:
+                raise ConflictError("recovery cancellation completion is fenced")
+            if run["state"] in TERMINAL_STATES:
+                self.connection.execute("COMMIT")
+                return run["version"]
+            if (run["state"] != "cancelling" or run["phase"] != "recovery_cleanup"
+                    or attempt["status"] != "cancelling"):
+                raise ConflictError("recovery cancellation is not active")
+            now = _utc_now()
+            path, digest, size, receipt_time = self._terminal_receipt(
+                run_id,
+                "cancelled",
+                "recovery_cleanup",
+                None,
+                attempt_id=attempt["id"],
+                now=now,
+            )
+            version = self._reference_terminal_receipt(
+                run_id, run["version"], path, digest, size, receipt_time,
+            ) + 1
+            self.connection.execute(
+                "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
+                (now, attempt["id"]),
+            )
+            self.connection.execute(
+                "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='cancelled',phase=NULL,version=?,updated_at=? WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({
+                "attempt_id": attempt["id"],
+                "reason": reason,
+                "receipt": "result-receipt.json",
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.cancelled',?,?)",
+                (run_id, version, payload, now),
+            )
             self.connection.execute("COMMIT")
             return version
         except Exception:

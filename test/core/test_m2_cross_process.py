@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,6 +17,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "core" / "src"))
 
 from devsquad.service import Service
 from devsquad.store import Store, request_hash
+from devsquad.supervisor import inspect_process
 
 
 def service_start(runtime, task, key, barrier, results):
@@ -140,6 +144,15 @@ class CrossProcessServiceTest(unittest.TestCase):
         finally:
             store.close()
 
+    def wait_state(self, run_id, expected, timeout=8):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status = Service(self.runtime).status(run_id)
+            if status["state"] in expected:
+                return status
+            time.sleep(0.05)
+        self.fail(f"run did not reach {expected}: {Service(self.runtime).status(run_id)}")
+
     def test_identical_public_starts_share_one_run_across_processes(self):
         args = (str(self.runtime), self.task, "same-process-key")
         outcomes = self.run_processes([(service_start,args),(service_start,args)])
@@ -199,6 +212,62 @@ class CrossProcessServiceTest(unittest.TestCase):
         self.assertEqual(len({outcome[2] for outcome in outcomes}), 1)
         result = Service(self.runtime).result(claim.run_id)
         self.assertEqual([item["name"] for item in result["artifacts"]], ["result-receipt.json"])
+
+    def test_running_cancel_race_reaps_runner_and_worker_once(self):
+        service = Service(self.runtime)
+        started = service.start(
+            self.task, "running-cancel-race", _internal_fake_delay=30,
+        )
+        self.wait_state(started["run_id"], {"running"})
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        child = None
+        try:
+            attempt = store.attempt(started["run_id"])
+            child_path = Path(attempt["child_record"])
+            deadline = time.monotonic() + 5
+            while not child_path.is_file() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertTrue(child_path.is_file())
+            child = json.loads(child_path.read_text())
+        finally:
+            store.close()
+        try:
+            args = (str(self.runtime), started["run_id"])
+            outcomes = self.run_processes([(service_cancel, args), (service_cancel, args)])
+            self.assertTrue(all(outcome[0] == "ok" for outcome in outcomes), outcomes)
+            self.assertTrue(all(outcome[1] in {"cancelling", "cancelled"} for outcome in outcomes))
+            self.wait_state(started["run_id"], {"cancelled"})
+
+            deadline = time.monotonic() + 5
+            while (inspect_process(
+                    attempt["pid"], attempt["pgid"], attempt["process_start_id"],
+                    ) != "dead" and time.monotonic() < deadline):
+                time.sleep(0.02)
+            self.assertEqual(
+                inspect_process(attempt["pid"], attempt["pgid"], attempt["process_start_id"]),
+                "dead",
+            )
+            self.assertEqual(
+                inspect_process(child["pid"], child["pgid"], child["process_start_id"]),
+                "dead",
+            )
+            result = service.result(started["run_id"])
+            self.assertTrue(result["ready"])
+            store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+            try:
+                types = [
+                    event["type"]
+                    for event in store.events_page(started["run_id"], limit=1000)["events"]
+                ]
+                self.assertEqual(types.count("run.cancelling"), 1)
+                self.assertEqual(types.count("run.cancelled"), 1)
+            finally:
+                store.close()
+        finally:
+            if child and inspect_process(
+                    child["pid"], child["pgid"], child["process_start_id"],
+                    ) == "live":
+                os.killpg(child["pgid"], signal.SIGKILL)
 
     def test_two_processes_cannot_claim_one_host_handoff(self):
         run_id, version = self.waiting_handoff("handoff-claim-race")

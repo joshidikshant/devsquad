@@ -13,6 +13,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
+from devsquad.contracts import ExecutionIdentity, LaunchSpec
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store
 from devsquad.supervisor import Supervisor, inspect_process
@@ -35,6 +36,29 @@ def crash_after_attempt_reservation(database, artifacts, run_id, expected_versio
     store = Store(Path(database), Path(artifacts))
     store.reserve_attempt(run_id, expected_version, "crashed-supervisor", package_digest)
     os._exit(23)
+
+
+def crash_after_runner_identity(
+    database, artifacts, run_id, expected_version, package_path,
+    package_digest, repo, marker,
+):
+    os.environ["PYTHONPATH"] = package_path
+    store = Store(Path(database), Path(artifacts))
+    identity = ExecutionIdentity("fixture", "1", None, None, None, None)
+    command = (
+        sys.executable,
+        "-c",
+        f"from pathlib import Path; Path({marker!r}).write_text('executed')",
+    )
+    spec = LaunchSpec(
+        1, "fixture", "cli_exec", command, repo, None, 30, identity,
+    )
+    supervisor = Supervisor(store)
+    supervisor._release_runner_gate = lambda _: os._exit(24)
+    supervisor.launch_durable(
+        run_id, expected_version, spec, "crashed-after-identity", package_digest,
+    )
+    os._exit(99)
 
 
 class ServiceTest(unittest.TestCase):
@@ -193,6 +217,70 @@ class ServiceTest(unittest.TestCase):
         finally:
             store.close()
 
+    def test_crash_after_runner_identity_before_gate_requeues_without_execution(self):
+        with mock.patch.object(self.service,"_spawn_daemon",return_value=0):
+            started=self.service.start(
+                self.task,"identity-before-gate",_internal_fake_delay=.01,
+            )
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(started["run_id"])
+            expected_version=run["version"]
+            package_path=run["package_path"]
+            package_digest=run["package_digest"]
+        finally:
+            store.close()
+        marker=self.root/"PRE_GATE_COMMAND_EXECUTED"
+        context=multiprocessing.get_context("spawn")
+        process=context.Process(
+            target=crash_after_runner_identity,
+            args=(
+                str(self.runtime/"state.sqlite3"),str(self.runtime/"artifacts"),
+                started["run_id"],expected_version,package_path,package_digest,
+                str(self.repo),str(marker),
+            ),
+        )
+        process.start(); process.join(timeout=10)
+        if process.is_alive():
+            process.terminate(); process.join(timeout=2)
+        self.assertEqual(process.exitcode,24)
+
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            attempt=store.attempt(started["run_id"])
+            deadline=time.monotonic()+5
+            while (inspect_process(
+                    attempt["pid"],attempt["pgid"],attempt["process_start_id"],
+                    )=="live" and time.monotonic()<deadline):
+                time.sleep(.02)
+            self.assertEqual(
+                inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"]),
+                "dead",
+            )
+            self.assertFalse(Path(attempt["child_record"]).exists())
+            self.assertFalse(marker.exists())
+        finally:
+            store.close()
+
+        resumed=self.service.resume(started["run_id"])
+        self.assertTrue(resumed["launched"])
+        self.assertEqual(resumed["disposition"],"continued")
+        self.wait_state(started["run_id"],{"succeeded"})
+        self.assertFalse(marker.exists())
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            attempts=store.connection.execute(
+                "SELECT status FROM attempts WHERE run_id=? ORDER BY created_at",
+                (started["run_id"],),
+            ).fetchall()
+            self.assertEqual([row["status"] for row in attempts],["recovery_required","finished"])
+            events=store.events_page(started["run_id"],limit=1000)["events"]
+            self.assertEqual(
+                sum(event["type"]=="run.unstarted_attempt_recovered" for event in events),1,
+            )
+        finally:
+            store.close()
+
     def test_dead_supervisor_with_live_child_never_relaunches(self):
         started=self.service.start(self.task,"daemon-crash",_internal_fake_delay=10)
         status=self.wait_state(started["run_id"],{"running"})
@@ -207,6 +295,65 @@ class ServiceTest(unittest.TestCase):
             self.assertEqual(store.connection.execute("SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],)).fetchone()[0],1)
             os.killpg(attempt["pgid"],signal.SIGKILL)
         finally: store.close()
+
+    def test_runner_death_with_live_child_can_be_safely_cancelled(self):
+        started=self.service.start(
+            self.task,"orphan-child-cancel",_internal_fake_delay=30,
+        )
+        self.wait_state(started["run_id"],{"running"})
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        child=None
+        try:
+            attempt=store.attempt(started["run_id"])
+            child_path=Path(attempt["child_record"])
+            deadline=time.monotonic()+5
+            while not child_path.is_file() and time.monotonic()<deadline:
+                time.sleep(.02)
+            self.assertTrue(child_path.is_file())
+            child=json.loads(child_path.read_text())
+            self.assertEqual(
+                inspect_process(child["pid"],child["pgid"],child["process_start_id"]),
+                "live",
+            )
+            os.killpg(attempt["pgid"],signal.SIGKILL)
+        finally:
+            store.close()
+        try:
+            blocked=self.wait_state(started["run_id"],{"blocked"})
+            self.assertEqual(blocked["phase"],"recovery_required")
+            store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+            try:
+                attempt=store.attempt(started["run_id"])
+                self.assertEqual(attempt["status"],"ownership_ambiguous")
+                self.assertEqual(
+                    store.connection.execute(
+                        "SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],),
+                    ).fetchone()[0],1,
+                )
+            finally:
+                store.close()
+            retained=self.service.resume(started["run_id"],{
+                "attempt_id":attempt["id"],"disposition":"retain_ownership",
+            })
+            self.assertFalse(retained["launched"])
+            cancelled=self.service.cancel(started["run_id"])
+            self.assertEqual(cancelled["state"],"cancelled")
+            self.assertEqual(
+                inspect_process(child["pid"],child["pgid"],child["process_start_id"]),
+                "dead",
+            )
+            result=self.service.result(started["run_id"])
+            receipt=json.loads(Path(next(
+                artifact["path"] for artifact in result["artifacts"]
+                if artifact["name"]=="result-receipt.json"
+            )).read_text())
+            self.assertEqual(receipt["attempt_id"],attempt["id"])
+            self.assertEqual(receipt["phase"],"recovery_cleanup")
+        finally:
+            if child and inspect_process(
+                    child["pid"],child["pgid"],child["process_start_id"],
+                    )=="live":
+                os.killpg(child["pgid"],signal.SIGKILL)
 
     def test_orphan_artifact_is_not_a_result(self):
         with mock.patch.object(self.service,"_spawn_daemon",return_value=0):
