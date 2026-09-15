@@ -317,6 +317,9 @@ class Service:
             if run["state"] == "queued" and run["phase"] == "preparing": version = store.cancel_preparing(run_id)
             elif run["state"] == "queued" and run["phase"] == "launching": version = store.cancel_launching(run_id)
             elif run["state"] == "queued" and run["phase"] is None: version = store.cancel_queued(run_id)
+            elif run["state"] == "cancelling" and run["phase"] == "recovery_cleanup":
+                from .supervisor import Supervisor
+                version = Supervisor(store).cancel_orphan(run_id)
             elif run["state"] in {"running", "cancelling"}: version, _ = store.request_cancel(run_id)
             elif run["state"] == "awaiting_host": version = store.cancel_host_wait(run_id)
             elif run["state"] == "blocked":

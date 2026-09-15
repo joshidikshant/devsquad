@@ -1147,9 +1147,9 @@ class Store:
             raise ContractError("handoff publication requires valid ownership and packet fields")
         packet_json = canonical_json(packet)
         packet_sha256 = hashlib.sha256(packet_json.encode()).hexdigest()
-        timestamp = _authoritative_now(now).isoformat()
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            timestamp = _authoritative_now(now).isoformat()
             row = self.connection.execute(
                 "SELECT r.state,r.phase,r.version,a.id AS attempt_id,a.status AS attempt_status,"
                 "s.fencing_token AS supervisor_token,s.active AS supervisor_active "
@@ -1251,11 +1251,11 @@ class Store:
             raise ContractError("handoff claim requires a run version and owner")
         if prior_claim is not None and not isinstance(prior_claim, HandoffClaim):
             raise ContractError("prior handoff claim is invalid")
-        current = _authoritative_now(now)
-        timestamp = current.isoformat()
-        expires_at = (current + timedelta(seconds=HOST_LEASE_SECONDS)).isoformat()
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            current = _authoritative_now(now)
+            timestamp = current.isoformat()
+            expires_at = (current + timedelta(seconds=HOST_LEASE_SECONDS)).isoformat()
             row = self.connection.execute(
                 "SELECT r.state,r.phase,r.version,h.id AS handoff_id,h.status,"
                 "c.kind,c.owner_id,c.fencing_token,c.active,c.handoff_id AS claim_handoff_id,"
@@ -1389,12 +1389,12 @@ class Store:
         )
         decision_json = canonical_json(decision)
         evidence_json = canonical_json(evidence_refs)
-        current = _authoritative_now(now)
-        timestamp = current.isoformat()
         rejection = None
         result = None
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            current = _authoritative_now(now)
+            timestamp = current.isoformat()
             run = self.connection.execute(
                 "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
             ).fetchone()
@@ -1538,10 +1538,9 @@ class Store:
         return result
 
     def cancel_host_wait(self, run_id: str, *, now: datetime | None = None) -> int:
-        current = _authoritative_now(now)
-        timestamp = current.isoformat()
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            timestamp = _authoritative_now(now).isoformat()
             run = self.connection.execute(
                 "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
             ).fetchone()

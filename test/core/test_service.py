@@ -68,6 +68,19 @@ def crash_after_artifact_finalize_before_import(database, artifacts, run_id):
     os._exit(99)
 
 
+def crash_after_recovery_cancel_commits(database, artifacts, run_id):
+    store = Store(Path(database), Path(artifacts))
+    request_recovery_cancel = store.request_recovery_cancel
+
+    def request_then_crash(cancel_run_id, attempt_token):
+        request_recovery_cancel(cancel_run_id, attempt_token)
+        os._exit(26)
+
+    store.request_recovery_cancel = request_then_crash
+    Supervisor(store).cancel_orphan(run_id)
+    os._exit(99)
+
+
 class ServiceTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="devsquad-service-")
@@ -356,6 +369,84 @@ class ServiceTest(unittest.TestCase):
             )).read_text())
             self.assertEqual(receipt["attempt_id"],attempt["id"])
             self.assertEqual(receipt["phase"],"recovery_cleanup")
+        finally:
+            if child and inspect_process(
+                    child["pid"],child["pgid"],child["process_start_id"],
+                    )=="live":
+                os.killpg(child["pgid"],signal.SIGKILL)
+
+    def test_public_cancel_resumes_crashed_orphan_cleanup_once(self):
+        started=self.service.start(
+            self.task,"orphan-cancel-restart",_internal_fake_delay=30,
+        )
+        self.wait_state(started["run_id"],{"running"})
+        child=None
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            attempt=store.attempt(started["run_id"])
+            child_path=Path(attempt["child_record"])
+            deadline=time.monotonic()+5
+            while not child_path.is_file() and time.monotonic()<deadline:
+                time.sleep(.02)
+            self.assertTrue(child_path.is_file())
+            child=json.loads(child_path.read_text())
+            self.assertEqual(
+                inspect_process(child["pid"],child["pgid"],child["process_start_id"]),
+                "live",
+            )
+            os.killpg(attempt["pgid"],signal.SIGKILL)
+        finally:
+            store.close()
+        try:
+            blocked=self.wait_state(started["run_id"],{"blocked"})
+            self.assertEqual(blocked["phase"],"recovery_required")
+
+            context=multiprocessing.get_context("spawn")
+            process=context.Process(
+                target=crash_after_recovery_cancel_commits,
+                args=(
+                    str(self.runtime/"state.sqlite3"),str(self.runtime/"artifacts"),
+                    started["run_id"],
+                ),
+            )
+            process.start(); process.join(timeout=10)
+            if process.is_alive():
+                process.terminate(); process.join(timeout=2)
+            self.assertEqual(process.exitcode,26)
+            interrupted=self.service.status(started["run_id"])
+            self.assertEqual(
+                (interrupted["state"],interrupted["phase"]),
+                ("cancelling","recovery_cleanup"),
+            )
+            self.assertEqual(
+                inspect_process(child["pid"],child["pgid"],child["process_start_id"]),
+                "live",
+            )
+
+            first=self.service.cancel(started["run_id"])
+            second=self.service.cancel(started["run_id"])
+            self.assertEqual(first["state"],"cancelled")
+            self.assertEqual(second,first)
+            self.assertEqual(
+                inspect_process(child["pid"],child["pgid"],child["process_start_id"]),
+                "dead",
+            )
+
+            result=self.service.result(started["run_id"])
+            receipts=[
+                artifact for artifact in result["artifacts"]
+                if artifact["name"]=="result-receipt.json"
+            ]
+            self.assertEqual(len(receipts),1)
+            receipt=json.loads(Path(receipts[0]["path"]).read_text())
+            self.assertEqual(receipt["phase"],"recovery_cleanup")
+            events=self.service.events(started["run_id"],limit=1000)["events"]
+            self.assertEqual(
+                sum(event["type"]=="run.cancelling" for event in events),1,
+            )
+            self.assertEqual(
+                sum(event["type"]=="run.cancelled" for event in events),1,
+            )
         finally:
             if child and inspect_process(
                     child["pid"],child["pgid"],child["process_start_id"],

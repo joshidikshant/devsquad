@@ -8,7 +8,9 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
@@ -89,6 +91,88 @@ class HandoffStoreTest(unittest.TestCase):
             "evidence_refs": [],
         }
         return {**body, "submission_hash": request_hash(body)}
+
+    def claim_with_deadline(self, key, deadline):
+        run_id, _, snapshot = self.waiting_run(key)
+        claim = self.store.claim_handoff(
+            run_id,
+            snapshot.run_version,
+            "host",
+            now=deadline - timedelta(minutes=1),
+        )
+        expires_at = deadline.isoformat()
+        self.store.connection.execute(
+            "UPDATE claims SET lease_expires_at=? WHERE run_id=?",
+            (expires_at, run_id),
+        )
+        return run_id, HandoffClaim(
+            run_id=claim.run_id,
+            handoff_id=claim.handoff_id,
+            owner_id=claim.owner_id,
+            fencing_token=claim.fencing_token,
+            expires_at=expires_at,
+            run_version=claim.run_version,
+            action=claim.action,
+        )
+
+    def run_after_independent_writer_wait(self, deadline, operation):
+        """Run an operation whose BEGIN IMMEDIATE is blocked across a lease expiry."""
+        ready = threading.Event()
+        begin_attempted = threading.Event()
+        release_started = threading.Event()
+        failures = []
+        connection = self.store.connection
+
+        class BeginNotifyingConnection:
+            def execute(self, statement, *args, **kwargs):
+                if statement == "BEGIN IMMEDIATE":
+                    begin_attempted.set()
+                return connection.execute(statement, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(connection, name)
+
+        def hold_lock():
+            writer = sqlite3.connect(self.database, timeout=5, isolation_level=None)
+            try:
+                writer.execute("PRAGMA busy_timeout=5000")
+                writer.execute("BEGIN IMMEDIATE")
+                ready.set()
+                if not begin_attempted.wait(5):
+                    raise AssertionError("handoff operation did not attempt its write transaction")
+                # Give the caller time to enter SQLite's busy wait before releasing the lock.
+                time.sleep(0.05)
+                release_started.set()
+                writer.execute("COMMIT")
+            except BaseException as exc:  # Preserve thread failures for the assertion owner.
+                failures.append(exc)
+                ready.set()
+            finally:
+                if writer.in_transaction:
+                    writer.execute("ROLLBACK")
+                writer.close()
+
+        thread = threading.Thread(target=hold_lock)
+        thread.start()
+        self.store.connection = BeginNotifyingConnection()
+        try:
+            self.assertTrue(ready.wait(5), "independent SQLite writer did not acquire its lock")
+            self.assertEqual(failures, [])
+            before_expiry = deadline - timedelta(seconds=1)
+            after_expiry = deadline + timedelta(seconds=1)
+            with mock.patch(
+                "devsquad.store._authoritative_now",
+                side_effect=lambda value=None: (
+                    after_expiry if release_started.is_set() else before_expiry
+                ),
+            ):
+                return operation()
+        finally:
+            begin_attempted.set()
+            thread.join(5)
+            self.store.connection = connection
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(failures, [])
 
     def test_schema_four_fixture_migrates_to_host_handoffs(self):
         old_database = self.root / "schema-four.sqlite3"
@@ -251,6 +335,51 @@ class HandoffStoreTest(unittest.TestCase):
             thread.join()
         self.assertEqual(len(claims), 1)
         self.assertEqual(len(conflicts), 1)
+
+    def test_renewal_checks_expiry_after_waiting_for_write_lock(self):
+        deadline = datetime(2026, 9, 15, 5, 2, tzinfo=timezone.utc)
+        run_id, claim = self.claim_with_deadline("renewal-lock", deadline)
+        version_before = self.store.run(run_id)["version"]
+        with self.assertRaisesRegex(ConflictError, "stale or expired"):
+            self.run_after_independent_writer_wait(
+                deadline,
+                lambda: self.store.claim_handoff(
+                    run_id,
+                    version_before,
+                    claim.owner_id,
+                    claim,
+                ),
+            )
+        self.assertEqual(self.store.run(run_id)["version"], version_before)
+        persisted = self.store.connection.execute(
+            "SELECT lease_expires_at,renewed_at FROM claims WHERE run_id=?", (run_id,),
+        ).fetchone()
+        self.assertEqual(tuple(persisted), (claim.expires_at, None))
+
+    def test_completion_checks_expiry_after_waiting_for_write_lock(self):
+        deadline = datetime(2026, 9, 15, 5, 2, tzinfo=timezone.utc)
+        run_id, claim = self.claim_with_deadline("completion-lock", deadline)
+        version_before = self.store.run(run_id)["version"]
+        with self.assertRaisesRegex(ConflictError, "expired_claim"):
+            self.run_after_independent_writer_wait(
+                deadline,
+                lambda: self.store.record_handoff_submission(
+                    run_id, claim, self.decision(),
+                ),
+            )
+        run = self.store.run(run_id)
+        self.assertEqual(
+            (run["state"], run["phase"], run["version"]),
+            ("awaiting_host", None, version_before + 1),
+        )
+        rejection = self.store.connection.execute(
+            "SELECT outcome,rejection_code,recorded_run_version "
+            "FROM handoff_submissions WHERE handoff_id=?",
+            (claim.handoff_id,),
+        ).fetchone()
+        self.assertEqual(
+            tuple(rejection), ("rejected", "expired_claim", version_before + 1),
+        )
 
     def test_expired_submission_is_audited_and_cannot_displace_takeover(self):
         run_id, _, snapshot = self.waiting_run()
