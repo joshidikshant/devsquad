@@ -48,6 +48,13 @@ class AttemptReservation:
     version: int
 
 
+@dataclass(frozen=True)
+class PreparationClaim:
+    run_id: str
+    fencing_token: int
+    version: int
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -163,6 +170,89 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def reclaim_preparation(self, run_id: str, expected_version: int, owner_id: str) -> PreparationClaim:
+        """Take over an interrupted preflight while fencing its former owner."""
+        if type(expected_version) is not int or expected_version < 1 or not owner_id:
+            raise ContractError("preparation recovery requires a version and owner")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,c.fencing_token "
+                "FROM runs r JOIN claims c ON c.run_id=r.id WHERE r.id=?",
+                (run_id,),
+            ).fetchone()
+            if (not row or row["state"] != "queued" or row["phase"] != "preparing"
+                    or row["version"] != expected_version):
+                raise ConflictError("preparation is no longer recoverable at that version")
+            token, version, now = row["fencing_token"] + 1, expected_version + 1, _utc_now()
+            self.connection.execute(
+                "UPDATE claims SET fencing_token=?,owner_id=?,active=1,claimed_at=? WHERE run_id=?",
+                (token, owner_id, now, run_id),
+            )
+            self.connection.execute(
+                "UPDATE runs SET version=?,updated_at=? WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({"owner_id": owner_id, "fencing_token": token})
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.preparation_reclaimed',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return PreparationClaim(run_id, token, version)
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def _terminal_receipt(self, run_id: str, terminal_state: str, phase: str, payload: Any) -> tuple[Path, str, int, str]:
+        finished_at = _utc_now()
+        receipt = {
+            "schema_version": 1,
+            "run_id": run_id,
+            "state": terminal_state,
+            "phase": phase,
+            "attempt_id": None,
+            "returncode": None,
+            "cancelled": terminal_state == "cancelled",
+            "timed_out": False,
+            "error": payload if terminal_state == "failed" else None,
+            "finished_at": finished_at,
+        }
+        path, digest, size = self.finalize_artifact(
+            run_id, "result-receipt.json", canonical_json(receipt).encode(),
+        )
+        return path, digest, size, finished_at
+
+    def _reference_terminal_receipt(
+        self,
+        run_id: str,
+        version: int,
+        path: Path,
+        digest: str,
+        size: int,
+        now: str,
+    ) -> int:
+        artifact_id = str(uuid.uuid4())
+        self.connection.execute(
+            "INSERT INTO artifacts(id,run_id,name,path,sha256,byte_size,created_at) "
+            "VALUES(?,?,'result-receipt.json',?,?,?,?)",
+            (artifact_id, run_id, str(path), digest, size, now),
+        )
+        version += 1
+        artifact_event = canonical_json({
+            "artifact_id": artifact_id,
+            "name": "result-receipt.json",
+            "sha256": digest,
+            "byte_size": size,
+        })
+        self.connection.execute(
+            "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+            "VALUES(?,?,'artifact.recorded',?,?)",
+            (run_id, version, artifact_event, now),
+        )
+        return version
+
     def complete_preparation(self, run_id: str, fencing_token: int, mutable_snapshot: Any, *, package_path: str | None = None, package_digest: str | None = None, supersedes_run_id: str | None = None) -> int:
         snapshot = canonical_json(mutable_snapshot)
         self.connection.execute("BEGIN IMMEDIATE")
@@ -188,20 +278,51 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
-    def fail_preparation(self, run_id: str, fencing_token: int, error: Any) -> int:
+    def fail_preparation(
+        self,
+        run_id: str,
+        fencing_token: int,
+        error: Any,
+        *,
+        mutable_snapshot: Any | None = None,
+        supersedes_run_id: str | None = None,
+    ) -> int:
         encoded = canonical_json(error)
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             row = self.connection.execute(
-                "SELECT r.state,r.phase,r.version,c.fencing_token,c.active FROM runs r JOIN claims c ON c.run_id=r.id WHERE r.id=?",
+                "SELECT r.project_id,r.state,r.phase,r.version,c.fencing_token,c.active "
+                "FROM runs r JOIN claims c ON c.run_id=r.id WHERE r.id=?",
                 (run_id,),
             ).fetchone()
             if not row or row["state"] != "queued" or row["phase"] != "preparing" or not row["active"] or row["fencing_token"] != fencing_token:
                 raise ConflictError("preparation failure is stale or cancelled")
-            version, now = row["version"] + 1, _utc_now()
-            self.connection.execute("UPDATE runs SET state='failed',phase=NULL,version=?,updated_at=? WHERE id=?", (version, now, run_id))
+            if supersedes_run_id is not None:
+                predecessor = self.connection.execute(
+                    "SELECT project_id,state FROM runs WHERE id=?", (supersedes_run_id,),
+                ).fetchone()
+                if (not predecessor or predecessor["project_id"] != row["project_id"]
+                        or predecessor["state"] not in TERMINAL_STATES):
+                    raise ConflictError("superseded run must be terminal and belong to the same project")
+            path, digest, size, now = self._terminal_receipt(run_id, "failed", "preparing", error)
+            version = self._reference_terminal_receipt(
+                run_id, row["version"], path, digest, size, now,
+            )
+            version += 1
+            snapshot = canonical_json(mutable_snapshot) if mutable_snapshot is not None else None
+            self.connection.execute(
+                "UPDATE runs SET mutable_snapshot=COALESCE(?,mutable_snapshot),supersedes_run_id=?,"
+                "state='failed',phase=NULL,version=?,updated_at=? WHERE id=?",
+                (snapshot, supersedes_run_id, version, now, run_id),
+            )
             self.connection.execute("UPDATE claims SET active=0 WHERE run_id=?", (run_id,))
-            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.failed',?,?)", (run_id, version, encoded, now))
+            terminal_payload = dict(error) if isinstance(error, dict) else {"error": error}
+            terminal_payload["receipt"] = "result-receipt.json"
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.failed',?,?)",
+                (run_id, version, canonical_json(terminal_payload), now),
+            )
             self.connection.execute("COMMIT")
             return version
         except Exception:
@@ -219,10 +340,17 @@ class Store:
                 return row["version"]
             if row["state"] != "queued" or row["phase"] != "preparing":
                 raise ConflictError("run is no longer preparing")
-            version, now = row["version"] + 1, _utc_now()
+            path, digest, size, now = self._terminal_receipt(run_id, "cancelled", "preparing", None)
+            version = self._reference_terminal_receipt(
+                run_id, row["version"], path, digest, size, now,
+            ) + 1
             self.connection.execute("UPDATE runs SET state='cancelled',phase=NULL,version=?,updated_at=? WHERE id=?", (version, now, run_id))
             self.connection.execute("UPDATE claims SET active=0,fencing_token=fencing_token+1 WHERE run_id=?", (run_id,))
-            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.cancelled','{}',?)", (run_id, version, now))
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.cancelled',?,?)",
+                (run_id, version, canonical_json({"receipt": "result-receipt.json"}), now),
+            )
             self.connection.execute("COMMIT")
             return version
         except Exception:
@@ -612,9 +740,14 @@ class Store:
                 self.connection.execute("COMMIT"); return row["version"]
             if row["state"] != "queued" or row["phase"] is not None:
                 raise ConflictError("queued run is owned by another operation")
-            version, now = row["version"] + 1, _utc_now()
+            path,digest,size,now=self._terminal_receipt(run_id,"cancelled","queued",None)
+            version=self._reference_terminal_receipt(run_id,row["version"],path,digest,size,now)+1
             self.connection.execute("UPDATE runs SET state='cancelled',version=?,updated_at=? WHERE id=?", (version, now, run_id))
-            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.cancelled','{}',?)", (run_id, version, now))
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.cancelled',?,?)",
+                (run_id,version,canonical_json({"receipt":"result-receipt.json"}),now),
+            )
             self.connection.execute("COMMIT"); return version
         except Exception:
             self.connection.execute("ROLLBACK"); raise
@@ -624,11 +757,16 @@ class Store:
         try:
             row=self.connection.execute("SELECT state,phase,version FROM runs WHERE id=?",(run_id,)).fetchone()
             if not row or row["state"]!="queued" or row["phase"]!="launching": raise ConflictError("run is not launching")
-            version,now=row["version"]+1,_utc_now()
+            path,digest,size,now=self._terminal_receipt(run_id,"cancelled","launching",None)
+            version=self._reference_terminal_receipt(run_id,row["version"],path,digest,size,now)+1
             self.connection.execute("UPDATE attempts SET status='recovery_required',finished_at=? WHERE run_id=? AND status='reserved'",(now,run_id))
             self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=?",(run_id,))
             self.connection.execute("UPDATE runs SET state='cancelled',phase=NULL,version=?,updated_at=? WHERE id=?",(version,now,run_id))
-            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.cancelled','{}',?)",(run_id,version,now))
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.cancelled',?,?)",
+                (run_id,version,canonical_json({"receipt":"result-receipt.json"}),now),
+            )
             self.connection.execute("COMMIT"); return version
         except Exception: self.connection.execute("ROLLBACK"); raise
 

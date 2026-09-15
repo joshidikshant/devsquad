@@ -92,26 +92,77 @@ class Service:
             snapshot["internal_fake_delay"] = internal_delay
         return snapshot
 
+    def _continue_preparation(
+        self,
+        store: Store,
+        run_id: str,
+        fencing_token: int,
+        submitted: dict[str, Any],
+    ) -> tuple[tuple[int, Path, str] | None, dict[str, Any] | None]:
+        snapshot = None
+        supersedes_run_id = submitted.get("supersedes_run_id")
+        try:
+            task = submitted["task"]
+            internal_delay = submitted.get("_internal_fake_delay")
+            validate_task(task, require_existing_repo=True)
+            snapshot = self._resolve_snapshot(task, internal_delay)
+            if internal_delay is None:
+                error = {
+                    "error": "CAPABILITY_UNAVAILABLE",
+                    "message": "branch-review workflow is introduced in M3",
+                }
+                store.fail_preparation(
+                    run_id,
+                    fencing_token,
+                    error,
+                    mutable_snapshot=snapshot,
+                    supersedes_run_id=supersedes_run_id,
+                )
+                return None, error
+            package, digest = self._freeze_package()
+            version = store.complete_preparation(
+                run_id,
+                fencing_token,
+                snapshot,
+                package_path=str(package),
+                package_digest=digest,
+                supersedes_run_id=supersedes_run_id,
+            )
+            return (version, package, digest), None
+        except Exception as exc:
+            error = {"error": "PREPARATION_FAILED", "message": str(exc)}
+            try:
+                # A rejected predecessor remains in submitted_request but is not
+                # published as a valid supersession relation.
+                store.fail_preparation(
+                    run_id,
+                    fencing_token,
+                    error,
+                    mutable_snapshot=snapshot,
+                )
+            except ConflictError:
+                # Cancellation or another recovery owner may have fenced us.
+                raise exc
+            return None, error
+
     def start(self, task: dict[str, Any], idempotency_key: str, supersedes_run_id: str | None = None, *, _internal_fake_delay: float | None = None) -> dict[str, Any]:
         validate_task(task, require_existing_repo=True)
         submitted = {"task": task, "supersedes_run_id": supersedes_run_id}
+        if _internal_fake_delay is not None:
+            submitted["_internal_fake_delay"] = _internal_fake_delay
         store = self._store()
         try:
             claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}")
             if not claim.created:
                 return {"run_id": claim.run_id, "state": store.run(claim.run_id)["state"], "created": False}
-            try:
-                snapshot = self._resolve_snapshot(task, _internal_fake_delay)
-                if _internal_fake_delay is None:
-                    store.fail_preparation(claim.run_id, claim.fencing_token or 0, {"error": "CAPABILITY_UNAVAILABLE", "message": "branch-review workflow is introduced in M3"})
-                    return {"run_id": claim.run_id, "state": "failed", "created": True}
-                package, digest = self._freeze_package()
-                version = store.complete_preparation(claim.run_id, claim.fencing_token or 0, snapshot, package_path=str(package), package_digest=digest, supersedes_run_id=supersedes_run_id)
-            except Exception as exc:
-                store.fail_preparation(claim.run_id, claim.fencing_token or 0, {"error": "PREPARATION_FAILED", "message": str(exc)})
-                raise
+            launch, error = self._continue_preparation(
+                store, claim.run_id, claim.fencing_token or 0, submitted,
+            )
         finally:
             store.close()
+        if launch is None:
+            return {"run_id": claim.run_id, "state": "failed", "created": True, "error": error}
+        version, package, digest = launch
         self._spawn_daemon(claim.run_id, version, package, digest)
         return {"run_id": claim.run_id, "state": "queued", "created": True}
 
@@ -142,9 +193,8 @@ class Service:
             run, artifacts = store.result_snapshot(run_id)
             if run["state"] not in TERMINAL_STATES:
                 return {"run_id":run_id,"ready":False,"state":run["state"],"artifacts":[]}
-            if run["state"] != "failed" or run.get("package_digest"):
-                if not any(item["name"]=="result-receipt.json" for item in artifacts):
-                    raise ConflictError("terminal result has no durable receipt")
+            if not any(item["name"]=="result-receipt.json" for item in artifacts):
+                raise ConflictError("terminal result has no durable receipt")
             for item in artifacts:
                 path=Path(item["path"])
                 if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=item["sha256"]:
@@ -167,6 +217,8 @@ class Service:
 
     def resume(self, run_id: str, recovery: dict[str, Any] | None = None) -> dict[str, Any]:
         store = self._store()
+        launch: tuple[int, Path, str] | None = None
+        preparation_error: dict[str, Any] | None = None
         try:
             run = store.run(run_id)
             if run["state"] in TERMINAL_STATES: raise ConflictError("terminal run cannot resume; start a superseding run")
@@ -175,7 +227,15 @@ class Service:
                 attempt=store.attempt(run_id)
                 disposition = Supervisor(store).import_durable(run_id) if attempt and attempt.get("exit_record") else Supervisor(store).recover(run_id)
                 return {"run_id": run_id, "disposition": disposition, "launched": False}
-            if run["state"] == "queued" and run["phase"] is None:
+            if run["state"] == "queued" and run["phase"] == "preparing":
+                submitted = json.loads(run["submitted_request"])
+                claim = store.reclaim_preparation(
+                    run_id, run["version"], f"preflight-recovery:{os.getpid()}",
+                )
+                launch, preparation_error = self._continue_preparation(
+                    store, run_id, claim.fencing_token, submitted,
+                )
+            elif run["state"] == "queued" and run["phase"] is None:
                 version = run["version"]
             elif run["state"] == "blocked":
                 if not isinstance(recovery,dict) or set(recovery)!={"attempt_id","disposition"} or recovery["disposition"] not in {"confirm_dead","retain_ownership"}:
@@ -190,5 +250,16 @@ class Service:
             else:
                 raise ConflictError("run is not resumable")
         finally: store.close()
-        package,digest=self._verified_package(run); self._spawn_daemon(run_id, version, package, digest)
+        if run["phase"] == "preparing":
+            if launch is None:
+                return {
+                    "run_id": run_id,
+                    "disposition": "preparation_failed",
+                    "launched": False,
+                    "error": preparation_error,
+                }
+            version,package,digest=launch
+        else:
+            package,digest=self._verified_package(run)
+        self._spawn_daemon(run_id, version, package, digest)
         return {"run_id": run_id, "disposition": "continued", "launched": True}

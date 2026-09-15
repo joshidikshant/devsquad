@@ -93,7 +93,8 @@ class StoreIntegrityReview(unittest.TestCase):
         count = self.store.connection.execute(
             "SELECT COUNT(*) FROM artifacts WHERE run_id=?", (self.claim.run_id,),
         ).fetchone()[0]
-        self.assertEqual(count, 1)
+        self.assertEqual(count, 2)
+        self.assertIsNotNone(self.store.artifact_named(self.claim.run_id, "result-receipt.json"))
 
 
 class StoreInitializationReview(unittest.TestCase):

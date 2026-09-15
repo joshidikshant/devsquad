@@ -61,7 +61,61 @@ class StoreTest(unittest.TestCase):
         with self.assertRaises(ConflictError):
             self.store.complete_preparation(first.run_id, first.fencing_token, {"branch": "moved"})
         run = self.store.run(first.run_id)
-        self.assertEqual((run["state"], run["version"]), ("cancelled", 2))
+        self.assertEqual((run["state"], run["version"]), ("cancelled", 3))
+        self.assertIsNotNone(self.store.artifact_named(first.run_id, "result-receipt.json"))
+
+    def test_two_recovery_claimants_yield_one_owner_and_fence_the_old_token(self):
+        original = self.store.claim_start(self.repo, "recover", {"task": "fixed"}, "old-owner")
+        expected_version = self.store.run(original.run_id)["version"]
+        barrier = threading.Barrier(2)
+        successes, conflicts = [], []
+
+        def reclaim(owner):
+            connection = Store(self.database, self.artifacts)
+            try:
+                barrier.wait()
+                successes.append(connection.reclaim_preparation(original.run_id, expected_version, owner))
+            except ConflictError as exc:
+                conflicts.append(exc)
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=reclaim, args=(owner,)) for owner in ("recovery-a", "recovery-b")]
+        for thread in threads: thread.start()
+        for thread in threads: thread.join()
+
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(successes[0].fencing_token, (original.fencing_token or 0) + 1)
+        with self.assertRaises(ConflictError):
+            self.store.complete_preparation(original.run_id, original.fencing_token, {"branch": "stale"})
+        version = self.store.complete_preparation(
+            original.run_id, successes[0].fencing_token, {"branch": "recovered"},
+        )
+        self.assertEqual(version, successes[0].version + 1)
+
+    def test_queued_and_launching_cancellation_publish_one_receipt(self):
+        queued = self.store.claim_start(self.repo, "cancel-queued", {"task": 1}, "owner")
+        queued_version = self.store.complete_preparation(
+            queued.run_id, queued.fencing_token, {"branch": "frozen"},
+        )
+        cancelled_version = self.store.cancel_queued(queued.run_id)
+        self.assertEqual(cancelled_version, queued_version + 2)
+        self.assertIsNotNone(self.store.artifact_named(queued.run_id, "result-receipt.json"))
+        self.assertEqual(self.store.cancel_queued(queued.run_id), cancelled_version)
+
+        launching = self.store.claim_start(self.repo, "cancel-launching", {"task": 2}, "owner")
+        launching_version = self.store.complete_preparation(
+            launching.run_id, launching.fencing_token, {"branch": "frozen"},
+        )
+        reservation = self.store.reserve_attempt(
+            launching.run_id, launching_version, "supervisor", "package-digest",
+        )
+        final_version = self.store.cancel_launching(launching.run_id)
+        self.assertEqual(final_version, reservation.version + 2)
+        self.assertIsNotNone(self.store.artifact_named(launching.run_id, "result-receipt.json"))
+        with self.assertRaises(ConflictError):
+            self.store.mark_attempt_running(reservation, 10, 10, "stale-process")
 
     def test_event_and_projection_compare_and_swap_share_transaction(self):
         claim = self.store.claim_start(self.repo, "events", {"task": "x"}, "owner")

@@ -67,6 +67,25 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(len(page["events"]),2); self.assertIsNotNone(page["next_cursor"])
         with self.assertRaises(ConflictError): self.service.resume(first["run_id"])
 
+    def test_abandoned_preparation_is_reclaimed_from_the_submitted_request(self):
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            claim=store.claim_start(
+                self.repo,
+                "abandoned-preparation",
+                {"task":self.task,"supersedes_run_id":None,"_internal_fake_delay":.01},
+                "dead-preflight-owner",
+            )
+        finally:
+            store.close()
+        resumed=self.service.resume(claim.run_id)
+        self.assertTrue(resumed["launched"])
+        self.assertEqual(resumed["disposition"],"continued")
+        self.wait_state(claim.run_id,{"succeeded"})
+        events=self.service.events(claim.run_id)["events"]
+        self.assertEqual(sum(event["type"]=="run.preparation_reclaimed" for event in events),1)
+        self.assertTrue(self.service.result(claim.run_id)["ready"])
+
     def test_new_process_inspects_run_after_launching_process_exits(self):
         task_file=self.root/"task.json"; task_file.write_text(json.dumps(self.task))
         env=os.environ.copy(); env["PYTHONPATH"]=str(ROOT/"plugin/core/src")
@@ -109,7 +128,60 @@ class ServiceTest(unittest.TestCase):
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
         try: store.finalize_artifact(started["run_id"],"orphan",b"bytes")
         finally: store.close()
-        self.assertEqual(self.service.result(started["run_id"])["artifacts"],[])
+        artifacts=self.service.result(started["run_id"])["artifacts"]
+        self.assertEqual([item["name"] for item in artifacts],["result-receipt.json"])
+
+    def test_pre_attempt_failure_and_cancellation_have_durable_receipts(self):
+        failed=self.service.start(self.task,"capability-unavailable")
+        self.assertEqual(failed["state"],"failed")
+        failure_result=self.service.result(failed["run_id"])
+        self.assertTrue(failure_result["ready"])
+        failure_receipt=json.loads(Path(failure_result["artifacts"][0]["path"]).read_text())
+        self.assertEqual(failure_receipt["state"],"failed")
+        self.assertEqual(failure_receipt["error"]["error"],"CAPABILITY_UNAVAILABLE")
+
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            preparing=store.claim_start(
+                self.repo,"cancel-preparing",{"task":self.task,"supersedes_run_id":None},"owner",
+            )
+        finally:
+            store.close()
+        cancelled=self.service.cancel(preparing.run_id)
+        self.assertEqual(cancelled["state"],"cancelled")
+        cancellation_result=self.service.result(preparing.run_id)
+        cancellation_receipt=json.loads(Path(cancellation_result["artifacts"][0]["path"]).read_text())
+        self.assertTrue(cancellation_receipt["cancelled"])
+        self.assertEqual(cancellation_receipt["phase"],"preparing")
+
+    def test_invalid_predecessor_fails_with_run_context_and_receipt(self):
+        started=self.service.start(
+            self.task,"invalid-predecessor","does-not-exist",_internal_fake_delay=.01,
+        )
+        self.assertEqual(started["state"],"failed")
+        self.assertEqual(started["error"]["error"],"PREPARATION_FAILED")
+        self.assertIn("superseded run",started["error"]["message"])
+        result=self.service.result(started["run_id"])
+        self.assertTrue(result["ready"])
+        self.assertEqual([item["name"] for item in result["artifacts"]],["result-receipt.json"])
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            self.assertIsNone(store.run(started["run_id"])["supersedes_run_id"])
+        finally:
+            store.close()
+
+    def test_post_claim_snapshot_failure_has_run_context_and_receipt(self):
+        task=json.loads(json.dumps(self.task))
+        task["project"]["base_ref"]="refs/heads/does-not-exist"
+        started=self.service.start(task,"invalid-moving-ref",_internal_fake_delay=.01)
+        self.assertEqual(started["state"],"failed")
+        self.assertEqual(started["error"]["error"],"PREPARATION_FAILED")
+        self.assertIn("does not resolve",started["error"]["message"])
+        result=self.service.result(started["run_id"])
+        self.assertTrue(result["ready"])
+        receipt=json.loads(Path(result["artifacts"][0]["path"]).read_text())
+        self.assertEqual(receipt["run_id"],started["run_id"])
+        self.assertEqual(receipt["error"],started["error"])
 
     def test_coordinator_crash_imports_runner_receipt_once(self):
         started=self.service.start(self.task,"receipt-recovery",_internal_fake_delay=.3)
