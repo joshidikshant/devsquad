@@ -68,6 +68,15 @@ required_tools[]; permission_policy; account_pool_id; billing_mode;
 quality_status; evidence_refs[]
 ```
 
+The path named by `routing.profiles_file` contains one strict profile registry,
+not a bare array: `{schema_version:1, profiles:[Profile...], bindings:{...}}`.
+Profile IDs are unique. Each binding is
+`alias -> {profile_id, version}` and must target a profile in the same registry.
+The registry's exact byte hash, every selected concrete profile/hash and every
+resolved alias/version are frozen in preflight. Editing either file after that
+cannot move an active run. Runtime-qualified binding promotion in M6 uses the
+same versioned binding shape and affects new runs only.
+
 `effort.transport` is `native`, `model_variant`, or `provider_default`. Values are native to that harness/model; never translate “high” into a numeric equivalent across vendors. Unsupported explicit effort fails validation. Provider default may be allowed, but its effective value remains unknown unless reported. `quality_status` is `unvalidated`, `trial`, `proven` or `suspended`, scoped to task class by policy evidence. Trial profiles are eligible only in explicitly permitted classes. Exact family and model IDs are mandatory for cross-model independence claims; inability to verify identity blocks that claim.
 
 Install-time discovery reports supported values and evidence (`documented`, `probed`, `unavailable`, `unknown`) with `checked_at`, CLI version and toolset hash. Selecting a known catalog entry verifies that it exists, not that the invocation used it: attempts retain separate `requested` and `observed` fields. Manually verified mappings may establish identity for a versioned harness; silent model fallback must never be labelled confirmed.
@@ -77,6 +86,16 @@ Install-time discovery reports supported values and evidence (`documented`, `pro
 Default selection is automatic among policy-eligible profiles. The host supplies task requirements; the deterministic router chooses the model/effort/tool profile without another planning-model call. Within the selected toolbox, the worker chooses individual tool calls. Discovery can enumerate supported configurations; initial quality preferences and account-pool mappings still require evidence and operator setup.
 
 `routing.overrides` defaults to `{}`. Each key is a model role supported by the chosen workflow, with value `{profile_id, fallback}`; `fallback` defaults to `none` and optionally allows `policy`. A pin constrains the initial profile; `none` also prohibits substitution/escalation to another profile. A pinned profile must pass the ordinary identity, capability, quality, permission and billing filters. Invalid pins fail validation; temporarily unavailable pins block. `policy` permits the normal qualified fallback list within the task budget. Roles without pins remain automatic. Record overrides and their origin in the routing receipt and separate them from automatic decisions in evaluations.
+
+Each `policy.account_pools` entry has
+`allowed_billing_modes[]`, positive `max_concurrency`, and optional
+`unknown_capacity_policy` (`allow_bounded` by default or `block`). Runtime
+availability is a separate snapshot with status `available`, `exhausted` or
+`unknown`, a non-negative local `in_flight` count and an optional sourced
+timestamp. Unknown capacity never becomes an invented allowance:
+`allow_bounded` permits at most one unresolved in-flight job in that pool,
+while `block` permits none. Declaring `paid_api` in a profile is insufficient;
+the pool policy must explicitly allow that billing mode.
 
 The [selection and Council amendment](SELECTION-AND-COUNCIL.md) gives examples and ownership boundaries. Evidence gathering/proposals are automatic. Initially promotions are reviewed; the [model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md) permits tested model-binding promotion under an explicitly enabled, previously reviewed `guarded_auto` policy. Changing permissions, billing authority or the promotion policy itself remains reviewed. Optional C1 is outside the initial two-workflow schema until that gated extension ships.
 

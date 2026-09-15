@@ -21,6 +21,14 @@ class ProfileUnsupported(ContractError):
     code = "PROFILE_UNSUPPORTED"
 
 
+class CapabilityUnavailable(ContractError):
+    code = "CAPABILITY_UNAVAILABLE"
+
+
+class PolicyDenied(ContractError):
+    code = "POLICY_DENIED"
+
+
 @dataclass(frozen=True)
 class ExecutionIdentity:
     harness: str

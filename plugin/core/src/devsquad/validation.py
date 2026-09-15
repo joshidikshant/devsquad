@@ -96,6 +96,35 @@ def validate_profile(value: dict[str, Any]) -> None:
     if not isinstance(value["quality_status"], str) or value["quality_status"] not in {"unvalidated", "trial", "proven", "suspended"}: raise ContractError("invalid quality status")
 
 
+def validate_profile_registry(value: dict[str, Any]) -> None:
+    fields = {"schema_version", "profiles", "bindings"}
+    _exact(value, fields, fields, "profile registry")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        raise ContractError("invalid profile registry schema version")
+    profiles = value["profiles"]
+    if not isinstance(profiles, list) or not profiles:
+        raise ContractError("profile registry profiles must be a non-empty array")
+    identifiers = []
+    for profile in profiles:
+        validate_profile(profile)
+        identifiers.append(profile["id"])
+    if len(set(identifiers)) != len(identifiers):
+        raise ContractError("profile registry profile ids must be unique")
+    bindings = value["bindings"]
+    if not isinstance(bindings, dict):
+        raise ContractError("profile registry bindings must be an object")
+    for alias, binding in bindings.items():
+        if not isinstance(alias, str) or not alias:
+            raise ContractError("profile binding aliases must be non-empty strings")
+        _exact(binding, {"profile_id", "version"}, {"profile_id", "version"}, "profile binding")
+        if not isinstance(binding["profile_id"], str) or not binding["profile_id"]:
+            raise ContractError("profile binding profile_id must be non-empty")
+        if type(binding["version"]) is not int or binding["version"] < 1:
+            raise ContractError("profile binding version must be positive")
+        if binding["profile_id"] not in identifiers:
+            raise ContractError(f"profile binding target does not exist: {binding['profile_id']}")
+
+
 def validate_policy(value: dict[str, Any]) -> None:
     fields = {"schema_version", "id", "version", "roles", "task_classes", "require_different_model_for_review", "prefer_different_harness_for_review", "account_pools", "experiment_budget"}
     required = fields - {"prefer_different_harness_for_review"}
@@ -116,6 +145,23 @@ def validate_policy(value: dict[str, Any]) -> None:
         raise ContractError("task_classes must map names to quality status")
     if not all(isinstance(k, str) and k and isinstance(v, dict) for k, v in value["account_pools"].items()):
         raise ContractError("account_pools must map names to objects")
+    for pool in value["account_pools"].values():
+        _exact(
+            pool,
+            {"allowed_billing_modes", "max_concurrency", "unknown_capacity_policy"},
+            {"allowed_billing_modes", "max_concurrency"},
+            "account pool policy",
+        )
+        modes = pool["allowed_billing_modes"]
+        if (not isinstance(modes, list) or not modes
+                or len(set(modes)) != len(modes)
+                or not all(isinstance(mode, str) and mode in {"subscription", "paid_api"}
+                           for mode in modes)):
+            raise ContractError("account pool billing modes are invalid")
+        if type(pool["max_concurrency"]) is not int or pool["max_concurrency"] < 1:
+            raise ContractError("account pool max_concurrency must be positive")
+        if pool.get("unknown_capacity_policy", "allow_bounded") not in {"allow_bounded", "block"}:
+            raise ContractError("account pool unknown_capacity_policy is invalid")
     if not all(isinstance(k, str) and k and type(v) is int and v >= 0 for k, v in value["experiment_budget"].items()):
         raise ContractError("experiment_budget must contain non-negative integers")
 
