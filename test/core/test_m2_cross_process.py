@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "plugin" / "core" / "src"))
 from devsquad.service import Service
 from devsquad.store import Store, request_hash
 from devsquad.supervisor import inspect_process
+from devsquad_test_fixtures import branch_review_routing_documents
 
 
 def service_start(runtime, task, key, barrier, results):
@@ -84,8 +85,9 @@ class CrossProcessServiceTest(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         subprocess.run(["git", "-C", str(self.repo), "config", "user.email", "test@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(self.repo), "config", "user.name", "Test"], check=True)
-        (self.repo / "profiles.json").write_text("{}\n")
-        (self.repo / "policy.json").write_text("{}\n")
+        profiles_json, policy_json = branch_review_routing_documents()
+        (self.repo / "profiles.json").write_text(profiles_json)
+        (self.repo / "policy.json").write_text(policy_json)
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "-qm", "base"], check=True)
         self.task = json.loads((ROOT / "docs/plans/engineering-team/examples/branch-review.json").read_text())

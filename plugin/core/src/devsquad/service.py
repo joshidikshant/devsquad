@@ -14,6 +14,7 @@ import threading
 from typing import Any
 
 from .contracts import ContractError
+from .router import load_routing
 from .store import (
     ConflictError,
     HandoffClaim,
@@ -158,15 +159,26 @@ class Service:
             if result.returncode != 0: raise ContractError(f"Git ref does not resolve to a commit: {ref}")
             return result.stdout.strip()
         configs = {}
+        config_payloads = {}
         for label in ("profiles_file", "policy_file"):
             candidate = Path(task["routing"][label])
             path = (repo / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
             if path != repo and repo not in path.parents: raise ContractError(f"{label} escapes project")
-            data = path.read_bytes(); configs[label] = {"path": str(path), "sha256": hashlib.sha256(data).hexdigest()}
+            data = path.read_bytes()
+            config_payloads[label] = data
+            configs[label] = {
+                "path": str(path), "sha256": hashlib.sha256(data).hexdigest(),
+            }
         snapshot = {"task": task, "base_oid": oid(task["project"]["base_ref"]), "target_oid": oid(task["project"]["target_ref"]), "configs": configs}
         if internal_delay is not None:
             if internal_delay < 0 or internal_delay > 60: raise ContractError("internal fake delay is invalid")
             snapshot["internal_fake_delay"] = internal_delay
+        else:
+            snapshot["routing"] = load_routing(
+                task,
+                config_payloads["profiles_file"],
+                config_payloads["policy_file"],
+            )
         return snapshot
 
     def _continue_preparation(

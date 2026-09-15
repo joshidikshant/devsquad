@@ -1,3 +1,4 @@
+import hashlib
 import json
 import multiprocessing
 import os
@@ -17,6 +18,7 @@ from devsquad.contracts import ExecutionIdentity, LaunchSpec
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store
 from devsquad.supervisor import Supervisor, inspect_process
+from devsquad_test_fixtures import branch_review_routing_documents
 
 
 def concurrent_receipt_import(database, artifacts, run_id, barrier, results):
@@ -88,7 +90,9 @@ class ServiceTest(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         subprocess.run(["git", "-C", str(self.repo), "config", "user.email", "test@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(self.repo), "config", "user.name", "Test"], check=True)
-        (self.repo / "profiles.json").write_text("{}\n"); (self.repo / "policy.json").write_text("{}\n")
+        self.profiles_json, self.policy_json = branch_review_routing_documents()
+        (self.repo / "profiles.json").write_text(self.profiles_json)
+        (self.repo / "policy.json").write_text(self.policy_json)
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "-qm", "base"], check=True)
         self.task = json.loads((ROOT / "docs/plans/engineering-team/examples/branch-review.json").read_text())
@@ -485,6 +489,51 @@ class ServiceTest(unittest.TestCase):
         self.assertTrue(cancellation_receipt["cancelled"])
         self.assertEqual(cancellation_receipt["phase"],"preparing")
 
+    def test_public_preflight_freezes_profile_policy_and_alias_selection(self):
+        started=self.service.start(self.task,"frozen-routing")
+        self.assertEqual(started["error"]["error"],"CAPABILITY_UNAVAILABLE")
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            snapshot=json.loads(store.run(started["run_id"])["mutable_snapshot"])
+        finally:
+            store.close()
+        routed=snapshot["routing"]
+        reviewer=routed["roles"]["reviewer"]
+        self.assertEqual(reviewer["selected"]["profile_id"],"fixture-reviewer")
+        self.assertEqual(
+            reviewer["selected"]["binding"],
+            {"alias":"review.deep","profile_id":"fixture-reviewer","version":1},
+        )
+        self.assertEqual(
+            routed["profile_registry"]["sha256"],
+            hashlib.sha256(self.profiles_json.encode()).hexdigest(),
+        )
+        self.assertEqual(
+            routed["policy"]["sha256"],
+            hashlib.sha256(self.policy_json.encode()).hexdigest(),
+        )
+        self.assertEqual(
+            snapshot["configs"]["profiles_file"]["sha256"],
+            routed["profile_registry"]["sha256"],
+        )
+        self.assertEqual(
+            snapshot["configs"]["policy_file"]["sha256"],
+            routed["policy"]["sha256"],
+        )
+
+        (self.repo/"profiles.json").write_text("not valid after snapshot\n")
+        (self.repo/"policy.json").write_text("also changed\n")
+        replayed=self.service.start(self.task,"frozen-routing")
+        self.assertEqual(replayed["run_id"],started["run_id"])
+        self.assertFalse(replayed["created"])
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            self.assertEqual(
+                json.loads(store.run(started["run_id"])["mutable_snapshot"]),snapshot,
+            )
+        finally:
+            store.close()
+
     def test_invalid_predecessor_fails_with_run_context_and_receipt(self):
         started=self.service.start(
             self.task,"invalid-predecessor","does-not-exist",_internal_fake_delay=.01,
@@ -515,8 +564,8 @@ class ServiceTest(unittest.TestCase):
         subprocess.run(["git","init","-q",str(other)],check=True)
         subprocess.run(["git","-C",str(other),"config","user.email","test@example.invalid"],check=True)
         subprocess.run(["git","-C",str(other),"config","user.name","Test"],check=True)
-        (other/"profiles.json").write_text("{}\n")
-        (other/"policy.json").write_text("{}\n")
+        (other/"profiles.json").write_text(self.profiles_json)
+        (other/"policy.json").write_text(self.policy_json)
         subprocess.run(["git","-C",str(other),"add","."],check=True)
         subprocess.run(["git","-C",str(other),"commit","-qm","foreign"],check=True)
         foreign_task=json.loads(json.dumps(self.task))
