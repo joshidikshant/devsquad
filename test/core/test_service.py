@@ -61,6 +61,13 @@ def crash_after_runner_identity(
     os._exit(99)
 
 
+def crash_after_artifact_finalize_before_import(database, artifacts, run_id):
+    store = Store(Path(database), Path(artifacts))
+    store.commit_durable_import = lambda *args, **kwargs: os._exit(25)
+    Supervisor(store).import_durable(run_id)
+    os._exit(99)
+
+
 class ServiceTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="devsquad-service-")
@@ -510,6 +517,67 @@ class ServiceTest(unittest.TestCase):
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
         try: self.assertEqual(store.connection.execute("SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],)).fetchone()[0],1)
         finally: store.close()
+
+    def test_importer_crash_after_artifact_finalize_has_no_false_completion(self):
+        started=self.service.start(
+            self.task,"artifact-import-crash",_internal_fake_delay=.2,
+        )
+        self.wait_state(started["run_id"],{"running"})
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            attempt=store.attempt(started["run_id"])
+            owner=store.connection.execute(
+                "SELECT owner_id FROM supervisor_claims WHERE run_id=?",
+                (started["run_id"],),
+            ).fetchone()[0]
+            os.kill(int(owner.split(":",1)[1]),signal.SIGKILL)
+            receipt=Path(attempt["exit_record"])
+            deadline=time.monotonic()+5
+            while not receipt.is_file() and time.monotonic()<deadline:
+                time.sleep(.02)
+            self.assertTrue(receipt.is_file())
+            while (inspect_process(
+                    attempt["pid"],attempt["pgid"],attempt["process_start_id"],
+                    )=="live" and time.monotonic()<deadline):
+                time.sleep(.02)
+            self.assertNotEqual(
+                inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"]),
+                "live",
+            )
+        finally:
+            store.close()
+
+        context=multiprocessing.get_context("spawn")
+        process=context.Process(
+            target=crash_after_artifact_finalize_before_import,
+            args=(
+                str(self.runtime/"state.sqlite3"),
+                str(self.runtime/"artifacts"),
+                started["run_id"],
+            ),
+        )
+        process.start(); process.join(timeout=10)
+        if process.is_alive():
+            process.terminate(); process.join(timeout=2)
+        self.assertEqual(process.exitcode,25)
+
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            self.assertEqual(store.run(started["run_id"])["state"],"running")
+            self.assertEqual(store.artifacts_for_run(started["run_id"]),[])
+            finalized=[
+                path for path in (self.runtime/"artifacts"/started["run_id"]).iterdir()
+                if path.is_file()
+            ]
+            self.assertEqual(len(finalized),3)
+        finally:
+            store.close()
+
+        resumed=self.service.resume(started["run_id"])
+        self.assertIn(resumed["disposition"],{"succeeded","already_finalized"})
+        result=self.service.result(started["run_id"])
+        self.assertTrue(result["ready"])
+        self.assertEqual(len(result["artifacts"]),3)
 
     def test_two_processes_import_one_runner_receipt_atomically(self):
         started=self.service.start(self.task,"receipt-race",_internal_fake_delay=.3)
