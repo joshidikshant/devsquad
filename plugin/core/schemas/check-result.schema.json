@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devsquad.local/schemas/check-result-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "candidate_sha256", "target_oid", "id", "argv", "cwd", "required_to_pass", "status", "returncode", "error_code", "duration_ms", "stdout", "stderr"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "target_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "id": {"type": "string", "minLength": 1},
+    "argv": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "cwd": {"type": "string"},
+    "required_to_pass": {"type": "boolean"},
+    "status": {"enum": ["passed", "failed", "timed_out", "launch_failed"]},
+    "returncode": {"type": ["integer", "null"]},
+    "error_code": {"enum": [null, "TIMEOUT", "CLI_ERROR"]},
+    "duration_ms": {"type": "integer", "minimum": 0},
+    "stdout": {"$ref": "#/$defs/stream"},
+    "stderr": {"$ref": "#/$defs/stream"}
+  },
+  "$defs": {
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preview", "captured_bytes", "total_bytes", "truncated", "full_sha256"],
+      "properties": {
+        "preview": {"type": "string", "maxLength": 65536},
+        "captured_bytes": {"type": "integer", "minimum": 0},
+        "total_bytes": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"},
+        "full_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

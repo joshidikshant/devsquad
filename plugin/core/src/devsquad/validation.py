@@ -36,16 +36,23 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
         raise ContractError("goal and task_class must be non-empty strings")
     if not isinstance(value["acceptance"], list) or not value["acceptance"]:
         raise ContractError("acceptance must be non-empty")
+    acceptance_ids = set()
     for item in value["acceptance"]:
         _exact(item, {"id", "description", "evidence_kind"}, {"id", "description", "evidence_kind"}, "acceptance item")
         if not all(isinstance(item[k], str) and item[k].strip() for k in ("id", "description")):
             raise ContractError("acceptance id and description must be non-empty strings")
         if not isinstance(item["evidence_kind"], str) or item["evidence_kind"] not in {"review", "check", "artifact", "host"}:
             raise ContractError("invalid evidence_kind")
+        if item["id"] in acceptance_ids:
+            raise ContractError("acceptance ids must be unique")
+        acceptance_ids.add(item["id"])
     if not isinstance(value["checks"], list): raise ContractError("checks must be an array")
+    check_ids = set()
     for check in value["checks"]:
         _exact(check, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass"}, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass"}, "check")
         if not isinstance(check["id"], str) or not check["id"]: raise ContractError("check id must be non-empty")
+        if check["id"] in check_ids: raise ContractError("check ids must be unique")
+        check_ids.add(check["id"])
         if not isinstance(check["argv"], list) or not check["argv"] or not all(isinstance(v, str) and v for v in check["argv"]): raise ContractError("check argv must be a non-empty string array")
         _relative(check["cwd"], "check cwd")
         if not isinstance(check["timeout_seconds"], int) or isinstance(check["timeout_seconds"], bool) or check["timeout_seconds"] <= 0: raise ContractError("check timeout must be positive")
