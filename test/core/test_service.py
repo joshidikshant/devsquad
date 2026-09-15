@@ -31,6 +31,12 @@ def concurrent_receipt_import(database, artifacts, run_id, barrier, results):
             store.close()
 
 
+def crash_after_attempt_reservation(database, artifacts, run_id, expected_version, package_digest):
+    store = Store(Path(database), Path(artifacts))
+    store.reserve_attempt(run_id, expected_version, "crashed-supervisor", package_digest)
+    os._exit(23)
+
+
 class ServiceTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="devsquad-service-")
@@ -146,6 +152,46 @@ class ServiceTest(unittest.TestCase):
         if self.service.status(started["run_id"])["state"]=="running":
             response=self.service.cancel(started["run_id"]); self.assertIn(response["state"],{"cancelling","cancelled"})
             self.wait_state(started["run_id"],{"cancelled"})
+
+    def test_process_crash_after_attempt_reservation_is_recoverable(self):
+        with mock.patch.object(self.service,"_spawn_daemon",return_value=0):
+            started=self.service.start(self.task,"reservation-crash",_internal_fake_delay=.01)
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(started["run_id"])
+            expected_version=run["version"]
+            package_digest=run["package_digest"]
+        finally:
+            store.close()
+
+        context=multiprocessing.get_context("spawn")
+        process=context.Process(
+            target=crash_after_attempt_reservation,
+            args=(
+                str(self.runtime/"state.sqlite3"),str(self.runtime/"artifacts"),
+                started["run_id"],expected_version,package_digest,
+            ),
+        )
+        process.start(); process.join(timeout=10)
+        if process.is_alive():
+            process.terminate(); process.join(timeout=2)
+        self.assertEqual(process.exitcode,23)
+        self.assertEqual(self.service.status(started["run_id"])["phase"],"launching")
+
+        with mock.patch.object(self.service,"_spawn_daemon",return_value=123) as spawn:
+            resumed=self.service.resume(started["run_id"])
+        self.assertTrue(resumed["launched"])
+        spawn.assert_called_once()
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(started["run_id"])
+            attempt=store.attempt(started["run_id"])
+            self.assertEqual((run["state"],run["phase"]),("queued",None))
+            self.assertEqual(attempt["status"],"recovery_required")
+            event_types=[event["type"] for event in store.events_page(started["run_id"])["events"]]
+            self.assertEqual(event_types.count("run.launch_recovered"),1)
+        finally:
+            store.close()
 
     def test_dead_supervisor_with_live_child_never_relaunches(self):
         started=self.service.start(self.task,"daemon-crash",_internal_fake_delay=10)
@@ -271,6 +317,33 @@ class ServiceTest(unittest.TestCase):
         try:
             run=store.run(replacement["run_id"])
             self.assertEqual(run["supersedes_run_id"],predecessor["run_id"])
+        finally:
+            store.close()
+
+    def test_valid_predecessor_survives_repository_loss_during_recovery(self):
+        predecessor=self.service.start(self.task,"lost-repo-predecessor")
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            replacement=store.claim_start(
+                self.repo,
+                "lost-repo-replacement",
+                {
+                    "task":self.task,
+                    "supersedes_run_id":predecessor["run_id"],
+                    "_internal_fake_delay":.01,
+                },
+                "dead-preflight-owner",
+            )
+        finally:
+            store.close()
+        self.repo.rename(self.root/"repo-moved-away")
+        resumed=self.service.resume(replacement.run_id)
+        self.assertEqual(resumed["disposition"],"preparation_failed")
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(replacement.run_id)
+            self.assertEqual(run["supersedes_run_id"],predecessor["run_id"])
+            self.assertIsNotNone(store.artifact_named(replacement.run_id,"result-receipt.json"))
         finally:
             store.close()
 

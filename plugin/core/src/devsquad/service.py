@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from typing import Any
 
 from .contracts import ContractError
@@ -109,9 +110,9 @@ class Service:
         try:
             task = submitted["task"]
             internal_delay = submitted.get("_internal_fake_delay")
-            validate_task(task, require_existing_repo=True)
             store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
             validated_supersedes_run_id = supersedes_run_id
+            validate_task(task, require_existing_repo=True)
             worktree = store.preparation_worktree(
                 run_id, fencing_token, Path(task["project"]["repo_path"]),
             )
@@ -183,6 +184,11 @@ class Service:
         log_dir=self.runtime/"private-logs"; log_dir.mkdir(parents=True,exist_ok=True)
         with (log_dir/f"{run_id}.supervisor.log").open("ab",buffering=0) as diagnostic:
             process = subprocess.Popen(command, cwd=self.runtime, env=environment, stdin=subprocess.DEVNULL, stdout=diagnostic, stderr=diagnostic, start_new_session=True, close_fds=True)
+        threading.Thread(
+            target=process.wait,
+            name=f"devsquad-reap-{run_id}",
+            daemon=True,
+        ).start()
         return process.pid
 
     def status(self, run_id: str) -> dict[str, Any]:
@@ -246,6 +252,8 @@ class Service:
                 launch, preparation_error = self._continue_preparation(
                     store, run_id, claim.fencing_token, submitted,
                 )
+            elif run["state"] == "queued" and run["phase"] == "launching":
+                version = store.recover_launching(run_id, run["version"])
             elif run["state"] == "queued" and run["phase"] is None:
                 version = run["version"]
             elif run["state"] == "blocked":

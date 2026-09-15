@@ -25,13 +25,19 @@ def _drain(stream, capture: Path, limit: int, result: dict):
     result.update(total_bytes=total,captured_bytes=kept,truncated=total>kept,full_sha256=digest.hexdigest(),captured_sha256=hashlib.sha256(capture.read_bytes()).hexdigest())
 
 def main(argv=None):
-    p=argparse.ArgumentParser(); p.add_argument("--gate-fd",type=int,required=True); p.add_argument("--database",type=Path,required=True); p.add_argument("--artifacts",type=Path,required=True); p.add_argument("--run-id",required=True); p.add_argument("--attempt-token",required=True); p.add_argument("--supervisor-token",type=int,required=True); p.add_argument("--stdout",type=Path,required=True); p.add_argument("--stderr",type=Path,required=True); p.add_argument("--exit-record",type=Path,required=True); p.add_argument("--child-record",type=Path,required=True); p.add_argument("--limit",type=int,required=True); p.add_argument("--timeout",type=float,required=True); p.add_argument("--grace",type=float,required=True); p.add_argument("command",nargs=argparse.REMAINDER)
+    p=argparse.ArgumentParser(); p.add_argument("--gate-fd",type=int,required=True); p.add_argument("--stdin-fd",type=int); p.add_argument("--database",type=Path,required=True); p.add_argument("--artifacts",type=Path,required=True); p.add_argument("--run-id",required=True); p.add_argument("--attempt-token",required=True); p.add_argument("--supervisor-token",type=int,required=True); p.add_argument("--stdout",type=Path,required=True); p.add_argument("--stderr",type=Path,required=True); p.add_argument("--exit-record",type=Path,required=True); p.add_argument("--child-record",type=Path,required=True); p.add_argument("--limit",type=int,required=True); p.add_argument("--timeout",type=float,required=True); p.add_argument("--grace",type=float,required=True); p.add_argument("command",nargs=argparse.REMAINDER)
     a=p.parse_args(argv); command=a.command[1:] if a.command[:1]==["--"] else a.command
     with os.fdopen(a.gate_fd,"rb",closefd=True) as gate:
-        if gate.read(1)!=b"1": return 125
+        if gate.read(1)!=b"1":
+            if a.stdin_fd is not None: os.close(a.stdin_fd)
+            return 125
     child_gate_read,child_gate_write=os.pipe()
     gated=[os.sys.executable,"-P","-m","devsquad.worker_gate","--gate-fd",str(child_gate_read),"--",*command]
-    child=subprocess.Popen(gated,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True,pass_fds=(child_gate_read,))
+    stdin_source=subprocess.DEVNULL if a.stdin_fd is None else a.stdin_fd
+    try:
+        child=subprocess.Popen(gated,stdin=stdin_source,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True,pass_fds=(child_gate_read,))
+    finally:
+        if a.stdin_fd is not None: os.close(a.stdin_fd)
     os.close(child_gate_read)
     started=process_start_identity(child.pid)
     if started is None:

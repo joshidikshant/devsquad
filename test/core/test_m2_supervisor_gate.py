@@ -17,7 +17,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "core" / "src"))
 
-from devsquad.contracts import ExecutionIdentity, LaunchSpec
+from devsquad.contracts import ContractError, ExecutionIdentity, LaunchSpec
 from devsquad.store import ConflictError, Store
 from devsquad.supervisor import Supervisor, inspect_process, process_start_identity
 
@@ -140,6 +140,33 @@ class SupervisorGateReview(unittest.TestCase):
         ).fetchone()
         self.assertEqual(json.loads(terminal["payload"])["error"], "TIMEOUT")
         self.assertEqual(self.store.attempt(run_id)["status"], "finished")
+
+    def test_durable_launch_passes_an_opened_regular_stdin_artifact(self):
+        run_id,version=self._ready_run("durable-stdin")
+        stdin_path=self.root/"request input.json"
+        payload=b'{"request":"exact bytes"}\n'
+        stdin_path.write_bytes(payload)
+        code="import sys;sys.stdout.buffer.write(sys.stdin.buffer.read())"
+        spec=self._spec(sys.executable,"-c",code,stdin_path=str(stdin_path))
+        source=str(ROOT/"plugin"/"core"/"src")
+        with mock.patch.dict(os.environ,{"PYTHONPATH":source}):
+            handle=self.supervisor.launch_durable(run_id,version,spec,"owner","package")
+        self.assertEqual(self.supervisor.wait_durable(handle,2),0)
+        attempt=self.store.attempt(run_id)
+        artifact=self.store.connection.execute(
+            "SELECT path FROM artifacts WHERE id=?",(attempt["stdout_artifact_id"],),
+        ).fetchone()
+        self.assertEqual(Path(artifact["path"]).read_bytes(),payload)
+
+        linked_run,linked_version=self._ready_run("durable-stdin-symlink")
+        linked=self.root/"linked-input"
+        linked.symlink_to(stdin_path)
+        linked_spec=self._spec(sys.executable,"-c",code,stdin_path=str(linked))
+        with self.assertRaises(ContractError):
+            self.supervisor.launch_durable(
+                linked_run,linked_version,linked_spec,"owner","package",
+            )
+        self.assertEqual(self.store.run(linked_run)["state"],"blocked")
 
     def test_recovery_never_signals_an_ambiguous_identity(self):
         run_id, version = self._ready_run("ambiguous")

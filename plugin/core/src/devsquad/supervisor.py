@@ -7,6 +7,7 @@ import ctypes
 import hashlib
 import os
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -17,6 +18,26 @@ import json
 
 from .contracts import ContractError, LaunchSpec
 from .store import AttemptReservation, ConflictError, Store, canonical_json
+
+
+def _open_stdin_artifact(path: str) -> BinaryIO:
+    candidate = Path(path)
+    if candidate.is_symlink():
+        raise ContractError("stdin artifact must be a regular non-symlink file")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(candidate, flags)
+    except OSError as exc:
+        raise ContractError("stdin artifact must be a readable regular non-symlink file") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ContractError("stdin artifact must be a regular non-symlink file")
+        return os.fdopen(descriptor, "rb")
+    except Exception:
+        os.close(descriptor)
+        raise
 
 
 def process_start_identity(pid: int) -> str | None:
@@ -133,10 +154,7 @@ class Supervisor:
         try:
             stdin_stream: Any = subprocess.DEVNULL
             if spec.stdin_path is not None:
-                stdin_path = os.path.realpath(spec.stdin_path)
-                if os.path.islink(spec.stdin_path) or not os.path.isfile(stdin_path):
-                    raise ContractError("stdin artifact must be a regular non-symlink file")
-                stdin_stream = open(stdin_path, "rb")
+                stdin_stream = _open_stdin_artifact(spec.stdin_path)
             try:
                 process = subprocess.Popen(list(spec.argv), cwd=spec.cwd, env=environment, stdin=stdin_stream, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             finally:
@@ -182,7 +200,10 @@ class Supervisor:
             "stdout_spool":"stdout.capture", "stderr_spool":"stderr.capture", "stdout_meta":"stdout.meta.json", "stderr_meta":"stderr.meta.json", "exit_record":"exit.json", "child_record":"child.json"}.items()}
         gate_read, gate_write = os.pipe()
         process = None
+        stdin_stream = None
         try:
+            if spec.stdin_path is not None:
+                stdin_stream = _open_stdin_artifact(spec.stdin_path)
             command=[sys.executable,"-P","-m","devsquad.attempt_runner","--gate-fd",str(gate_read),
                 "--database",str(self.store.database),"--artifacts",str(self.store.artifacts),
                 "--run-id",run_id,"--attempt-token",reservation.attempt_token,
@@ -190,8 +211,13 @@ class Supervisor:
                 "--stderr",paths["stderr_spool"],"--exit-record",paths["exit_record"],
                 "--child-record",paths["child_record"],"--limit",str(self.output_limit),
                 "--timeout",str(spec.timeout_seconds),"--grace",str(self.grace_seconds),"--",*spec.argv]
+            if stdin_stream is not None:
+                command[4:4] = ["--stdin-fd", str(stdin_stream.fileno())]
             environment=os.environ.copy(); environment.update(spec.environment)
-            process=subprocess.Popen(command,cwd=spec.cwd,env=environment,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,pass_fds=(gate_read,),start_new_session=True)
+            passed_fds=(gate_read,) if stdin_stream is None else (gate_read,stdin_stream.fileno())
+            process=subprocess.Popen(command,cwd=spec.cwd,env=environment,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,pass_fds=passed_fds,start_new_session=True)
+            if stdin_stream is not None:
+                stdin_stream.close(); stdin_stream=None
             os.close(gate_read)
             started=process_start_identity(process.pid)
             if started is None: raise RuntimeError("gated child has no strong process identity")
@@ -199,6 +225,8 @@ class Supervisor:
             os.write(gate_write,b"1"); os.close(gate_write)
             return DurableAttempt(reservation,process,paths)
         except Exception:
+            if stdin_stream is not None:
+                stdin_stream.close()
             try: os.close(gate_write)
             except OSError: pass
             for fd in (gate_read,):

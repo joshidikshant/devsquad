@@ -764,6 +764,51 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def recover_launching(self, run_id: str, expected_version: int) -> int:
+        """Fence an abandoned pre-gate reservation and make the run launchable."""
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status FROM attempts WHERE run_id=? ORDER BY created_at DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            claim = self.connection.execute(
+                "SELECT active FROM supervisor_claims WHERE run_id=?", (run_id,),
+            ).fetchone()
+            if (not run or run["state"] != "queued" or run["phase"] != "launching"
+                    or run["version"] != expected_version or not attempt
+                    or attempt["status"] != "reserved" or not claim or not claim["active"]):
+                raise ConflictError("launch reservation is no longer recoverable")
+            version, now = expected_version + 1, _utc_now()
+            self.connection.execute(
+                "UPDATE attempts SET status='recovery_required',finished_at=? WHERE id=?",
+                (now, attempt["id"]),
+            )
+            self.connection.execute(
+                "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+            )
+            self.connection.execute(
+                "UPDATE runs SET phase=NULL,version=?,updated_at=? WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({
+                "attempt_id": attempt["id"],
+                "reason": "abandoned gated launch reservation",
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.launch_recovered',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def active_attempt(self, run_id: str) -> dict[str, Any] | None:
         row = self.connection.execute("SELECT * FROM attempts WHERE run_id=? AND status IN ('reserved','running','cancelling','ownership_ambiguous') ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
         return dict(row) if row else None
