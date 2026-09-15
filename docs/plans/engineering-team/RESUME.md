@@ -2,62 +2,41 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 15, 2026
+## Current position — September 16, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
-- Build branch: `codex/engineering-team`. `main` is the published runtime baseline.
-- Accepted M1 implementation checkpoint: `97a10f0`.
-- Probe cleanup hardening checkpoint: `7b5c41c`.
-- Accepted M1 status/evidence checkpoint: `c50c6b4`.
-- Native correlation/probe checkpoint: `97a10f0`. The saved integrated probe
-  passed; its private receipt SHA256 is
-  `324c2ce6154936ecf71a8bf913a195befd4251efc6dbb8bbab3dc0dbe1b86df8`.
-  Exact private receipt directory:
+- Build branch: `codex/engineering-team`. `main` remains the published runtime
+  baseline. Inspect current refs before acting; later build checkpoints may be
+  local and must not be discarded.
+- M1 is accepted for bounded truthful invocation/preparation at `97a10f0`.
+  Its saved integrated Codex receipt SHA256 is
+  `324c2ce6154936ecf71a8bf913a195befd4251efc6dbb8bbab3dc0dbe1b86df8`;
+  the private receipt remains outside the repository under
   `/Users/Dikshant/.devsquad/private-probes/native-codex-20260907T025419Z-97a10f0ae1e8`.
-- M1 is accepted for its bounded invocation/preparation scope. The next
-  milestone is M2.
-- M2 store foundation checkpoint: `0c2929c`. M2 remains in progress; its
-  supervisor, service operations and recovery slices are not accepted yet.
-- Supervisor lifecycle checkpoint: `0ee4cc0`. It completes migration 002,
-  fenced supervisor/writer ownership, strong process identity, bounded output,
-  heartbeat, timeout/cancel cleanup and conservative recovery. M2 remains in
-  progress because durable service operations and a detached supervisor entry
-  point are pending.
-- Cleanup-race hardening checkpoint: `df955f4`. Cleanup inventory fails closed,
-  timeout/cancel identity races retain ownership fencing, and 62 core tests pass.
-- Durable service checkpoint `cefd193` is explicit WIP and gated-runner
-  checkpoint `a0794a9` passed 67 core tests plus 202 shell assertions. The
-  preserved recovery candidate is `f76df41`. Adversarial hardening checkpoint
-  `5aa2e74` and CLI/wheel checkpoint `f0d29a7` pass 82 core tests plus all 202
-  shell assertions. Preparation/receipt checkpoint `144b0b2`, reviewed
-  project-identity fix `c6a7a23`, and gated-launch/stdin checkpoint `f9f2ffa`
-  now pass 94 core tests plus all 202 shell assertions. The current implementation
-  checkpoint replaces the unsafe anonymous-pipe launch with a persisted,
-  gated attempt runner and migration 003 durable paths. The runner cannot
-  launch the internal fixture worker until its strong identity and spool paths
-  are committed; it owns output drains, heartbeat, cancel polling and an
-  atomic exit record. Ordered migration discovery, transactional status,
-  stable event cursors and fenced preparation failure are implemented.
-  Recovery/import of a runner exit record is transactionally idempotent under
-  two-process races; timeouts cannot become success after a clean TERM exit;
-  repository-local Python packages cannot shadow the frozen internal runner.
-  Exact CLI envelopes, `start --wait`, and an installed-wheel schema-3-to-4
-  migration gate are covered. Interrupted preparation rotates its fencing token
-  and replays the canonical submitted request without permitting repository
-  retargeting. Every public pre-attempt terminal path publishes a durable
-  receipt; public/fixture predecessor validation covers valid, missing, active
-  and foreign-project links, including unrelated failure and repository-loss
-  cases. A real crash after gated-launch reservation is recoverable, durable
-  stdin preserves exact bytes, and detached supervisor handles are reaped.
-  Independent review found and drove the project-identity/lineage regressions.
-  Remaining M2 work includes post-identity/pre-gate and orphan-child recovery,
-  cross-process cancellation/start/writer races, host-handoff claim fencing,
-  and a final post-fix M2 gate. Public branch-review execution is explicitly
-  failed as `CAPABILITY_UNAVAILABLE` until M3; only the internal test hook can
-  run the fake step. M2 remains in progress.
-- GitHub build branch contains the cleanup/architecture checkpoint `55e93a2`; later implementation checkpoints are local. Inspect the actual current refs before acting.
-- User wants **Sol to implement, with Astra reviewing**, and explicitly wants work preserved across Plus-plan usage interruptions.
-- Full assignment remains **M1–M7 plus C1**, as specified in [SOL-HANDOFF.md](SOL-HANDOFF.md). M2 is in progress.
+- M2 is accepted at `ddb6f51`. Its durable store, gated runner, cancellation,
+  recovery, schema-5 host handoffs and CLI/service operations pass 121 core
+  tests with `ResourceWarning` promoted to failure and 202 Bash assertions.
+  See [M2-STATUS.md](M2-STATUS.md) and the
+  [portable redacted evidence](evidence/M2-durable-runs-2026-09-16.json).
+- Final independent M2 review found two P1 races and no other defect in its
+  bounded target. `ddb6f51` fixes both: lease authorization now samples time
+  after acquiring the SQLite write transaction, and public cancel resumes an
+  interrupted `recovery_cleanup`. Both have deterministic regressions.
+- The next milestone is M3. Public `branch-review` still fails explicitly as
+  `CAPABILITY_UNAVAILABLE`; M2 is infrastructure, not yet a usable engineering
+  workflow. Do not advertise DevSquad as ready for real review until M3 passes.
+- Current provider readiness is external to M2: Claude CLI is not logged in;
+  Grok CLI authentication expired; Gemini CLI's individual-account path is
+  unsupported and its supported successor is Antigravity; Antigravity is
+  authenticated but headless execution still lacks scoped permission/trust.
+  Do not retry these blocked paths, buy credits, use paid API fallback or
+  change global provider settings. Resume a provider gate only after the user
+  completes the corresponding normal login/permission action.
+- User wants the implementation orchestrated efficiently and preserved across
+  Plus-plan interruptions. Avoid recursive subagent fan-out: it consumed the
+  shared window rapidly without advancing M3.
+- Full assignment remains **M1–M7 plus C1**, as specified in
+  [SOL-HANDOFF.md](SOL-HANDOFF.md). M3 is next.
 
 ## Completed and preserved
 
@@ -69,11 +48,12 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 34 tests passed |
+| Python core discovery | 121 tests passed at the M2 acceptance gate |
 | Bash 3.2 regression suite | 10 test files, 202 assertions passed |
-| Wheel installation | Temporary venv resolves packaged schemas, adapters and shared taxonomy |
+| Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 5 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
 | Integrated native adapter proof | Passed at `97a10f0`; gpt-5.5/low, read-only, correlated completion and confirmed process-group cleanup |
+| M2 crash/race matrix | Real subprocess interruptions plus independent-process start, writer, cancel, import and host-handoff races passed at `ddb6f51` |
 
 The first two saved-probe invocations failed before `Popen` because of
 probe-only path/field defects, so neither launched Codex nor consumed a model
@@ -84,21 +64,27 @@ The successful run retained separate stderr files of 138,030 and
 285,644 bytes, supporting the diagnosis that an undrained stderr pipe caused
 the earlier apparent nonresponses.
 
-The authoritative requirement matrix is [M1-STATUS.md](M1-STATUS.md); detailed evidence is [M1-invocation-core-2026-09-06.json](evidence/M1-invocation-core-2026-09-06.json). [backlog.json](backlog.json) marks M1 complete and M2 next. Grok workspace-write and unprobed Antigravity/Grok settings are not advertised as verified.
+The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md) and
+[M2-STATUS.md](M2-STATUS.md). [backlog.json](backlog.json) marks both complete
+and M3 next. Unauthenticated, unsupported or permission-blocked provider paths
+are not advertised as verified.
 
 ## Exact next work
 
-1. Check Git state; preserve any new changes before doing further work. Read this file, M1-STATUS and the full Sol handoff. Do not restart the architecture exercise or reset to `main`.
-2. Read the M2 section of [IMPLEMENTATION.md](IMPLEMENTATION.md),
-   [M2-STATUS.md](M2-STATUS.md), and the corresponding contracts before
-   editing. Continue with migration 005 host-handoff storage and claim fencing,
-   then post-identity/pre-gate and orphan-child recovery plus the remaining
-   cross-process cancellation/start/writer crash matrix.
-   Do not redo the accepted store or supervisor foundations or the fixes in
-   `5aa2e74`/`f0d29a7`.
-3. Preserve M1 limitations and process-ownership boundaries. M1 acceptance is
-   not a claim that the full product exists, and no additional native probe is
-   needed for the accepted gate.
+1. Check Git status and recent commits, preserving work newer than this note.
+   Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
+2. Read the M3 section of [IMPLEMENTATION.md](IMPLEMENTATION.md), the task,
+   Profile/Policy and workflow sections of [CONTRACTS.md](CONTRACTS.md), and
+   the selection amendment. Implement the earliest M3 dependency: strict
+   profile/policy loading plus deterministic frozen role bindings and fallback
+   decisions, with tests. Then add frozen review workspace preparation before
+   any real reviewer launch.
+3. Preserve the M2 process/fencing boundaries. Extend the durable runner with
+   real workflow steps; do not bypass it with an in-process or ad-hoc provider
+   call. Keep public review unavailable until reviewer, declared checks, lead
+   disposition and bound receipt artifacts form a valid end-to-end slice.
+4. Use offline fake adapters for development. Provider login/permission work is
+   a later live gate and must not block independent M3 implementation.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 

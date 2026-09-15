@@ -11,7 +11,7 @@
   "execution_brief": "SOL-HANDOFF.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
-  "next_milestone": "M2",
+  "next_milestone": "M3",
   "milestones": [
     {
       "id": "M1",
@@ -36,7 +36,7 @@
       "id": "M2",
       "title": "Durable runs, cancellation and recovery",
       "depends_on": ["M1"],
-      "status": "in_progress",
+      "status": "complete",
       "acceptance_section": "M2 — Persist jobs and own their processes",
       "evidence": [
         {
@@ -65,6 +65,15 @@
           "artifact": "M2-STATUS.md",
           "recorded_at": "2026-09-15T11:06:00+05:30",
           "availability": "tracked tests"
+        },
+        {
+          "kind": "milestone_acceptance",
+          "revision": "ddb6f51",
+          "command_or_action": "121 core tests with ResourceWarning promoted to error, 202 shell assertions, spawned-process crash/cancel recovery, independent-process races and installed-wheel schema-4-to-5 migration",
+          "outcome": "All M2 durability, cancellation, recovery and host-handoff gates pass; both final independent-review P1 findings are fixed with regressions; real branch review remains the explicit M3 boundary",
+          "artifact": "evidence/M2-durable-runs-2026-09-16.json",
+          "recorded_at": "2026-09-16T00:41:03+05:30",
+          "availability": "portable_redacted"
         }
       ],
       "blocker": null
