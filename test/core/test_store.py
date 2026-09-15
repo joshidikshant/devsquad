@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 import sys
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
+from devsquad.contracts import ContractError
 from devsquad.store import ConflictError, SchemaVersionError, Store, git_common_dir
 
 
@@ -159,6 +160,62 @@ class StoreTest(unittest.TestCase):
         a = self.store.claim_start(self.repo, "root", {"task": 1}, "a")
         b = self.store.claim_start(linked, "linked", {"task": 2}, "b")
         self.assertEqual(a.project_id, b.project_id)
+
+    def test_preparation_can_pin_a_same_project_frozen_worktree(self):
+        frozen = self.root / "frozen-review"
+        subprocess.run(
+            ["git", "-C", str(self.repo), "worktree", "add", "--detach", "-q",
+             str(frozen), "HEAD"],
+            check=True,
+        )
+        target_oid = subprocess.run(
+            ["git", "-C", str(self.repo), "rev-parse", "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        claim = self.store.claim_start(self.repo, "frozen", {"task": 1}, "owner")
+        version = self.store.complete_preparation(
+            claim.run_id,
+            claim.fencing_token,
+            {"target_oid": target_oid},
+            package_path="/frozen/package",
+            package_digest="package",
+            worktree_path=str(frozen),
+        )
+        self.assertEqual(self.store.run(claim.run_id)["worktree_path"], str(frozen.resolve()))
+        reservation = self.store.reserve_attempt(
+            claim.run_id, version, "supervisor", "package",
+        )
+        attempt = self.store.connection.execute(
+            "SELECT worktree_path FROM attempts WHERE id=?", (reservation.attempt_id,),
+        ).fetchone()
+        self.assertEqual(attempt["worktree_path"], str(frozen.resolve()))
+
+        other = self.root / "other"
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        subprocess.run(
+            ["git", "-C", str(other), "config", "user.email", "test@example.invalid"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(other), "config", "user.name", "Test"], check=True,
+        )
+        (other / "README").write_text("other\n")
+        subprocess.run(["git", "-C", str(other), "add", "README"], check=True)
+        subprocess.run(["git", "-C", str(other), "commit", "-qm", "other"], check=True)
+        rejected = self.store.claim_start(self.repo, "wrong-project", {"task": 2}, "owner")
+        with self.assertRaisesRegex(ContractError, "different project"):
+            self.store.complete_preparation(
+                rejected.run_id,
+                rejected.fencing_token,
+                {"target_oid": target_oid},
+                worktree_path=str(other),
+            )
+        self.assertEqual(
+            (self.store.run(rejected.run_id)["state"], self.store.run(rejected.run_id)["phase"]),
+            ("queued", "preparing"),
+        )
 
     def test_artifact_is_finalized_and_verified_before_reference(self):
         claim = self.store.claim_start(self.repo, "artifact", {"task": 1}, "owner")

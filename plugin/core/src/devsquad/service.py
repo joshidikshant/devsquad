@@ -24,6 +24,13 @@ from .store import (
     canonical_json,
 )
 from .validation import validate_task
+from .workspaces import (
+    assert_clean_inputs,
+    committed_regular_file,
+    prepare_review_workspace,
+    repo_relative_config,
+    resolve_commit,
+)
 
 
 class Service:
@@ -147,29 +154,45 @@ class Service:
             payload["claim_expires_at"] = None
         return payload
 
-    @staticmethod
     def _resolve_snapshot(
+        self,
         task: dict[str, Any],
         internal_delay: float | None,
         resolved_repo: Path | None = None,
+        *,
+        project_id: str | None = None,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
-        def oid(ref: str) -> str:
-            result = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", f"{ref}^{{commit}}"], text=True, capture_output=True, check=False)
-            if result.returncode != 0: raise ContractError(f"Git ref does not resolve to a commit: {ref}")
-            return result.stdout.strip()
+        base_oid = resolve_commit(repo, task["project"]["base_ref"])
+        target_oid = resolve_commit(repo, task["project"]["target_ref"])
+        scope_paths = tuple(dict.fromkeys(
+            task["scope"]["read_paths"] + task["scope"]["write_paths"]
+        ))
+        config_paths = {
+            label: repo_relative_config(repo, task["routing"][label], label)
+            for label in ("profiles_file", "policy_file")
+        }
+        if internal_delay is None:
+            assert_clean_inputs(repo, scope_paths, config_paths.values())
         configs = {}
         config_payloads = {}
-        for label in ("profiles_file", "policy_file"):
-            candidate = Path(task["routing"][label])
-            path = (repo / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
-            if path != repo and repo not in path.parents: raise ContractError(f"{label} escapes project")
-            data = path.read_bytes()
+        for label, relative_path in config_paths.items():
+            path = repo / relative_path
+            data = (
+                committed_regular_file(repo, target_oid, relative_path)
+                if internal_delay is None else path.read_bytes()
+            )
             config_payloads[label] = data
             configs[label] = {
                 "path": str(path), "sha256": hashlib.sha256(data).hexdigest(),
             }
-        snapshot = {"task": task, "base_oid": oid(task["project"]["base_ref"]), "target_oid": oid(task["project"]["target_ref"]), "configs": configs}
+        snapshot = {
+            "task": task,
+            "base_oid": base_oid,
+            "target_oid": target_oid,
+            "configs": configs,
+        }
         if internal_delay is not None:
             if internal_delay < 0 or internal_delay > 60: raise ContractError("internal fake delay is invalid")
             snapshot["internal_fake_delay"] = internal_delay
@@ -178,6 +201,18 @@ class Service:
                 task,
                 config_payloads["profiles_file"],
                 config_payloads["policy_file"],
+            )
+            if project_id is None or run_id is None:
+                raise ContractError("public preflight requires run-owned workspace identity")
+            snapshot["workspace"] = prepare_review_workspace(
+                repo,
+                self.runtime,
+                project_id,
+                run_id,
+                base_oid,
+                target_oid,
+                scope_paths,
+                required_clean_paths=config_paths.values(),
             )
         return snapshot
 
@@ -200,7 +235,14 @@ class Service:
             worktree = store.preparation_worktree(
                 run_id, fencing_token, Path(task["project"]["repo_path"]),
             )
-            snapshot = self._resolve_snapshot(task, internal_delay, worktree)
+            project_id = store.run(run_id)["project_id"]
+            snapshot = self._resolve_snapshot(
+                task,
+                internal_delay,
+                worktree,
+                project_id=project_id,
+                run_id=run_id,
+            )
             if internal_delay is None:
                 error = {
                     "error": "CAPABILITY_UNAVAILABLE",

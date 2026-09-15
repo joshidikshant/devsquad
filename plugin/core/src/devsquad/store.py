@@ -358,23 +358,50 @@ class Store:
         )
         return version
 
-    def complete_preparation(self, run_id: str, fencing_token: int, mutable_snapshot: Any, *, package_path: str | None = None, package_digest: str | None = None, supersedes_run_id: str | None = None) -> int:
+    def complete_preparation(
+        self,
+        run_id: str,
+        fencing_token: int,
+        mutable_snapshot: Any,
+        *,
+        package_path: str | None = None,
+        package_digest: str | None = None,
+        supersedes_run_id: str | None = None,
+        worktree_path: str | None = None,
+    ) -> int:
         snapshot = canonical_json(mutable_snapshot)
+        resolved_worktree = None
+        worktree_common = None
+        if worktree_path is not None:
+            if not isinstance(worktree_path, str) or not worktree_path or not Path(worktree_path).is_absolute():
+                raise ContractError("prepared worktree path must be absolute")
+            resolved_worktree = str(Path(worktree_path).resolve(strict=True))
+            worktree_common = str(git_common_dir(Path(resolved_worktree)))
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             row = self.connection.execute(
-                "SELECT r.state,r.phase,r.version,c.fencing_token,c.active FROM runs r JOIN claims c ON c.run_id=r.id WHERE r.id=?",
+                "SELECT r.state,r.phase,r.version,c.fencing_token,c.active,"
+                "p.git_common_dir FROM runs r JOIN claims c ON c.run_id=r.id "
+                "JOIN projects p ON p.id=r.project_id WHERE r.id=?",
                 (run_id,),
             ).fetchone()
             if not row or row["state"] != "queued" or row["phase"] != "preparing" or not row["active"] or row["fencing_token"] != fencing_token:
                 raise ConflictError("preparation claim is stale or cancelled")
+            if worktree_common is not None and worktree_common != row["git_common_dir"]:
+                raise ContractError("prepared worktree belongs to a different project")
             if supersedes_run_id is not None:
                 predecessor = self.connection.execute("SELECT project_id,state FROM runs WHERE id=?", (supersedes_run_id,)).fetchone()
                 project = self.connection.execute("SELECT project_id FROM runs WHERE id=?", (run_id,)).fetchone()
                 if not predecessor or predecessor["project_id"] != project["project_id"] or predecessor["state"] not in TERMINAL_STATES:
                     raise ConflictError("superseded run must be terminal and belong to the same project")
             version, now = row["version"] + 1, _utc_now()
-            self.connection.execute("UPDATE runs SET mutable_snapshot=?,package_path=?,package_digest=?,supersedes_run_id=?,phase=NULL,version=?,updated_at=? WHERE id=?", (snapshot, package_path, package_digest, supersedes_run_id, version, now, run_id))
+            self.connection.execute(
+                "UPDATE runs SET mutable_snapshot=?,package_path=?,package_digest=?,"
+                "supersedes_run_id=?,worktree_path=COALESCE(?,worktree_path),phase=NULL,"
+                "version=?,updated_at=? WHERE id=?",
+                (snapshot, package_path, package_digest, supersedes_run_id,
+                 resolved_worktree, version, now, run_id),
+            )
             self.connection.execute("UPDATE claims SET active=0 WHERE run_id=?", (run_id,))
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.queued','{}',?)", (run_id, version, now))
             self.connection.execute("COMMIT")

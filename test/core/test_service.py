@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ExecutionIdentity, LaunchSpec
 from devsquad.service import Service
-from devsquad.store import ConflictError, Store
+from devsquad.store import ConflictError, Store, canonical_json
 from devsquad.supervisor import Supervisor, inspect_process
 from devsquad_test_fixtures import branch_review_routing_documents
 
@@ -91,6 +91,10 @@ class ServiceTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "config", "user.email", "test@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(self.repo), "config", "user.name", "Test"], check=True)
         self.profiles_json, self.policy_json = branch_review_routing_documents()
+        (self.repo / "src").mkdir()
+        (self.repo / "tests").mkdir()
+        (self.repo / "src/app.py").write_text("VALUE = 'base'\n")
+        (self.repo / "tests/test_app.py").write_text("# fixture test\n")
         (self.repo / "profiles.json").write_text(self.profiles_json)
         (self.repo / "policy.json").write_text(self.policy_json)
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
@@ -490,6 +494,32 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(cancellation_receipt["phase"],"preparing")
 
     def test_public_preflight_freezes_profile_policy_and_alias_selection(self):
+        base_oid=subprocess.run(
+            ["git","-C",str(self.repo),"rev-parse","HEAD"],
+            check=True,text=True,capture_output=True,
+        ).stdout.strip()
+        (self.repo/"src/app.py").write_text("VALUE = 'candidate'\n")
+        subprocess.run(["git","-C",str(self.repo),"add","src/app.py"],check=True)
+        subprocess.run(
+            ["git","-C",str(self.repo),"commit","-qm","candidate"],check=True,
+        )
+        target_oid=subprocess.run(
+            ["git","-C",str(self.repo),"rev-parse","HEAD"],
+            check=True,text=True,capture_output=True,
+        ).stdout.strip()
+        self.task["project"]["base_ref"]=base_oid
+        self.task["project"]["target_ref"]=target_oid
+        (self.repo/"notes.txt").write_text("unrelated local work\n")
+        before_head=subprocess.run(
+            ["git","-C",str(self.repo),"rev-parse","HEAD"],
+            check=True,capture_output=True,
+        ).stdout
+        before_status=subprocess.run(
+            ["git","-C",str(self.repo),"status","--porcelain=v1","-z"],
+            check=True,capture_output=True,
+        ).stdout
+        before_index=hashlib.sha256((self.repo/".git/index").read_bytes()).hexdigest()
+
         started=self.service.start(self.task,"frozen-routing")
         self.assertEqual(started["error"]["error"],"CAPABILITY_UNAVAILABLE")
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
@@ -520,6 +550,43 @@ class ServiceTest(unittest.TestCase):
             snapshot["configs"]["policy_file"]["sha256"],
             routed["policy"]["sha256"],
         )
+        workspace=snapshot["workspace"]
+        self.assertEqual(workspace["base_oid"],base_oid)
+        self.assertEqual(workspace["target_oid"],target_oid)
+        self.assertEqual(workspace["changed_paths"],["src/app.py"])
+        identity={
+            "schema_version":1,
+            "base_oid":base_oid,
+            "target_oid":target_oid,
+            "changed_paths":["src/app.py"],
+        }
+        self.assertEqual(
+            workspace["candidate_sha256"],
+            hashlib.sha256(canonical_json(identity).encode()).hexdigest(),
+        )
+        frozen=Path(workspace["path"])
+        self.assertEqual((frozen/"src/app.py").read_text(),"VALUE = 'candidate'\n")
+        self.assertEqual(
+            subprocess.run(
+                ["git","-C",str(frozen),"rev-parse","--abbrev-ref","HEAD"],
+                check=True,text=True,capture_output=True,
+            ).stdout.strip(),
+            "HEAD",
+        )
+        self.assertEqual(
+            (
+                subprocess.run(
+                    ["git","-C",str(self.repo),"rev-parse","HEAD"],
+                    check=True,capture_output=True,
+                ).stdout,
+                subprocess.run(
+                    ["git","-C",str(self.repo),"status","--porcelain=v1","-z"],
+                    check=True,capture_output=True,
+                ).stdout,
+                hashlib.sha256((self.repo/".git/index").read_bytes()).hexdigest(),
+            ),
+            (before_head,before_status,before_index),
+        )
 
         (self.repo/"profiles.json").write_text("not valid after snapshot\n")
         (self.repo/"policy.json").write_text("also changed\n")
@@ -533,6 +600,65 @@ class ServiceTest(unittest.TestCase):
             )
         finally:
             store.close()
+
+    def test_public_preflight_reads_config_from_frozen_target_commit(self):
+        frozen_target=subprocess.run(
+            ["git","-C",str(self.repo),"rev-parse","HEAD"],
+            check=True,text=True,capture_output=True,
+        ).stdout.strip()
+        (self.repo/"profiles.json").write_text("invalid current branch profile\n")
+        (self.repo/"policy.json").write_text("invalid current branch policy\n")
+        subprocess.run(["git","-C",str(self.repo),"add","profiles.json","policy.json"],check=True)
+        subprocess.run(
+            ["git","-C",str(self.repo),"commit","-qm","move current configs"],
+            check=True,
+        )
+        task=json.loads(json.dumps(self.task))
+        task["project"]["base_ref"]=frozen_target
+        task["project"]["target_ref"]=frozen_target
+
+        started=self.service.start(task,"target-config")
+        self.assertEqual(started["error"]["error"],"CAPABILITY_UNAVAILABLE")
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            snapshot=json.loads(store.run(started["run_id"])["mutable_snapshot"])
+        finally:
+            store.close()
+        self.assertEqual(snapshot["target_oid"],frozen_target)
+        self.assertEqual(
+            snapshot["configs"]["profiles_file"]["sha256"],
+            hashlib.sha256(self.profiles_json.encode()).hexdigest(),
+        )
+        self.assertEqual(
+            snapshot["configs"]["policy_file"]["sha256"],
+            hashlib.sha256(self.policy_json.encode()).hexdigest(),
+        )
+        self.assertEqual(
+            subprocess.run(
+                ["git","-C",snapshot["workspace"]["path"],"rev-parse","HEAD"],
+                check=True,text=True,capture_output=True,
+            ).stdout.strip(),
+            frozen_target,
+        )
+
+    def test_public_preflight_rejects_dirty_scoped_input_before_workspace(self):
+        (self.repo/"src/uncommitted.py").write_text("dirty\n")
+        started=self.service.start(self.task,"dirty-scope")
+        self.assertEqual(started["error"]["error"],"PREPARATION_FAILED")
+        self.assertIn("src/uncommitted.py",started["error"]["message"])
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(started["run_id"])
+            self.assertIsNone(run["mutable_snapshot"])
+            self.assertIsNotNone(store.artifact_named(
+                started["run_id"],"result-receipt.json",
+            ))
+        finally:
+            store.close()
+        self.assertFalse(
+            (self.runtime/"projects"/run["project_id"]/"runs"/
+             started["run_id"]/"review-worktree").exists()
+        )
 
     def test_invalid_predecessor_fails_with_run_context_and_receipt(self):
         started=self.service.start(
