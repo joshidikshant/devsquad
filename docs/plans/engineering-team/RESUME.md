@@ -22,9 +22,19 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   bounded target. `ddb6f51` fixes both: lease authorization now samples time
   after acquiring the SQLite write transaction, and public cancel resumes an
   interrupted `recovery_cleanup`. Both have deterministic regressions.
-- The next milestone is M3. Public `branch-review` still fails explicitly as
-  `CAPABILITY_UNAVAILABLE`; M2 is infrastructure, not yet a usable engineering
-  workflow. Do not advertise DevSquad as ready for real review until M3 passes.
+- M3 is in progress through `cd9a881`. `ca55990` adds strict deterministic
+  profile/policy routing, alias binding snapshots, pins/fallbacks, independent
+  reviewer selection and typed pool capacity. `1c7b614` freezes those exact
+  bytes and decisions during public preflight. `cd9a881` resolves base/target
+  OIDs and creates a detached run-owned review worktree without changing the
+  submitted checkout, index or HEAD; dirty scoped/config inputs and escaping
+  symlinks fail closed. The current gate is 144 core tests with
+  `ResourceWarning` promoted to failure plus 202 Bash assertions.
+- Public `branch-review` still fails explicitly as `CAPABILITY_UNAVAILABLE`
+  after the now-tested M3 preflight. The reviewer, declared checks, lead
+  disposition and bound report/receipt pipeline are not implemented yet. Do
+  not advertise DevSquad as ready for real review until that end-to-end gate
+  passes.
 - Current provider readiness is external to M2: Claude CLI is not logged in;
   Grok CLI authentication expired; Gemini CLI's individual-account path is
   unsupported and its supported successor is Antigravity; Antigravity is
@@ -34,7 +44,9 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   completes the corresponding normal login/permission action.
 - User wants the implementation orchestrated efficiently and preserved across
   Plus-plan interruptions. Avoid recursive subagent fan-out: it consumed the
-  shared window rapidly without advancing M3.
+  shared window rapidly without advancing M3. The recursively created M3
+  planning agents all hit the same Plus limit; continue locally until shared
+  agent capacity is restored, then use only bounded leaf reviews.
 - Full assignment remains **M1–M7 plus C1**, as specified in
   [SOL-HANDOFF.md](SOL-HANDOFF.md). M3 is next.
 
@@ -48,12 +60,14 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 121 tests passed at the M2 acceptance gate |
+| Python core discovery | 144 tests passed through the M3 frozen-workspace checkpoint |
 | Bash 3.2 regression suite | 10 test files, 202 assertions passed |
 | Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 5 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
 | Integrated native adapter proof | Passed at `97a10f0`; gpt-5.5/low, read-only, correlated completion and confirmed process-group cleanup |
 | M2 crash/race matrix | Real subprocess interruptions plus independent-process start, writer, cancel, import and host-handoff races passed at `ddb6f51` |
+| M3 deterministic routing | Strict profiles/policy, aliases, overrides, fallback and typed capacity tests passed at `ca55990` / `1c7b614` |
+| M3 frozen review input | Exact OIDs/config hashes, detached worktree, moving-ref stability, dirty-input rejection and source checkout preservation passed at `cd9a881` |
 
 The first two saved-probe invocations failed before `Popen` because of
 probe-only path/field defects, so neither launched Codex nor consumed a model
@@ -73,16 +87,16 @@ are not advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Read the M3 section of [IMPLEMENTATION.md](IMPLEMENTATION.md), the task,
-   Profile/Policy and workflow sections of [CONTRACTS.md](CONTRACTS.md), and
-   the selection amendment. Implement the earliest M3 dependency: strict
-   profile/policy loading plus deterministic frozen role bindings and fallback
-   decisions, with tests. Then add frozen review workspace preparation before
-   any real reviewer launch.
-3. Preserve the M2 process/fencing boundaries. Extend the durable runner with
-   real workflow steps; do not bypass it with an in-process or ad-hoc provider
-   call. Keep public review unavailable until reviewer, declared checks, lead
-   disposition and bound receipt artifacts form a valid end-to-end slice.
+2. Preserve the M2 process/fencing boundaries and implement the next M3 slice:
+   the durable reviewer → trusted declared checks → lead disposition pipeline.
+   Add strict structured review/check/disposition artifacts bound to
+   `workspace.candidate_sha256`, explicit `required_to_pass` handling and host
+   handoff continuation. Do not bypass the supervisor with an in-process or
+   ad-hoc provider call.
+3. Add terminal `receipt.json`, `receipt.md`, `events.jsonl` and artifact
+   manifest generation for the workflow. Keep public review unavailable until
+   the complete fake-adapter end-to-end gate passes, then run one bounded real
+   Codex review before declaring the M3 product stop usable.
 4. Use offline fake adapters for development. Provider login/permission work is
    a later live gate and must not block independent M3 implementation.
 

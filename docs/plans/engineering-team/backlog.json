@@ -82,9 +82,37 @@
       "id": "M3",
       "title": "Usable branch review from terminal",
       "depends_on": ["M2"],
-      "status": "pending",
+      "status": "in_progress",
       "acceptance_section": "M3 — Ship a useful branch review",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "ca55990",
+          "command_or_action": "131 core tests and 202 shell assertions covering strict deterministic routing, versioned aliases, pins/fallbacks, independent review and typed pool capacity",
+          "outcome": "M3 routing decisions are deterministic, fail closed and retain exact profile/policy identity; workflow execution remains unavailable",
+          "artifact": "../../../test/core/test_router.py",
+          "recorded_at": "2026-09-16T00:52:00+05:30",
+          "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "1c7b614",
+          "command_or_action": "132 core tests and 202 shell assertions covering public-preflight routing snapshots and replay after mutable config corruption",
+          "outcome": "New runs freeze exact config hashes, bindings and selected concrete profiles before execution",
+          "artifact": "../../../test/core/test_service.py",
+          "recorded_at": "2026-09-16T00:58:00+05:30",
+          "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "cd9a881",
+          "command_or_action": "144 core tests with ResourceWarning promoted to error and 202 shell assertions covering exact commit inputs and run-owned detached worktrees",
+          "outcome": "M3 preflight freezes base/target/config identity, rejects dirty scoped inputs and escaping symlinks, and preserves the submitted checkout/index/HEAD; reviewer/check/lead execution remains pending",
+          "artifact": "../../../test/core/test_workspaces.py",
+          "recorded_at": "2026-09-16T01:08:00+05:30",
+          "availability": "tracked_tests"
+        }
+      ],
       "blocker": null
     },
     {
