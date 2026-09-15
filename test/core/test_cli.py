@@ -230,7 +230,7 @@ class InstalledWheelMigrationTest(unittest.TestCase):
                 return candidate
         return None
 
-    def test_installed_wheel_contains_and_applies_migration_four(self):
+    def test_installed_wheel_contains_and_applies_migrations_through_five(self):
         build_python = self.build_python()
         if build_python is None:
             self.skipTest("offline wheel gate requires setuptools>=68 and wheel; set DEVSQUAD_BUILD_PYTHON")
@@ -272,9 +272,12 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 4
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 5
     columns = {row[1] for row in store.connection.execute("PRAGMA table_info(runs)")}
     assert {"package_path", "package_digest", "supersedes_run_id"} <= columns
+    assert store.connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='handoffs'"
+    ).fetchone()
 finally:
     store.close()
 '''

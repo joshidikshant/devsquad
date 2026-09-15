@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 from importlib.resources import files
 import json
@@ -17,8 +17,9 @@ from typing import Any
 
 from .contracts import ContractError
 
-SUPPORTED_SCHEMA_VERSION = 4
+SUPPORTED_SCHEMA_VERSION = 5
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
+HOST_LEASE_SECONDS = 10 * 60
 
 
 class ConflictError(ContractError):
@@ -55,8 +56,65 @@ class PreparationClaim:
     version: int
 
 
+@dataclass(frozen=True)
+class HandoffClaim:
+    run_id: str
+    handoff_id: str
+    owner_id: str
+    fencing_token: int
+    expires_at: str
+    run_version: int
+    action: str
+
+
+@dataclass(frozen=True)
+class HandoffSnapshot:
+    run_id: str
+    run_state: str
+    run_phase: str | None
+    run_version: int
+    handoff_id: str
+    sequence: int
+    status: str
+    packet: dict[str, Any]
+    packet_sha256: str
+    created_run_version: int
+    submitted_run_version: int | None
+    created_at: str
+    closed_at: str | None
+    claim: HandoffClaim | None
+
+
+@dataclass(frozen=True)
+class HandoffSubmission:
+    run_id: str
+    handoff_id: str
+    submission_id: str
+    submission_hash: str
+    disposition: str
+    recorded_run_version: int
+    replayed: bool
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _authoritative_now(value: datetime | None = None) -> datetime:
+    current = datetime.now(timezone.utc) if value is None else value
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ContractError("authoritative time must include a timezone")
+    return current.astimezone(timezone.utc)
+
+
+def _parse_utc(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise ConflictError("persisted handoff lease timestamp is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ConflictError("persisted handoff lease timestamp is invalid")
+    return parsed.astimezone(timezone.utc)
 
 
 def canonical_json(value: Any) -> str:
@@ -243,8 +301,16 @@ class Store:
                 or row["predecessor_state"] not in TERMINAL_STATES):
             raise ConflictError("superseded run must be terminal and belong to the same project")
 
-    def _terminal_receipt(self, run_id: str, terminal_state: str, phase: str, payload: Any) -> tuple[Path, str, int, str]:
-        finished_at = _utc_now()
+    def _terminal_receipt(
+        self,
+        run_id: str,
+        terminal_state: str,
+        phase: str,
+        payload: Any,
+        *,
+        now: str | None = None,
+    ) -> tuple[Path, str, int, str]:
+        finished_at = now or _utc_now()
         receipt = {
             "schema_version": 1,
             "run_id": run_id,
@@ -812,6 +878,506 @@ class Store:
     def active_attempt(self, run_id: str) -> dict[str, Any] | None:
         row = self.connection.execute("SELECT * FROM attempts WHERE run_id=? AND status IN ('reserved','running','cancelling','ownership_ambiguous') ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
         return dict(row) if row else None
+
+    @staticmethod
+    def _handoff_claim_from_row(row: sqlite3.Row, action: str) -> HandoffClaim:
+        return HandoffClaim(
+            run_id=row["run_id"],
+            handoff_id=row["handoff_id"],
+            owner_id=row["owner_id"],
+            fencing_token=row["fencing_token"],
+            expires_at=row["lease_expires_at"],
+            run_version=row["run_version"],
+            action=action,
+        )
+
+    def publish_handoff(
+        self,
+        run_id: str,
+        expected_version: int,
+        attempt_token: str,
+        supervisor_token: int,
+        packet: dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> HandoffSnapshot:
+        """Release a reconciled writer and publish one immutable host packet.
+
+        Process absence is established by the owning supervisor before it calls
+        this storage transition, just as it is before an ordinary attempt
+        completion. The persisted attempt and supervisor fences ensure a stale
+        coordinator cannot publish after ownership has moved.
+        """
+        if (type(expected_version) is not int or expected_version < 1
+                or not isinstance(attempt_token, str) or not attempt_token
+                or type(supervisor_token) is not int
+                or supervisor_token < 1 or not isinstance(packet, dict)):
+            raise ContractError("handoff publication requires valid ownership and packet fields")
+        packet_json = canonical_json(packet)
+        packet_sha256 = hashlib.sha256(packet_json.encode()).hexdigest()
+        timestamp = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,a.id AS attempt_id,a.status AS attempt_status,"
+                "s.fencing_token AS supervisor_token,s.active AS supervisor_active "
+                "FROM runs r JOIN attempts a ON a.run_id=r.id "
+                "JOIN supervisor_claims s ON s.run_id=r.id "
+                "WHERE r.id=? AND a.attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            if (not row or row["state"] != "running" or row["phase"] is not None
+                    or row["version"] != expected_version
+                    or row["attempt_status"] != "running"
+                    or not row["supervisor_active"]
+                    or row["supervisor_token"] != supervisor_token):
+                raise ConflictError("handoff publication is fenced")
+            if self.connection.execute(
+                "SELECT 1 FROM handoffs WHERE run_id=? AND status IN ('open','submitted')",
+                (run_id,),
+            ).fetchone():
+                raise ConflictError("run already has a pending handoff")
+            sequence = self.connection.execute(
+                "SELECT COALESCE(MAX(sequence),0)+1 FROM handoffs WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            handoff_id, version = str(uuid.uuid4()), expected_version + 1
+            self.connection.execute(
+                "INSERT INTO handoffs(id,run_id,sequence,packet_json,packet_sha256,status,"
+                "created_run_version,created_at) VALUES(?,?,?,?,?,'open',?,?)",
+                (handoff_id, run_id, sequence, packet_json, packet_sha256, version, timestamp),
+            )
+            self.connection.execute(
+                "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
+                (timestamp, row["attempt_id"]),
+            )
+            self.connection.execute(
+                "UPDATE supervisor_claims SET active=0 WHERE run_id=? AND fencing_token=?",
+                (run_id, supervisor_token),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='awaiting_host',phase=NULL,version=?,updated_at=? WHERE id=?",
+                (version, timestamp, run_id),
+            )
+            payload = canonical_json({
+                "handoff_id": handoff_id,
+                "packet_sha256": packet_sha256,
+                "sequence": sequence,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.awaiting_host',?,?)",
+                (run_id, version, payload, timestamp),
+            )
+            self.connection.execute("COMMIT")
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+        snapshot = self.handoff_snapshot(run_id)
+        if snapshot is None:  # Defensive: the just-committed projection must exist.
+            raise ConflictError("published handoff is missing")
+        return snapshot
+
+    def handoff_snapshot(self, run_id: str) -> HandoffSnapshot | None:
+        self.connection.execute("BEGIN")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if not run:
+                raise ContractError("run does not exist")
+            handoff = self.connection.execute(
+                "SELECT * FROM handoffs WHERE run_id=? ORDER BY sequence DESC LIMIT 1", (run_id,),
+            ).fetchone()
+            claim = None
+            if handoff:
+                claim_row = self.connection.execute(
+                    "SELECT run_id,handoff_id,owner_id,fencing_token,lease_expires_at,"
+                    "? AS run_version FROM claims WHERE run_id=? AND kind='host' "
+                    "AND handoff_id=? AND active=1",
+                    (run["version"], run_id, handoff["id"]),
+                ).fetchone()
+                if claim_row:
+                    claim = self._handoff_claim_from_row(claim_row, "current")
+            if not handoff:
+                self.connection.execute("COMMIT")
+                return None
+            packet_json = handoff["packet_json"]
+            if hashlib.sha256(packet_json.encode()).hexdigest() != handoff["packet_sha256"]:
+                raise ConflictError("persisted handoff packet hash does not match")
+            snapshot = HandoffSnapshot(
+                run_id=run_id,
+                run_state=run["state"],
+                run_phase=run["phase"],
+                run_version=run["version"],
+                handoff_id=handoff["id"],
+                sequence=handoff["sequence"],
+                status=handoff["status"],
+                packet=json.loads(packet_json),
+                packet_sha256=handoff["packet_sha256"],
+                created_run_version=handoff["created_run_version"],
+                submitted_run_version=handoff["submitted_run_version"],
+                created_at=handoff["created_at"],
+                closed_at=handoff["closed_at"],
+                claim=claim,
+            )
+            self.connection.execute("COMMIT")
+            return snapshot
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def claim_handoff(
+        self,
+        run_id: str,
+        expected_version: int,
+        owner_id: str,
+        prior_claim: HandoffClaim | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> HandoffClaim:
+        if (type(expected_version) is not int or expected_version < 1
+                or not isinstance(owner_id, str) or not owner_id):
+            raise ContractError("handoff claim requires a run version and owner")
+        if prior_claim is not None and not isinstance(prior_claim, HandoffClaim):
+            raise ContractError("prior handoff claim is invalid")
+        current = _authoritative_now(now)
+        timestamp = current.isoformat()
+        expires_at = (current + timedelta(seconds=HOST_LEASE_SECONDS)).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,h.id AS handoff_id,h.status,"
+                "c.kind,c.owner_id,c.fencing_token,c.active,c.handoff_id AS claim_handoff_id,"
+                "c.lease_expires_at "
+                "FROM runs r JOIN handoffs h ON h.run_id=r.id "
+                "JOIN claims c ON c.run_id=r.id "
+                "WHERE r.id=? ORDER BY h.sequence DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            if not row:
+                raise ContractError("run has no handoff")
+            if (row["state"] != "awaiting_host" or row["phase"] is not None
+                    or row["status"] != "open" or row["version"] != expected_version):
+                raise ConflictError("handoff is not claimable at that run version")
+            live = bool(
+                row["kind"] == "host" and row["active"]
+                and row["claim_handoff_id"] == row["handoff_id"]
+                and row["lease_expires_at"]
+                and current < _parse_utc(row["lease_expires_at"])
+            )
+            if prior_claim is not None:
+                if (not live or prior_claim.run_id != run_id
+                        or prior_claim.handoff_id != row["handoff_id"]
+                        or prior_claim.owner_id != owner_id
+                        or row["owner_id"] != owner_id
+                        or prior_claim.fencing_token != row["fencing_token"]):
+                    raise ConflictError("handoff renewal claim is stale or expired")
+                token, action = row["fencing_token"], "renewed"
+                self.connection.execute(
+                    "UPDATE claims SET lease_expires_at=?,renewed_at=? WHERE run_id=?",
+                    (expires_at, timestamp, run_id),
+                )
+            else:
+                if live:
+                    raise ConflictError("handoff already has a live claim")
+                prior_host_claim = row["kind"] == "host" and row["claim_handoff_id"] == row["handoff_id"]
+                token = row["fencing_token"] + 1
+                action = "taken_over" if prior_host_claim else "acquired"
+                self.connection.execute(
+                    "UPDATE claims SET kind='host',fencing_token=?,owner_id=?,active=1,"
+                    "claimed_at=?,handoff_id=?,lease_expires_at=?,renewed_at=NULL WHERE run_id=?",
+                    (token, owner_id, timestamp, row["handoff_id"], expires_at, run_id),
+                )
+            version = expected_version + 1
+            self.connection.execute(
+                "UPDATE runs SET version=?,updated_at=? WHERE id=?", (version, timestamp, run_id),
+            )
+            payload = canonical_json({
+                "action": action,
+                "expires_at": expires_at,
+                "fencing_token": token,
+                "handoff_id": row["handoff_id"],
+                "owner_id": owner_id,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,?,?,?)",
+                (run_id, version, f"handoff.{action}", payload, timestamp),
+            )
+            self.connection.execute("COMMIT")
+            return HandoffClaim(
+                run_id=run_id,
+                handoff_id=row["handoff_id"],
+                owner_id=owner_id,
+                fencing_token=token,
+                expires_at=expires_at,
+                run_version=version,
+                action=action,
+            )
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def _validated_handoff_decision(
+        self, run_id: str, decision: dict[str, Any],
+    ) -> tuple[str, str, str, str, list[dict[str, str]]]:
+        expected_fields = {
+            "schema_version", "submission_id", "submission_hash",
+            "disposition", "reason", "evidence_refs",
+        }
+        if not isinstance(decision, dict) or set(decision) != expected_fields:
+            raise ContractError("handoff decision fields are invalid")
+        if decision["schema_version"] != 1 or type(decision["schema_version"]) is not int:
+            raise ContractError("handoff decision schema_version is invalid")
+        submission_id = decision["submission_id"]
+        disposition = decision["disposition"]
+        reason = decision["reason"]
+        evidence_refs = decision["evidence_refs"]
+        if not isinstance(submission_id, str) or not submission_id:
+            raise ContractError("handoff submission_id is required")
+        if disposition not in {"accept", "revise", "reject"}:
+            raise ContractError("handoff disposition is invalid")
+        if not isinstance(reason, str) or (disposition == "revise" and not reason):
+            raise ContractError("handoff decision reason is invalid")
+        if not isinstance(evidence_refs, list):
+            raise ContractError("handoff evidence_refs must be an array")
+        normalized_refs = []
+        for evidence in evidence_refs:
+            if (not isinstance(evidence, dict) or set(evidence) != {"artifact_id", "sha256"}
+                    or not isinstance(evidence["artifact_id"], str)
+                    or not evidence["artifact_id"]
+                    or not isinstance(evidence["sha256"], str)):
+                raise ContractError("handoff evidence reference is invalid")
+            artifact = self.connection.execute(
+                "SELECT sha256 FROM artifacts WHERE id=? AND run_id=?",
+                (evidence["artifact_id"], run_id),
+            ).fetchone()
+            if not artifact or artifact["sha256"] != evidence["sha256"]:
+                raise ContractError("handoff evidence does not match a run artifact")
+            normalized_refs.append({
+                "artifact_id": evidence["artifact_id"], "sha256": evidence["sha256"],
+            })
+        body = {key: decision[key] for key in expected_fields if key != "submission_hash"}
+        expected_hash = request_hash(body)
+        if decision["submission_hash"] != expected_hash:
+            raise ContractError("handoff submission hash does not match the decision")
+        return submission_id, expected_hash, disposition, reason, normalized_refs
+
+    def record_handoff_submission(
+        self,
+        run_id: str,
+        claim: HandoffClaim,
+        decision: dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> HandoffSubmission:
+        if not isinstance(claim, HandoffClaim) or claim.run_id != run_id:
+            raise ContractError("handoff completion claim is invalid")
+        submission_id, submission_hash, disposition, _, evidence_refs = (
+            self._validated_handoff_decision(run_id, decision)
+        )
+        decision_json = canonical_json(decision)
+        evidence_json = canonical_json(evidence_refs)
+        current = _authoritative_now(now)
+        timestamp = current.isoformat()
+        rejection = None
+        result = None
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if not run:
+                raise ContractError("run does not exist")
+            handoff = self.connection.execute(
+                "SELECT * FROM handoffs WHERE id=? AND run_id=?", (claim.handoff_id, run_id),
+            ).fetchone()
+            if not handoff:
+                raise ConflictError("handoff completion targets a different run")
+            prior = self.connection.execute(
+                "SELECT * FROM handoff_submissions WHERE handoff_id=? AND submission_id=? "
+                "AND submission_hash=? ORDER BY created_at LIMIT 1",
+                (claim.handoff_id, submission_id, submission_hash),
+            ).fetchone()
+            if prior:
+                if prior["outcome"] == "recorded":
+                    self.connection.execute("COMMIT")
+                    return HandoffSubmission(
+                        run_id=run_id,
+                        handoff_id=claim.handoff_id,
+                        submission_id=submission_id,
+                        submission_hash=submission_hash,
+                        disposition=prior["disposition"],
+                        recorded_run_version=prior["recorded_run_version"],
+                        replayed=True,
+                    )
+                rejection = prior["rejection_code"] or "handoff_submission_rejected"
+            reused_id = self.connection.execute(
+                "SELECT 1 FROM handoff_submissions WHERE handoff_id=? AND submission_id=? "
+                "AND submission_hash<>?",
+                (claim.handoff_id, submission_id, submission_hash),
+            ).fetchone()
+            if reused_id and rejection is None:
+                rejection = "submission_id_reused"
+            persisted_claim = self.connection.execute(
+                "SELECT kind,owner_id,fencing_token,active,handoff_id,lease_expires_at "
+                "FROM claims WHERE run_id=?", (run_id,),
+            ).fetchone()
+            if rejection is None:
+                if run["state"] in TERMINAL_STATES:
+                    rejection = "terminal_run"
+                elif (run["state"] != "awaiting_host" or run["phase"] is not None
+                        or handoff["status"] != "open"):
+                    rejection = "handoff_not_open"
+                elif (not persisted_claim or persisted_claim["kind"] != "host"
+                        or not persisted_claim["active"]
+                        or persisted_claim["handoff_id"] != claim.handoff_id
+                        or persisted_claim["owner_id"] != claim.owner_id
+                        or persisted_claim["fencing_token"] != claim.fencing_token):
+                    rejection = "stale_claim"
+                elif (not persisted_claim["lease_expires_at"]
+                        or current >= _parse_utc(persisted_claim["lease_expires_at"])):
+                    rejection = "expired_claim"
+            if rejection is None:
+                version = run["version"] + 1
+                submission_row_id = str(uuid.uuid4())
+                self.connection.execute(
+                    "INSERT INTO handoff_submissions(id,handoff_id,submission_id,submission_hash,"
+                    "owner_id,fencing_token,disposition,decision_json,evidence_refs_json,outcome,"
+                    "rejection_code,recorded_run_version,created_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,'recorded',NULL,?,?)",
+                    (submission_row_id, claim.handoff_id, submission_id, submission_hash,
+                     claim.owner_id, claim.fencing_token, disposition, decision_json,
+                     evidence_json, version, timestamp),
+                )
+                self.connection.execute(
+                    "UPDATE handoffs SET status='submitted',submitted_run_version=?,closed_at=? "
+                    "WHERE id=?", (version, timestamp, claim.handoff_id),
+                )
+                self.connection.execute(
+                    "UPDATE claims SET active=0 WHERE run_id=? AND handoff_id=?",
+                    (run_id, claim.handoff_id),
+                )
+                self.connection.execute(
+                    "UPDATE runs SET phase='handoff_submitted',version=?,updated_at=? WHERE id=?",
+                    (version, timestamp, run_id),
+                )
+                payload = canonical_json({
+                    "disposition": disposition,
+                    "handoff_id": claim.handoff_id,
+                    "submission_hash": submission_hash,
+                    "submission_id": submission_id,
+                })
+                self.connection.execute(
+                    "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                    "VALUES(?,?,'handoff.submitted',?,?)",
+                    (run_id, version, payload, timestamp),
+                )
+                result = HandoffSubmission(
+                    run_id=run_id,
+                    handoff_id=claim.handoff_id,
+                    submission_id=submission_id,
+                    submission_hash=submission_hash,
+                    disposition=disposition,
+                    recorded_run_version=version,
+                    replayed=False,
+                )
+            else:
+                existing_rejection = self.connection.execute(
+                    "SELECT recorded_run_version FROM handoff_submissions WHERE handoff_id=? "
+                    "AND submission_id=? AND submission_hash=? AND outcome='rejected'",
+                    (claim.handoff_id, submission_id, submission_hash),
+                ).fetchone()
+                if not existing_rejection:
+                    terminal_audit = run["state"] in TERMINAL_STATES
+                    version = run["version"] if terminal_audit else run["version"] + 1
+                    self.connection.execute(
+                        "INSERT INTO handoff_submissions(id,handoff_id,submission_id,submission_hash,"
+                        "owner_id,fencing_token,disposition,decision_json,evidence_refs_json,outcome,"
+                        "rejection_code,recorded_run_version,created_at) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,'rejected',?,?,?)",
+                        (str(uuid.uuid4()), claim.handoff_id, submission_id, submission_hash,
+                         claim.owner_id, claim.fencing_token, disposition, decision_json,
+                         evidence_json, rejection, version, timestamp),
+                    )
+                    if not terminal_audit:
+                        self.connection.execute(
+                            "UPDATE runs SET version=?,updated_at=? WHERE id=?",
+                            (version, timestamp, run_id),
+                        )
+                        payload = canonical_json({
+                            "handoff_id": claim.handoff_id,
+                            "reason": rejection,
+                            "submission_hash": submission_hash,
+                            "submission_id": submission_id,
+                        })
+                        self.connection.execute(
+                            "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                            "VALUES(?,?,'handoff.completion_rejected',?,?)",
+                            (run_id, version, payload, timestamp),
+                        )
+            self.connection.execute("COMMIT")
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+        if rejection is not None:
+            raise ConflictError(f"handoff completion rejected: {rejection}")
+        if result is None:
+            raise ConflictError("handoff completion was not recorded")
+        return result
+
+    def cancel_host_wait(self, run_id: str, *, now: datetime | None = None) -> int:
+        current = _authoritative_now(now)
+        timestamp = current.isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if not run:
+                raise ContractError("run does not exist")
+            if run["state"] in TERMINAL_STATES:
+                self.connection.execute("COMMIT")
+                return run["version"]
+            handoff = self.connection.execute(
+                "SELECT id,status FROM handoffs WHERE run_id=? ORDER BY sequence DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            if (run["state"] != "awaiting_host" or not handoff
+                    or handoff["status"] not in {"open", "submitted"}
+                    or run["phase"] not in {None, "handoff_submitted"}):
+                raise ConflictError("run is not awaiting a cancellable host handoff")
+            path, digest, size, receipt_time = self._terminal_receipt(
+                run_id, "cancelled", "awaiting_host", None, now=timestamp,
+            )
+            version = self._reference_terminal_receipt(
+                run_id, run["version"], path, digest, size, receipt_time,
+            ) + 1
+            self.connection.execute(
+                "UPDATE handoffs SET status='cancelled',closed_at=? WHERE id=?",
+                (timestamp, handoff["id"]),
+            )
+            self.connection.execute(
+                "UPDATE claims SET active=0,fencing_token=fencing_token+1 "
+                "WHERE run_id=? AND kind='host' AND handoff_id=?",
+                (run_id, handoff["id"]),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='cancelled',phase=NULL,version=?,updated_at=? WHERE id=?",
+                (version, timestamp, run_id),
+            )
+            payload = canonical_json({
+                "handoff_id": handoff["id"], "receipt": "result-receipt.json",
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.cancelled',?,?)",
+                (run_id, version, payload, timestamp),
+            )
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def cancel_queued(self, run_id: str) -> int:
         self.connection.execute("BEGIN IMMEDIATE")
