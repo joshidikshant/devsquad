@@ -86,6 +86,46 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(sum(event["type"]=="run.preparation_reclaimed" for event in events),1)
         self.assertTrue(self.service.result(claim.run_id)["ready"])
 
+    def test_preparation_recovery_rejects_a_retargeted_repository_symlink(self):
+        link=self.root/"repo-link"
+        link.symlink_to(self.repo,target_is_directory=True)
+        task=json.loads(json.dumps(self.task))
+        task["project"]["repo_path"]=str(link)
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            claim=store.claim_start(
+                link,
+                "retargeted-repository",
+                {"task":task,"supersedes_run_id":None,"_internal_fake_delay":.01},
+                "dead-preflight-owner",
+            )
+        finally:
+            store.close()
+
+        other=self.root/"other-repo"
+        subprocess.run(["git","init","-q",str(other)],check=True)
+        subprocess.run(["git","-C",str(other),"config","user.email","test@example.invalid"],check=True)
+        subprocess.run(["git","-C",str(other),"config","user.name","Test"],check=True)
+        (other/"profiles.json").write_text('{"source":"other"}\n')
+        (other/"policy.json").write_text('{"source":"other"}\n')
+        subprocess.run(["git","-C",str(other),"add","."],check=True)
+        subprocess.run(["git","-C",str(other),"commit","-qm","other"],check=True)
+        link.unlink()
+        link.symlink_to(other,target_is_directory=True)
+
+        resumed=self.service.resume(claim.run_id)
+        self.assertFalse(resumed["launched"])
+        self.assertEqual(resumed["disposition"],"preparation_failed")
+        self.assertIn("claimed worktree",resumed["error"]["message"])
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(claim.run_id)
+            self.assertEqual(run["state"],"failed")
+            self.assertEqual(run["worktree_path"],str(self.repo.resolve()))
+            self.assertIsNone(run["mutable_snapshot"])
+        finally:
+            store.close()
+
     def test_new_process_inspects_run_after_launching_process_exits(self):
         task_file=self.root/"task.json"; task_file.write_text(json.dumps(self.task))
         env=os.environ.copy(); env["PYTHONPATH"]=str(ROOT/"plugin/core/src")
@@ -170,6 +210,42 @@ class ServiceTest(unittest.TestCase):
         finally:
             store.close()
 
+    def test_public_active_and_foreign_predecessor_matrix(self):
+        terminal=self.service.start(self.task,"terminal-predecessor")
+        public=self.service.start(self.task,"public-successor",terminal["run_id"])
+
+        with mock.patch.object(self.service,"_spawn_daemon",return_value=0):
+            active=self.service.start(self.task,"active-predecessor",_internal_fake_delay=.2)
+        against_active=self.service.start(
+            self.task,"against-active",active["run_id"],_internal_fake_delay=.01,
+        )
+
+        other=self.root/"foreign-repo"
+        subprocess.run(["git","init","-q",str(other)],check=True)
+        subprocess.run(["git","-C",str(other),"config","user.email","test@example.invalid"],check=True)
+        subprocess.run(["git","-C",str(other),"config","user.name","Test"],check=True)
+        (other/"profiles.json").write_text("{}\n")
+        (other/"policy.json").write_text("{}\n")
+        subprocess.run(["git","-C",str(other),"add","."],check=True)
+        subprocess.run(["git","-C",str(other),"commit","-qm","foreign"],check=True)
+        foreign_task=json.loads(json.dumps(self.task))
+        foreign_task["project"]["repo_path"]=str(other)
+        foreign=self.service.start(foreign_task,"foreign-predecessor")
+        against_foreign=self.service.start(
+            self.task,"against-foreign",foreign["run_id"],_internal_fake_delay=.01,
+        )
+
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            self.assertEqual(store.run(public["run_id"])["supersedes_run_id"],terminal["run_id"])
+            self.assertIsNone(store.run(against_active["run_id"])["supersedes_run_id"])
+            self.assertIsNone(store.run(against_foreign["run_id"])["supersedes_run_id"])
+        finally:
+            store.close()
+        self.assertEqual(against_active["state"],"failed")
+        self.assertEqual(against_foreign["state"],"failed")
+        self.service.cancel(active["run_id"])
+
     def test_post_claim_snapshot_failure_has_run_context_and_receipt(self):
         task=json.loads(json.dumps(self.task))
         task["project"]["base_ref"]="refs/heads/does-not-exist"
@@ -182,6 +258,21 @@ class ServiceTest(unittest.TestCase):
         receipt=json.loads(Path(result["artifacts"][0]["path"]).read_text())
         self.assertEqual(receipt["run_id"],started["run_id"])
         self.assertEqual(receipt["error"],started["error"])
+
+    def test_valid_predecessor_survives_an_unrelated_snapshot_failure(self):
+        predecessor=self.service.start(self.task,"lineage-predecessor")
+        task=json.loads(json.dumps(self.task))
+        task["project"]["target_ref"]="refs/heads/does-not-exist"
+        replacement=self.service.start(
+            task,"lineage-replacement",predecessor["run_id"],_internal_fake_delay=.01,
+        )
+        self.assertEqual(replacement["state"],"failed")
+        store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
+        try:
+            run=store.run(replacement["run_id"])
+            self.assertEqual(run["supersedes_run_id"],predecessor["run_id"])
+        finally:
+            store.close()
 
     def test_coordinator_crash_imports_runner_receipt_once(self):
         started=self.service.start(self.task,"receipt-recovery",_internal_fake_delay=.3)

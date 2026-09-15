@@ -205,6 +205,44 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def preparation_worktree(self, run_id: str, fencing_token: int, submitted_path: Path) -> Path:
+        """Resolve a submitted path only if it still names the claimed project."""
+        row = self.connection.execute(
+            "SELECT r.state,r.phase,r.worktree_path,proj.git_common_dir,c.fencing_token,c.active "
+            "FROM runs r JOIN projects proj ON proj.id=r.project_id "
+            "JOIN claims c ON c.run_id=r.id WHERE r.id=?",
+            (run_id,),
+        ).fetchone()
+        if (not row or row["state"] != "queued" or row["phase"] != "preparing"
+                or not row["active"] or row["fencing_token"] != fencing_token):
+            raise ConflictError("preparation claim is stale or cancelled")
+        try:
+            resolved = submitted_path.resolve(strict=True)
+        except OSError as exc:
+            raise ContractError("claimed project worktree is no longer available") from exc
+        if str(resolved) != row["worktree_path"]:
+            raise ContractError("project repo_path no longer resolves to the claimed worktree")
+        if str(git_common_dir(resolved)) != row["git_common_dir"]:
+            raise ContractError("claimed worktree no longer belongs to the persisted project")
+        return resolved
+
+    def validate_predecessor(self, run_id: str, fencing_token: int, supersedes_run_id: str | None) -> None:
+        if supersedes_run_id is None:
+            return
+        row = self.connection.execute(
+            "SELECT r.project_id,r.state,r.phase,c.fencing_token,c.active,"
+            "predecessor.project_id AS predecessor_project,predecessor.state AS predecessor_state "
+            "FROM runs r JOIN claims c ON c.run_id=r.id "
+            "LEFT JOIN runs predecessor ON predecessor.id=? WHERE r.id=?",
+            (supersedes_run_id, run_id),
+        ).fetchone()
+        if (not row or row["state"] != "queued" or row["phase"] != "preparing"
+                or not row["active"] or row["fencing_token"] != fencing_token):
+            raise ConflictError("preparation claim is stale or cancelled")
+        if (row["predecessor_project"] != row["project_id"]
+                or row["predecessor_state"] not in TERMINAL_STATES):
+            raise ConflictError("superseded run must be terminal and belong to the same project")
+
     def _terminal_receipt(self, run_id: str, terminal_state: str, phase: str, payload: Any) -> tuple[Path, str, int, str]:
         finished_at = _utc_now()
         receipt = {

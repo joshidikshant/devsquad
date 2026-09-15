@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -116,6 +117,16 @@ class StoreTest(unittest.TestCase):
         self.assertIsNotNone(self.store.artifact_named(launching.run_id, "result-receipt.json"))
         with self.assertRaises(ConflictError):
             self.store.mark_attempt_running(reservation, 10, 10, "stale-process")
+
+        for run_id,phase in ((queued.run_id,"queued"),(launching.run_id,"launching")):
+            artifact=self.store.artifact_named(run_id,"result-receipt.json")
+            content=Path(artifact["path"]).read_bytes()
+            receipt=json.loads(content)
+            self.assertEqual(hashlib.sha256(content).hexdigest(),artifact["sha256"])
+            self.assertEqual(
+                (receipt["run_id"],receipt["state"],receipt["phase"],receipt["cancelled"]),
+                (run_id,"cancelled",phase,True),
+            )
 
     def test_event_and_projection_compare_and_swap_share_transaction(self):
         claim = self.store.claim_start(self.repo, "events", {"task": "x"}, "owner")

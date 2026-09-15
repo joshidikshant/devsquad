@@ -74,8 +74,12 @@ class Service:
         return package,run["package_digest"]
 
     @staticmethod
-    def _resolve_snapshot(task: dict[str, Any], internal_delay: float | None) -> dict[str, Any]:
-        repo = Path(task["project"]["repo_path"]).resolve(strict=True)
+    def _resolve_snapshot(
+        task: dict[str, Any],
+        internal_delay: float | None,
+        resolved_repo: Path | None = None,
+    ) -> dict[str, Any]:
+        repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
         def oid(ref: str) -> str:
             result = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", f"{ref}^{{commit}}"], text=True, capture_output=True, check=False)
             if result.returncode != 0: raise ContractError(f"Git ref does not resolve to a commit: {ref}")
@@ -101,11 +105,17 @@ class Service:
     ) -> tuple[tuple[int, Path, str] | None, dict[str, Any] | None]:
         snapshot = None
         supersedes_run_id = submitted.get("supersedes_run_id")
+        validated_supersedes_run_id = None
         try:
             task = submitted["task"]
             internal_delay = submitted.get("_internal_fake_delay")
             validate_task(task, require_existing_repo=True)
-            snapshot = self._resolve_snapshot(task, internal_delay)
+            store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
+            validated_supersedes_run_id = supersedes_run_id
+            worktree = store.preparation_worktree(
+                run_id, fencing_token, Path(task["project"]["repo_path"]),
+            )
+            snapshot = self._resolve_snapshot(task, internal_delay, worktree)
             if internal_delay is None:
                 error = {
                     "error": "CAPABILITY_UNAVAILABLE",
@@ -116,7 +126,7 @@ class Service:
                     fencing_token,
                     error,
                     mutable_snapshot=snapshot,
-                    supersedes_run_id=supersedes_run_id,
+                    supersedes_run_id=validated_supersedes_run_id,
                 )
                 return None, error
             package, digest = self._freeze_package()
@@ -132,13 +142,14 @@ class Service:
         except Exception as exc:
             error = {"error": "PREPARATION_FAILED", "message": str(exc)}
             try:
-                # A rejected predecessor remains in submitted_request but is not
-                # published as a valid supersession relation.
+                # Preserve validated lineage through unrelated failures; a
+                # rejected predecessor remains only in submitted_request.
                 store.fail_preparation(
                     run_id,
                     fencing_token,
                     error,
                     mutable_snapshot=snapshot,
+                    supersedes_run_id=validated_supersedes_run_id,
                 )
             except ConflictError:
                 # Cancellation or another recovery owner may have fenced us.
