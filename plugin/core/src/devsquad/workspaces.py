@@ -148,7 +148,12 @@ def _validate_segment(value: str, label: str) -> str:
 
 
 def _validate_workspace(
-    source_repo: Path, workspace: Path, target_oid: str, scope_paths: Iterable[str],
+    source_repo: Path,
+    workspace: Path,
+    target_oid: str,
+    scope_paths: Iterable[str],
+    *,
+    require_clean: bool = True,
 ) -> None:
     try:
         resolved = workspace.resolve(strict=True)
@@ -163,7 +168,7 @@ def _validate_workspace(
         raise ContractError("existing review workspace targets a different commit")
     if _git(resolved, "rev-parse", "--abbrev-ref", "HEAD").strip() != b"HEAD":
         raise ContractError("review workspace must use detached HEAD")
-    if dirty_paths(resolved):
+    if require_clean and dirty_paths(resolved):
         raise ContractError("existing review workspace is dirty")
 
     for scope in scope_paths:
@@ -187,6 +192,27 @@ def _validate_workspace(
                 raise ContractError("scoped symlink is invalid or broken") from exc
             if destination != resolved and resolved not in destination.parents:
                 raise ContractError(f"scoped symlink escapes the review workspace: {name}")
+
+
+def reset_check_workspace(
+    review_workspace: Path,
+    check_workspace: Path,
+    target_oid: str,
+    scope_paths: Iterable[str],
+) -> None:
+    """Reset only the exact run-owned check worktree before another check pass."""
+    review = review_workspace.resolve(strict=True)
+    checks = check_workspace.resolve(strict=True)
+    if (review.name != "review-worktree"
+            or checks != review.parent / "check-worktree"):
+        raise ContractError("check workspace is not the review run's owned sibling")
+    _validate_workspace(review, review, target_oid, scope_paths)
+    _validate_workspace(
+        review, checks, target_oid, scope_paths, require_clean=False,
+    )
+    _git(checks, "reset", "--hard", target_oid)
+    _git(checks, "clean", "-ffdx")
+    _validate_workspace(review, checks, target_oid, scope_paths)
 
 
 def _prepare_detached_workspace(

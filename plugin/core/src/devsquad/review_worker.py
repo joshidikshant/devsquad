@@ -15,7 +15,7 @@ from .contracts import ContractError
 from .store import canonical_json
 from .supervisor import BoundedDrain
 from .workflows import MAX_PREVIEW_CHARS, make_branch_review_evidence
-from .workspaces import dirty_paths
+from .workspaces import dirty_paths, reset_check_workspace
 
 
 MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
@@ -146,6 +146,12 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         raise ContractError("offline review snapshot is incomplete")
     review_root = Path(workspace["path"]).resolve(strict=True)
     checks_root = Path(check_workspace["path"]).resolve(strict=True)
+    reset_check_workspace(
+        review_root,
+        checks_root,
+        workspace["target_oid"],
+        check_workspace["scope"],
+    )
     if dirty_paths(review_root):
         raise ContractError("frozen review workspace is dirty before reviewer execution")
     review = fixture

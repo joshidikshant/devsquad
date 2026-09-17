@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 import subprocess
@@ -14,6 +14,7 @@ import threading
 from typing import Any
 
 from .contracts import ContractError
+from .reports import build_terminal_reports
 from .router import load_routing
 from .store import (
     ConflictError,
@@ -24,7 +25,13 @@ from .store import (
     canonical_json,
 )
 from .validation import validate_task
-from .workflows import review_mode, validate_review_document
+from .workflows import (
+    apply_lead_disposition,
+    review_mode,
+    validate_branch_review_handoff,
+    validate_handoff_decision_evidence,
+    validate_review_document,
+)
 from .workspaces import (
     assert_clean_inputs,
     committed_regular_file,
@@ -460,6 +467,191 @@ class Service:
         finally:
             store.close()
 
+    @staticmethod
+    def _review_snapshot(run: dict[str, Any]) -> dict[str, Any]:
+        try:
+            snapshot = json.loads(run["mutable_snapshot"])
+        except (KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise ConflictError("frozen branch review snapshot is invalid") from exc
+        if (not isinstance(snapshot, dict)
+                or canonical_json(snapshot) != run["mutable_snapshot"]):
+            raise ConflictError("frozen branch review snapshot is not canonical")
+        return snapshot
+
+    @staticmethod
+    def _review_gate(
+        store: Store,
+        run_id: str,
+        handoff: HandoffSnapshot,
+        snapshot: dict[str, Any],
+        decision: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        packet = validate_branch_review_handoff(handoff.packet, snapshot)
+        validate_handoff_decision_evidence(decision, packet)
+        revisions_used = sum(
+            entry["decision"]["disposition"] == "revise"
+            for entry in store.branch_review_history(run_id)
+            if entry["sequence"] < handoff.sequence
+        )
+        gate = apply_lead_disposition(
+            packet["evaluation"],
+            decision.get("disposition"),
+            revisions_used=revisions_used,
+            max_revisions=snapshot["task"]["budget"]["max_revisions"],
+        )
+        return packet, gate
+
+    def _terminalize_branch_review(
+        self,
+        store: Store,
+        run_id: str,
+        handoff: HandoffSnapshot,
+        snapshot: dict[str, Any],
+        entry: dict[str, Any],
+        terminal_state: str,
+        error: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        history = store.branch_review_history(run_id)
+        evidence_ids = {
+            reference["artifact_id"]
+            for item in history
+            for reference in item["packet"]["artifacts"]
+        }
+        run_artifacts = store.artifacts_for_run(run_id)
+        if evidence_ids - {artifact["id"] for artifact in run_artifacts}:
+            raise ConflictError("branch review evidence artifact is missing")
+        expected_parent = (self.artifacts / run_id).resolve()
+        for artifact in run_artifacts:
+            path = Path(artifact["path"])
+            if (path.resolve().parent != expected_parent
+                    or not path.is_file()
+                    or path.stat().st_size != artifact["byte_size"]
+                    or hashlib.sha256(path.read_bytes()).hexdigest()
+                    != artifact["sha256"]):
+                raise ConflictError("branch review artifact is missing or corrupt")
+        reports = build_terminal_reports(
+            run_id=run_id,
+            state=terminal_state,
+            snapshot=snapshot,
+            history=history,
+            run_artifacts=run_artifacts,
+            events=store.events_for_run(run_id),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            error=error,
+        )
+        prepared = []
+        for name in sorted(reports):
+            content = reports[name]
+            path, digest, size = store.finalize_artifact(run_id, name, content)
+            prepared.append({
+                "name": name,
+                "path": path,
+                "sha256": digest,
+                "byte_size": size,
+            })
+        decision = entry["decision"]
+        outcome = store.complete_handoff_terminal(
+            run_id,
+            handoff.handoff_id,
+            decision["submission_id"],
+            decision["submission_hash"],
+            prepared,
+            terminal_state,
+            {
+                "handoff_id": handoff.handoff_id,
+                "submission_id": decision["submission_id"],
+                "submission_hash": decision["submission_hash"],
+                "disposition": decision["disposition"],
+                "receipt": "result-receipt.json",
+                "error": error,
+            },
+        )
+        return {
+            "action": "terminal",
+            "state": outcome["state"],
+            "version": outcome["version"],
+            "replayed_continuation": outcome["replayed"],
+            "launch": None,
+        }
+
+    def _continue_branch_review_submission(
+        self,
+        store: Store,
+        run_id: str,
+        handoff: HandoffSnapshot,
+        snapshot: dict[str, Any],
+        entry: dict[str, Any],
+    ) -> dict[str, Any]:
+        run = store.run(run_id)
+        if run["state"] in TERMINAL_STATES:
+            return {
+                "action": "already_terminal",
+                "state": run["state"],
+                "version": run["version"],
+                "replayed_continuation": True,
+                "launch": None,
+            }
+        _, gate = self._review_gate(
+            store, run_id, handoff, snapshot, entry["decision"],
+        )
+        if gate["action"] == "repeat_review":
+            decision = entry["decision"]
+            requeue = store.requeue_review_revision(
+                run_id,
+                handoff.handoff_id,
+                decision["submission_id"],
+                decision["submission_hash"],
+            )
+            if requeue["action"] == "requeued":
+                queued = store.run(run_id)
+                package, digest = self._verified_package(queued)
+                return {
+                    "action": "requeued",
+                    "state": queued["state"],
+                    "version": queued["version"],
+                    "replayed_continuation": requeue["replayed"],
+                    "launch": (queued["version"], package, digest),
+                }
+            if requeue["action"] == "already_advanced":
+                advanced = store.run(run_id)
+                return {
+                    "action": "already_advanced",
+                    "state": advanced["state"],
+                    "version": advanced["version"],
+                    "replayed_continuation": True,
+                    "launch": None,
+                }
+            gate = {
+                **gate,
+                "action": "budget_exhausted",
+                "terminal_state": "failed",
+            }
+            error = {
+                "error": "BUDGET_EXHAUSTED",
+                "message": "branch review worker invocation budget is exhausted",
+            }
+        elif gate["action"] == "budget_exhausted":
+            error = {
+                "error": "BUDGET_EXHAUSTED",
+                "message": "branch review revision budget is exhausted",
+            }
+        elif gate["terminal_state"] == "failed":
+            error = {
+                "error": "REVIEW_REJECTED",
+                "message": entry["decision"]["reason"] or "host rejected the review",
+            }
+        else:
+            error = None
+        return self._terminalize_branch_review(
+            store,
+            run_id,
+            handoff,
+            snapshot,
+            entry,
+            gate["terminal_state"],
+            error,
+        )
+
     def handoff_complete(
         self,
         run_id: str,
@@ -470,10 +662,26 @@ class Service:
         if decoded.run_id != run_id:
             raise ConflictError("handoff completion claim targets a different run")
         store = self._store()
+        launch = None
         try:
-            submission = store.record_handoff_submission(run_id, decoded, decision)
             run = store.run(run_id)
-            return {
+            handoff = store.handoff_snapshot_by_id(run_id, decoded.handoff_id)
+            branch_review = handoff.packet.get("workflow") == "branch-review"
+            snapshot = self._review_snapshot(run) if branch_review else None
+            if branch_review:
+                self._review_gate(store, run_id, handoff, snapshot, decision)
+            submission = store.record_handoff_submission(run_id, decoded, decision)
+            continuation = None
+            if branch_review:
+                entry = store.recorded_handoff_submission(run_id, decoded.handoff_id)
+                if entry is None:
+                    raise ConflictError("recorded branch review submission is missing")
+                continuation = self._continue_branch_review_submission(
+                    store, run_id, handoff, snapshot, entry,
+                )
+                launch = continuation.pop("launch")
+            run = store.run(run_id)
+            response = {
                 "run_id": run_id,
                 "state": run["state"],
                 "phase": run["phase"],
@@ -485,17 +693,47 @@ class Service:
                 "recorded_run_version": submission.recorded_run_version,
                 "replayed": submission.replayed,
             }
+            if continuation is not None:
+                response["continuation"] = continuation
         finally:
             store.close()
+        if launch is not None:
+            version, package, digest = launch
+            self._spawn_daemon(run_id, version, package, digest)
+            response["launched"] = True
+        elif branch_review:
+            response["launched"] = False
+        return response
 
     def resume(self, run_id: str, recovery: dict[str, Any] | None = None) -> dict[str, Any]:
         store = self._store()
         launch: tuple[int, Path, str] | None = None
         preparation_error: dict[str, Any] | None = None
+        branch_response: dict[str, Any] | None = None
         try:
             run = store.run(run_id)
             if run["state"] in TERMINAL_STATES: raise ConflictError("terminal run cannot resume; start a superseding run")
-            if run["state"] in {"running","cancelling"}:
+            if run["state"] == "awaiting_host" and run["phase"] == "handoff_submitted":
+                handoff = store.handoff_snapshot(run_id)
+                if handoff is None or handoff.packet.get("workflow") != "branch-review":
+                    raise ConflictError("run has no resumable branch review submission")
+                snapshot = self._review_snapshot(run)
+                entry = store.recorded_handoff_submission(run_id, handoff.handoff_id)
+                if entry is None:
+                    raise ConflictError("recorded branch review submission is missing")
+                continuation = self._continue_branch_review_submission(
+                    store, run_id, handoff, snapshot, entry,
+                )
+                launch = continuation.pop("launch")
+                current = store.run(run_id)
+                branch_response = {
+                    "run_id": run_id,
+                    "disposition": continuation["action"],
+                    "state": current["state"],
+                    "version": current["version"],
+                    "launched": launch is not None,
+                }
+            if branch_response is None and run["state"] in {"running","cancelling"}:
                 from .supervisor import Supervisor
                 attempt=store.attempt(run_id)
                 disposition = Supervisor(store).import_durable(run_id) if attempt and attempt.get("exit_record") else Supervisor(store).recover(run_id)
@@ -503,7 +741,9 @@ class Service:
                     return {"run_id": run_id, "disposition": disposition, "launched": False}
                 run = store.run(run_id)
                 version = run["version"]
-            if run["state"] == "queued" and run["phase"] == "preparing":
+            if branch_response is not None:
+                pass
+            elif run["state"] == "queued" and run["phase"] == "preparing":
                 submitted = json.loads(run["submitted_request"])
                 claim = store.reclaim_preparation(
                     run_id, run["version"], f"preflight-recovery:{os.getpid()}",
@@ -528,6 +768,11 @@ class Service:
             else:
                 raise ConflictError("run is not resumable")
         finally: store.close()
+        if branch_response is not None:
+            if launch is not None:
+                version, package, digest = launch
+                self._spawn_daemon(run_id, version, package, digest)
+            return branch_response
         if run["phase"] == "preparing":
             if launch is None:
                 return {

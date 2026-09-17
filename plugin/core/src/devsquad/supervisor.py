@@ -295,16 +295,17 @@ class Supervisor:
         stdout: bytes,
     ) -> str:
         evidence = decode_branch_review_evidence(stdout, snapshot)
+        suffix = attempt["id"]
         documents = {
-            "review.json": evidence["review"],
-            "checks.json": {
+            f"review-{suffix}.json": evidence["review"],
+            f"checks-{suffix}.json": {
                 "schema_version": 1,
                 "candidate_sha256": evidence["candidate_sha256"],
                 "target_oid": evidence["target_oid"],
                 "results": evidence["checks"],
             },
-            "evaluation.json": evidence["evaluation"],
-            "review-attempt.json": evidence["attempt"],
+            f"evaluation-{suffix}.json": evidence["evaluation"],
+            f"review-attempt-{suffix}.json": evidence["attempt"],
         }
         artifacts = list(stream_artifacts)
         evidence_references = []
@@ -327,6 +328,7 @@ class Supervisor:
             "review": evidence["review"],
             "checks": evidence["checks"],
             "evaluation": evidence["evaluation"],
+            "attempt_id": attempt["id"],
             "attempt": evidence["attempt"],
             "artifacts": evidence_references,
             "instructions": (

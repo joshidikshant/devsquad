@@ -20,6 +20,13 @@ from .contracts import ContractError
 SUPPORTED_SCHEMA_VERSION = 5
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
+BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
+    "receipt.json",
+    "receipt.md",
+    "events.jsonl",
+    "artifact-manifest.json",
+    "result-receipt.json",
+})
 
 
 class ConflictError(ContractError):
@@ -742,6 +749,43 @@ class Store:
             raise ContractError(f"durable import requires exactly one {requirement}")
         return prepared, stdout_names[0], stderr_names[0]
 
+    def _prepare_exact_artifacts(
+        self,
+        run_id: str,
+        artifacts: list[dict[str, Any]],
+        expected_names: frozenset[str],
+    ) -> list[tuple[str, str, str, int]]:
+        """Verify a complete named artifact set before entering a write transaction."""
+        if not isinstance(artifacts, list):
+            raise ContractError("artifacts must be an array")
+        expected_parent = (self.artifacts / run_id).resolve()
+        prepared = []
+        names = set()
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                raise ContractError("artifacts must be objects")
+            name = artifact.get("name")
+            path = Path(artifact.get("path", ""))
+            digest = artifact.get("sha256")
+            size = artifact.get("byte_size")
+            if (not isinstance(name, str) or not name or Path(name).name != name
+                    or name in names):
+                raise ContractError("artifact names must be unique path components")
+            names.add(name)
+            if path.resolve().parent != expected_parent:
+                raise ContractError("artifact path is outside the run-owned store")
+            content = path.read_bytes()
+            if (not isinstance(digest, str)
+                    or type(size) is not int
+                    or size < 0
+                    or hashlib.sha256(content).hexdigest() != digest
+                    or len(content) != size):
+                raise ConflictError("artifact changed before database import")
+            prepared.append((name, str(path), digest, size))
+        if names != set(expected_names):
+            raise ContractError("terminal artifact set is incomplete or unexpected")
+        return prepared
+
     def _reference_prepared_artifacts(
         self,
         run_id: str,
@@ -1431,6 +1475,93 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def handoff_snapshot_by_id(
+        self, run_id: str, handoff_id: str,
+    ) -> HandoffSnapshot:
+        if not isinstance(handoff_id, str) or not handoff_id:
+            raise ContractError("handoff id is required")
+        self.connection.execute("BEGIN")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if not run:
+                raise ContractError("run does not exist")
+            handoff = self.connection.execute(
+                "SELECT * FROM handoffs WHERE id=? AND run_id=?", (handoff_id, run_id),
+            ).fetchone()
+            if not handoff:
+                raise ConflictError("handoff belongs to a different run")
+            claim_row = self.connection.execute(
+                "SELECT run_id,handoff_id,owner_id,fencing_token,lease_expires_at,"
+                "? AS run_version FROM claims WHERE run_id=? AND kind='host' "
+                "AND handoff_id=? AND active=1",
+                (run["version"], run_id, handoff_id),
+            ).fetchone()
+            snapshot = self._handoff_snapshot_from_rows(
+                run_id, run, handoff, claim_row,
+            )
+            if snapshot is None:  # Defensive: handoff was selected above.
+                raise ConflictError("handoff is missing")
+            self.connection.execute("COMMIT")
+            return snapshot
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def branch_review_history(self, run_id: str) -> list[dict[str, Any]]:
+        """Return canonical recorded handoffs and decisions in workflow order."""
+        if not self.connection.execute(
+            "SELECT 1 FROM runs WHERE id=?", (run_id,),
+        ).fetchone():
+            raise ContractError("run does not exist")
+        rows = self.connection.execute(
+            "SELECT h.id AS handoff_id,h.sequence,h.packet_json,h.packet_sha256,"
+            "s.submission_id,s.submission_hash,s.disposition,s.decision_json,"
+            "s.recorded_run_version "
+            "FROM handoffs h JOIN handoff_submissions s ON s.handoff_id=h.id "
+            "WHERE h.run_id=? AND s.outcome='recorded' ORDER BY h.sequence",
+            (run_id,),
+        ).fetchall()
+        history = []
+        for row in rows:
+            try:
+                packet = json.loads(row["packet_json"])
+                decision = json.loads(row["decision_json"])
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ConflictError("persisted branch review history is invalid") from exc
+            if (not isinstance(packet, dict)
+                    or canonical_json(packet) != row["packet_json"]
+                    or hashlib.sha256(row["packet_json"].encode()).hexdigest()
+                    != row["packet_sha256"]
+                    or not isinstance(decision, dict)
+                    or canonical_json(decision) != row["decision_json"]):
+                raise ConflictError("persisted branch review history hash is invalid")
+            submission_id, submission_hash, disposition, _, _ = (
+                self._validated_handoff_decision(run_id, decision)
+            )
+            if (submission_id != row["submission_id"]
+                    or submission_hash != row["submission_hash"]
+                    or disposition != row["disposition"]):
+                raise ConflictError("persisted branch review decision is inconsistent")
+            history.append({
+                "handoff_id": row["handoff_id"],
+                "sequence": row["sequence"],
+                "packet": packet,
+                "packet_sha256": row["packet_sha256"],
+                "decision": decision,
+                "recorded_run_version": row["recorded_run_version"],
+            })
+        return history
+
+    def recorded_handoff_submission(
+        self, run_id: str, handoff_id: str,
+    ) -> dict[str, Any] | None:
+        for entry in self.branch_review_history(run_id):
+            if entry["handoff_id"] == handoff_id:
+                return entry
+        return None
+
     def claim_handoff(
         self,
         run_id: str,
@@ -1731,6 +1862,204 @@ class Store:
             raise ConflictError("handoff completion was not recorded")
         return result
 
+    def requeue_review_revision(
+        self,
+        run_id: str,
+        handoff_id: str,
+        submission_id: str,
+        submission_hash: str,
+    ) -> dict[str, Any]:
+        """Consume one saved revise decision and requeue within both task budgets."""
+        if not all(
+            isinstance(value, str) and value
+            for value in (handoff_id, submission_id, submission_hash)
+        ):
+            raise ContractError("revision requeue identifiers are invalid")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,r.mutable_snapshot,h.status,h.sequence,"
+                "s.disposition FROM runs r JOIN handoffs h ON h.run_id=r.id "
+                "JOIN handoff_submissions s ON s.handoff_id=h.id "
+                "WHERE r.id=? AND h.id=? AND s.submission_id=? "
+                "AND s.submission_hash=? AND s.outcome='recorded'",
+                (run_id, handoff_id, submission_id, submission_hash),
+            ).fetchone()
+            if not row:
+                raise ConflictError("recorded revision submission is missing")
+            if row["disposition"] != "revise":
+                raise ConflictError("handoff submission is not a revision request")
+            latest_sequence = self.connection.execute(
+                "SELECT MAX(sequence) FROM handoffs WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            if row["status"] == "consumed":
+                action = (
+                    "requeued"
+                    if row["sequence"] == latest_sequence
+                    and row["state"] == "queued"
+                    and row["phase"] is None
+                    else "already_advanced"
+                )
+                self.connection.execute("COMMIT")
+                return {
+                    "action": action,
+                    "version": row["version"],
+                    "replayed": True,
+                }
+            if (row["state"] != "awaiting_host"
+                    or row["phase"] != "handoff_submitted"
+                    or row["status"] != "submitted"
+                    or row["sequence"] != latest_sequence):
+                raise ConflictError("revision handoff is no longer current")
+            try:
+                snapshot = json.loads(row["mutable_snapshot"])
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ConflictError("frozen review snapshot is invalid") from exc
+            if (not isinstance(snapshot, dict)
+                    or canonical_json(snapshot) != row["mutable_snapshot"]):
+                raise ConflictError("frozen review snapshot is not canonical")
+            try:
+                budget = snapshot["task"]["budget"]
+                max_revisions = budget["max_revisions"]
+                max_invocations = budget["max_worker_invocations"]
+            except (KeyError, TypeError) as exc:
+                raise ConflictError("frozen review budget is missing") from exc
+            if (type(max_revisions) is not int or max_revisions < 0
+                    or type(max_invocations) is not int or max_invocations < 1):
+                raise ConflictError("frozen review budget is invalid")
+            revisions = self.connection.execute(
+                "SELECT COUNT(*) FROM handoff_submissions s "
+                "JOIN handoffs h ON h.id=s.handoff_id "
+                "WHERE h.run_id=? AND s.outcome='recorded' "
+                "AND s.disposition='revise' AND h.sequence<=?",
+                (run_id, row["sequence"]),
+            ).fetchone()[0]
+            invocations = self.connection.execute(
+                "SELECT COUNT(*) FROM attempts WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            if revisions > max_revisions or invocations >= max_invocations:
+                self.connection.execute("COMMIT")
+                return {
+                    "action": "budget_exhausted",
+                    "version": row["version"],
+                    "replayed": False,
+                    "revisions_requested": revisions,
+                    "worker_invocations": invocations,
+                }
+            now, version = _utc_now(), row["version"] + 1
+            self.connection.execute(
+                "UPDATE handoffs SET status='consumed',closed_at=? WHERE id=?",
+                (now, handoff_id),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='queued',phase=NULL,version=?,updated_at=? "
+                "WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({
+                "handoff_id": handoff_id,
+                "submission_id": submission_id,
+                "revisions_requested": revisions,
+                "worker_invocations": invocations,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.revision_queued',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "action": "requeued",
+                "version": version,
+                "replayed": False,
+                "revisions_requested": revisions,
+                "worker_invocations": invocations,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def complete_handoff_terminal(
+        self,
+        run_id: str,
+        handoff_id: str,
+        submission_id: str,
+        submission_hash: str,
+        artifacts: list[dict[str, Any]],
+        terminal_state: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Atomically publish M3 terminal reports and consume the host handoff."""
+        if terminal_state not in {"succeeded", "failed"}:
+            raise ContractError("branch review terminal state is invalid")
+        if not all(
+            isinstance(value, str) and value
+            for value in (handoff_id, submission_id, submission_hash)
+        ):
+            raise ContractError("terminal handoff identifiers are invalid")
+        prepared = self._prepare_exact_artifacts(
+            run_id, artifacts, BRANCH_REVIEW_TERMINAL_ARTIFACTS,
+        )
+        encoded_payload = canonical_json(payload)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,h.status,h.sequence,s.disposition "
+                "FROM runs r JOIN handoffs h ON h.run_id=r.id "
+                "JOIN handoff_submissions s ON s.handoff_id=h.id "
+                "WHERE r.id=? AND h.id=? AND s.submission_id=? "
+                "AND s.submission_hash=? AND s.outcome='recorded'",
+                (run_id, handoff_id, submission_id, submission_hash),
+            ).fetchone()
+            if not row:
+                raise ConflictError("recorded terminal submission is missing")
+            expected_state = "succeeded" if row["disposition"] == "accept" else "failed"
+            if terminal_state != expected_state:
+                raise ContractError("terminal state contradicts the lead disposition")
+            if row["state"] in TERMINAL_STATES:
+                if row["state"] != terminal_state or row["status"] != "consumed":
+                    raise ConflictError("terminal handoff was completed differently")
+                self.connection.execute("COMMIT")
+                return {
+                    "state": row["state"],
+                    "version": row["version"],
+                    "replayed": True,
+                }
+            latest_sequence = self.connection.execute(
+                "SELECT MAX(sequence) FROM handoffs WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            if (row["state"] != "awaiting_host"
+                    or row["phase"] != "handoff_submitted"
+                    or row["status"] != "submitted"
+                    or row["sequence"] != latest_sequence):
+                raise ConflictError("terminal handoff is no longer current")
+            version, _ = self._reference_prepared_artifacts(
+                run_id, row["version"], prepared,
+            )
+            now, version = _utc_now(), version + 1
+            self.connection.execute(
+                "UPDATE handoffs SET status='consumed',closed_at=? WHERE id=?",
+                (now, handoff_id),
+            )
+            self.connection.execute(
+                "UPDATE claims SET active=0 WHERE run_id=? AND handoff_id=?",
+                (run_id, handoff_id),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state=?,phase=NULL,version=?,updated_at=? WHERE id=?",
+                (terminal_state, version, now, run_id),
+            )
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,?,?,?)",
+                (run_id, version, f"run.{terminal_state}", encoded_payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return {"state": terminal_state, "version": version, "replayed": False}
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def cancel_host_wait(self, run_id: str, *, now: datetime | None = None) -> int:
         self.connection.execute("BEGIN IMMEDIATE")
         try:
@@ -1833,6 +2162,27 @@ class Store:
         page, more = rows[:limit], len(rows) > limit
         consumed = page[-1]["id"] if page else after
         return {"events": [{**dict(row), "payload": json.loads(row["payload"])} for row in page], "next_cursor": consumed, "has_more": more}
+
+    def events_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        if not self.connection.execute(
+            "SELECT 1 FROM runs WHERE id=?", (run_id,),
+        ).fetchone():
+            raise ContractError("run does not exist")
+        rows = self.connection.execute(
+            "SELECT id,run_version,type,payload,created_at FROM events "
+            "WHERE run_id=? ORDER BY id",
+            (run_id,),
+        ).fetchall()
+        events = []
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ConflictError("persisted event payload is invalid") from exc
+            if canonical_json(payload) != row["payload"]:
+                raise ConflictError("persisted event payload is not canonical")
+            events.append({**dict(row), "payload": payload})
+        return events
 
     def status_snapshot(
         self, run_id: str,

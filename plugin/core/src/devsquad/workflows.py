@@ -527,3 +527,72 @@ def decode_branch_review_evidence(
         ),
         snapshot,
     )
+
+
+def validate_branch_review_handoff(
+    packet: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate a saved host packet and reconstruct its trusted evidence."""
+    value = _exact(packet, {
+        "schema_version", "workflow", "candidate_sha256", "base_oid", "target_oid",
+        "review", "checks", "evaluation", "attempt_id", "attempt", "artifacts",
+        "instructions",
+    }, "branch review handoff")
+    evidence = {
+        field: value[field]
+        for field in (
+            "schema_version", "workflow", "candidate_sha256", "base_oid", "target_oid",
+            "review", "checks", "evaluation", "attempt",
+        )
+    }
+    validate_branch_review_evidence(evidence, snapshot)
+    attempt_id = _text(value["attempt_id"], "handoff attempt id", maximum=200)
+    artifacts = value["artifacts"]
+    if not isinstance(artifacts, list) or len(artifacts) != 4:
+        raise ContractError("branch review handoff must contain four evidence artifacts")
+    names, identifiers = set(), set()
+    for reference in artifacts:
+        item = _exact(
+            reference, {"artifact_id", "name", "sha256"}, "handoff artifact reference",
+        )
+        artifact_id = _text(item["artifact_id"], "handoff artifact id", maximum=200)
+        name = _text(item["name"], "handoff artifact name", maximum=255)
+        _sha256(item["sha256"], "handoff artifact sha256")
+        if name in names or artifact_id in identifiers:
+            raise ContractError("branch review handoff artifact references are duplicated")
+        names.add(name)
+        identifiers.add(artifact_id)
+    expected_names = {
+        f"review-{attempt_id}.json",
+        f"checks-{attempt_id}.json",
+        f"evaluation-{attempt_id}.json",
+        f"review-attempt-{attempt_id}.json",
+    }
+    if names != expected_names:
+        raise ContractError("branch review handoff is missing required evidence artifacts")
+    _text(value["instructions"], "handoff instructions", maximum=2000)
+    return json.loads(canonical_json(value))
+
+
+def validate_handoff_decision_evidence(
+    decision: dict[str, Any],
+    packet: dict[str, Any],
+) -> None:
+    """Require a lead decision to explicitly bind every presented evidence artifact."""
+    if not isinstance(decision, dict) or not isinstance(decision.get("evidence_refs"), list):
+        raise ContractError("lead decision evidence_refs must be an array")
+    expected = {
+        (reference["artifact_id"], reference["sha256"])
+        for reference in packet["artifacts"]
+    }
+    supplied = set()
+    for reference in decision["evidence_refs"]:
+        if (not isinstance(reference, dict)
+                or set(reference) != {"artifact_id", "sha256"}
+                or not isinstance(reference["artifact_id"], str)
+                or not isinstance(reference["sha256"], str)):
+            raise ContractError("lead decision evidence reference is invalid")
+        supplied.add((reference["artifact_id"], reference["sha256"]))
+    if len(decision["evidence_refs"]) != len(supplied) or supplied != expected:
+        raise ContractError("lead decision must bind every presented evidence artifact")
