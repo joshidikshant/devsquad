@@ -138,6 +138,15 @@
           "artifact": "../../../test/core/test_review_runtime.py",
           "recorded_at": "2026-09-17T16:35:24+05:30",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "459ff3f",
+          "command_or_action": "167 core tests with ResourceWarning promoted to error and 202 shell assertions covering the public native Codex reviewer and provider protocol faults",
+          "outcome": "M3 can run one frozen, ephemeral, read-only Codex app-server review inside the M2 process fence, verify exact execution identity, validate candidate-bound structured output and record native usage; the bounded real Codex gate remains pending",
+          "artifact": "../../../test/core/test_review_runtime.py",
+          "recorded_at": "2026-09-17T16:55:37+05:30",
+          "availability": "tracked_tests"
         }
       ],
       "blocker": null
