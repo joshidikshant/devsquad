@@ -13,7 +13,8 @@ import tempfile
 import threading
 from typing import Any
 
-from .contracts import ContractError
+from .codex_review_worker import freeze_codex_reviewer
+from .contracts import CapabilityUnavailable, ContractError, ProfileUnsupported
 from .reports import build_terminal_reports
 from .router import load_routing
 from .store import (
@@ -281,18 +282,9 @@ class Service:
                 internal_review_fixture=internal_review_fixture,
             )
             if internal_delay is None and internal_review_fixture is None:
-                error = {
-                    "error": "CAPABILITY_UNAVAILABLE",
-                    "message": "branch-review workflow is introduced in M3",
-                }
-                store.fail_preparation(
-                    run_id,
-                    fencing_token,
-                    error,
-                    mutable_snapshot=snapshot,
-                    supersedes_run_id=validated_supersedes_run_id,
+                snapshot["review_adapter"] = freeze_codex_reviewer(
+                    snapshot["routing"]["roles"]["reviewer"]["selected"],
                 )
-                return None, error
             package, digest = self._freeze_package()
             version = store.complete_preparation(
                 run_id,
@@ -301,12 +293,19 @@ class Service:
                 package_path=str(package),
                 package_digest=digest,
                 supersedes_run_id=supersedes_run_id,
-                worktree_path=(
-                    snapshot["workspace"]["path"]
-                    if internal_review_fixture is not None else None
-                ),
+                worktree_path=(snapshot.get("workspace") or {}).get("path"),
             )
             return (version, package, digest), None
+        except (CapabilityUnavailable, ProfileUnsupported) as exc:
+            error = {"error": exc.code, "message": str(exc)}
+            store.fail_preparation(
+                run_id,
+                fencing_token,
+                error,
+                mutable_snapshot=snapshot,
+                supersedes_run_id=validated_supersedes_run_id,
+            )
+            return None, error
         except Exception as exc:
             error = {"error": "PREPARATION_FAILED", "message": str(exc)}
             try:

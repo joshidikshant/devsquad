@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
@@ -373,6 +375,146 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertEqual((resumed["state"], resumed["disposition"]), ("succeeded", "terminal"))
         self.assertFalse(resumed["launched"])
         self.assertTrue(self.service.result(run_id)["ready"])
+
+    def test_public_native_codex_driver_verifies_identity_usage_and_output(self):
+        profiles = {
+            "schema_version": 1,
+            "profiles": [{
+                "id": "native-codex-reviewer",
+                "harness": "codex",
+                "model_family": "gpt-fixture",
+                "model_id": "gpt-fake-review",
+                "effort": {"value": "low", "transport": "native"},
+                "required_tools": ["read"],
+                "permission_policy": "read_only",
+                "account_pool_id": "codex-subscription",
+                "billing_mode": "subscription",
+                "quality_status": "proven",
+                "evidence_refs": ["native-fixture"],
+            }],
+            "bindings": {
+                "review.deep": {"profile_id": "native-codex-reviewer", "version": 1},
+            },
+        }
+        policy_document = {
+            "schema_version": 1,
+            "id": "native-codex-policy",
+            "version": 1,
+            "roles": {"reviewer": [{"kind": "alias", "id": "review.deep"}]},
+            "task_classes": {"fixture-review-small": "proven"},
+            "require_different_model_for_review": True,
+            "prefer_different_harness_for_review": True,
+            "account_pools": {
+                "codex-subscription": {
+                    "allowed_billing_modes": ["subscription"],
+                    "max_concurrency": 1,
+                    "unknown_capacity_policy": "allow_bounded",
+                },
+            },
+            "experiment_budget": {},
+        }
+        (self.repo / "devsquad/profiles.json").write_text(
+            json.dumps(profiles, sort_keys=True) + "\n"
+        )
+        (self.repo / "devsquad/policy.json").write_text(
+            json.dumps(policy_document, sort_keys=True) + "\n"
+        )
+        subprocess.run(
+            ["git", "-C", str(self.repo), "add", "devsquad"], check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", "native review config"],
+            check=True,
+        )
+        self.target = self.git_text("rev-parse", "HEAD").strip()
+        self.task["project"]["target_ref"] = self.target
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        (fake_bin / "codex").symlink_to(
+            ROOT / "test/core/fakes/codex_review_cli.py"
+        )
+        environment = {
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+        }
+        with patch.dict(os.environ, environment, clear=False):
+            started = self.service.start(self.task, "native-codex-review")
+        self.assertTrue(started["created"])
+        waiting = self.wait_state(started["run_id"], {"awaiting_host", "failed"})
+        self.assertEqual(waiting["state"], "awaiting_host")
+        claimed = self.service.handoff_claim(
+            started["run_id"], waiting["version"], "native-host",
+        )
+        packet = claimed["handoff"]["packet"]
+        observed = packet["attempt"]["observed_identity"]
+        self.assertEqual(
+            (observed["harness"], observed["harness_version"], observed["model_id"]),
+            ("codex", "codex-cli 0.135.0", "gpt-fake-review"),
+        )
+        self.assertEqual(packet["attempt"]["usage"], {
+            "input_tokens": 120,
+            "output_tokens": 40,
+            "total_tokens": 160,
+            "source": "native_reported",
+        })
+        self.assertEqual(packet["review"]["verdict"], "clean")
+        decision = self.decision(packet, "accept-native", "accept", "Native review accepted.")
+        completed = self.service.handoff_complete(
+            started["run_id"], claimed["claim"], decision,
+        )
+        self.assertEqual(completed["state"], "succeeded")
+        receipt_artifact = next(
+            artifact for artifact in self.service.result(started["run_id"])["artifacts"]
+            if artifact["name"] == "receipt.json"
+        )
+        receipt = json.loads(Path(receipt_artifact["path"]).read_text())
+        self.assertEqual(receipt["accounting"]["attempt_usage"][0]["total_tokens"], 160)
+        self.assertEqual(receipt["limitations"], [])
+
+    def test_native_codex_faults_never_become_valid_reviews(self):
+        profiles_text, policy_text = branch_review_routing_documents()
+        profiles = json.loads(profiles_text)
+        profile = profiles["profiles"][0]
+        profile.update({
+            "harness": "codex",
+            "model_family": "gpt-fixture",
+            "required_tools": ["read"],
+            "permission_policy": "read_only",
+        })
+        fake_bin = self.root / "fault-bin"
+        fake_bin.mkdir()
+        (fake_bin / "codex").symlink_to(
+            ROOT / "test/core/fakes/codex_review_cli.py"
+        )
+        environment = {
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+        }
+        for mode in ("malformed", "denied", "disconnect", "identity-drift"):
+            with self.subTest(mode=mode):
+                profile["model_id"] = f"gpt-fake-{mode}"
+                (self.repo / "devsquad/profiles.json").write_text(
+                    json.dumps(profiles, sort_keys=True) + "\n"
+                )
+                (self.repo / "devsquad/policy.json").write_text(policy_text)
+                subprocess.run(
+                    ["git", "-C", str(self.repo), "add", "devsquad"], check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(self.repo), "commit", "-qm", f"fault {mode}"],
+                    check=True,
+                )
+                target = self.git_text("rev-parse", "HEAD").strip()
+                self.task["project"]["target_ref"] = target
+                with patch.dict(os.environ, environment, clear=False):
+                    started = self.service.start(self.task, f"native-fault-{mode}")
+                self.assertEqual(started["state"], "queued")
+                failed = self.wait_state(started["run_id"], {"awaiting_host", "failed"})
+                self.assertEqual(failed["state"], "failed")
+                self.assertIsNone(failed["handoff"])
+                result = self.service.result(started["run_id"])
+                self.assertTrue(result["ready"])
+                self.assertNotIn(
+                    "receipt.json", {artifact["name"] for artifact in result["artifacts"]},
+                )
 
     def test_invalid_internal_review_fails_before_launch_with_a_receipt(self):
         invalid = dict(self.fixture, verdict="clean")

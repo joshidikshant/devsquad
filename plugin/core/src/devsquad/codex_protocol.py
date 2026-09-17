@@ -70,11 +70,20 @@ def initialized_notification() -> dict[str, Any]:
     return {"method": "initialized", "params": {}}
 
 
-def thread_start_request(request_id: int, *, cwd: str, model: str, permission: str) -> dict[str, Any]:
+def thread_start_request(
+    request_id: int,
+    *,
+    cwd: str,
+    model: str,
+    permission: str,
+    ephemeral: bool = False,
+) -> dict[str, Any]:
     sandbox = {"read_only": "read-only", "workspace_write": "workspace-write"}.get(permission)
     if sandbox is None:
         raise ContractError(f"unsupported native permission: {permission}")
-    return request(request_id, "thread/start", {"cwd": cwd, "model": model, "sandbox": sandbox, "approvalPolicy": "never", "ephemeral": False})
+    if type(ephemeral) is not bool:
+        raise ContractError("native thread ephemeral flag must be boolean")
+    return request(request_id, "thread/start", {"cwd": cwd, "model": model, "sandbox": sandbox, "approvalPolicy": "never", "ephemeral": ephemeral})
 
 
 def model_list_request(request_id: int, cursor: str | None = None, limit: int = 100) -> dict[str, Any]:
@@ -126,7 +135,7 @@ class NativeTurnState:
         self.events.append(message)
         method = message.get("method", "")
         params = message.get("params", message.get("result", {}))
-        if method in {"thread/started", "thread/start/completed", "turn/started", "item/agentMessage/delta", "turn/output/delta", "turn/completed", "error"} and not isinstance(params, dict):
+        if method in {"thread/started", "thread/start/completed", "turn/started", "item/agentMessage/delta", "turn/output/delta", "item/completed", "turn/completed", "error"} and not isinstance(params, dict):
             raise ContractError("native event params must be an object")
         if not isinstance(params, dict):
             return
@@ -162,6 +171,17 @@ class NativeTurnState:
                 raise ContractError("native output delta must be a string")
             if self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
                 self.output.append(delta)
+        if (method == "item/completed" and not self.output
+                and self.thread_id and self.turn_id
+                and message_thread == self.thread_id and message_turn == self.turn_id):
+            item = params.get("item")
+            if not isinstance(item, dict):
+                raise ContractError("native completed item must be an object")
+            if item.get("type") in {"agentMessage", "agent_message"}:
+                content = item.get("text", item.get("content"))
+                if not isinstance(content, str):
+                    raise ContractError("native completed agent message must contain text")
+                self.output.append(content)
         if method == "turn/completed" and self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
             self.terminal = True
             self.terminal_status = turn.get("status")

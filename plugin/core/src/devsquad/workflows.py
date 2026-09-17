@@ -25,6 +25,55 @@ _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT_OID = re.compile(r"[0-9a-f]{40}\Z")
 
 
+def review_output_schema() -> dict[str, Any]:
+    """Return the strict native structured-output schema for one review."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "schema_version", "candidate_sha256", "base_oid", "target_oid",
+            "review_mode", "verdict", "summary", "findings",
+        ],
+        "properties": {
+            "schema_version": {"const": 1},
+            "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "base_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+            "target_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+            "review_mode": {"enum": ["standard", "adversarial"]},
+            "verdict": {"enum": ["clean", "findings"]},
+            "summary": {"type": "string", "minLength": 1, "maxLength": 20_000},
+            "findings": {
+                "type": "array",
+                "maxItems": MAX_FINDINGS,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "id", "severity", "title", "description", "path",
+                        "start_line", "end_line", "evidence",
+                    ],
+                    "properties": {
+                        "id": {"type": "string", "minLength": 1, "maxLength": 200},
+                        "severity": {"enum": sorted(FINDING_SEVERITIES)},
+                        "title": {"type": "string", "minLength": 1, "maxLength": 500},
+                        "description": {
+                            "type": "string", "minLength": 1,
+                            "maxLength": MAX_TEXT_CHARS,
+                        },
+                        "path": {"type": "string", "minLength": 1},
+                        "start_line": {"type": "integer", "minimum": 1},
+                        "end_line": {"type": "integer", "minimum": 1},
+                        "evidence": {
+                            "type": "string", "minLength": 1,
+                            "maxLength": MAX_TEXT_CHARS,
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
 def _exact(
     value: Any,
     fields: set[str],
@@ -434,7 +483,8 @@ def validate_branch_review_evidence(
         raise ContractError("branch review evaluation does not match derived gates")
     attempt = _exact(document["attempt"], {
         "role", "selected_profile", "prompt_sha256", "review_sha256",
-        "worker_invocations", "native_model_requests", "usage",
+        "observed_identity", "native_ids", "worker_invocations",
+        "native_model_requests", "usage",
     }, "review attempt evidence")
     if attempt["role"] != "reviewer":
         raise ContractError("review attempt role is invalid")
@@ -450,6 +500,36 @@ def validate_branch_review_evidence(
     review_sha256 = hashlib.sha256(canonical_json(review).encode()).hexdigest()
     if _sha256(attempt["review_sha256"], "review document sha256") != review_sha256:
         raise ContractError("review document hash is invalid")
+    adapter = snapshot.get("review_adapter")
+    observed = attempt["observed_identity"]
+    native_ids = attempt["native_ids"]
+    if adapter is None:
+        if observed is not None or native_ids != {}:
+            raise ContractError("fixture review cannot claim a native observed identity")
+    else:
+        if not isinstance(adapter, dict):
+            raise ContractError("frozen review adapter is invalid")
+        for field in ("harness", "harness_version", "model_provider"):
+            if not isinstance(adapter.get(field), str) or not adapter[field]:
+                raise ContractError("frozen review adapter identity is invalid")
+        identity = _exact(observed, {
+            "harness", "harness_version", "model_provider", "model_id", "effort",
+            "permission_policy", "verification",
+        }, "observed reviewer identity")
+        expected_identity = {
+            "harness": adapter["harness"],
+            "harness_version": adapter["harness_version"],
+            "model_provider": adapter["model_provider"],
+            "model_id": frozen_reviewer["profile"]["model_id"],
+            "effort": frozen_reviewer["profile"]["effort"]["value"],
+            "permission_policy": frozen_reviewer["profile"]["permission_policy"],
+            "verification": "verified",
+        }
+        if canonical_json(identity) != canonical_json(expected_identity):
+            raise ContractError("observed reviewer identity does not match the frozen adapter")
+        ids = _exact(native_ids, {"thread_id", "turn_id"}, "native reviewer ids")
+        for field in ("thread_id", "turn_id"):
+            _text(ids[field], f"native reviewer {field}", maximum=500)
     if attempt["worker_invocations"] != 1 or type(attempt["worker_invocations"]) is not int:
         raise ContractError("review worker invocation accounting is invalid")
     if attempt["worker_invocations"] > task["budget"]["max_worker_invocations"]:
@@ -479,6 +559,11 @@ def make_branch_review_evidence(
     snapshot: dict[str, Any],
     review: dict[str, Any],
     checks: list[dict[str, Any]],
+    *,
+    observed_identity: dict[str, Any] | None = None,
+    native_ids: dict[str, str] | None = None,
+    native_model_requests: int | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     task, workspace = snapshot["task"], snapshot["workspace"]
     normalized_review = validate_review_document(review, task, workspace)
@@ -504,9 +589,11 @@ def make_branch_review_evidence(
             "review_sha256": hashlib.sha256(
                 canonical_json(normalized_review).encode()
             ).hexdigest(),
+            "observed_identity": observed_identity,
+            "native_ids": native_ids if native_ids is not None else {},
             "worker_invocations": 1,
-            "native_model_requests": None,
-            "usage": {
+            "native_model_requests": native_model_requests,
+            "usage": usage if usage is not None else {
                 "input_tokens": None,
                 "output_tokens": None,
                 "total_tokens": None,

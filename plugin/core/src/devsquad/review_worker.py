@@ -14,7 +14,11 @@ from typing import Any
 from .contracts import ContractError
 from .store import canonical_json
 from .supervisor import BoundedDrain
-from .workflows import MAX_PREVIEW_CHARS, make_branch_review_evidence
+from .workflows import (
+    MAX_PREVIEW_CHARS,
+    make_branch_review_evidence,
+    validate_review_document,
+)
 from .workspaces import dirty_paths, reset_check_workspace
 
 
@@ -133,17 +137,18 @@ def _verify_finding_locations(review: dict[str, Any], workspace: Path) -> None:
             )
 
 
-def run(snapshot: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(snapshot, dict):
-        raise ContractError("workflow snapshot must be an object")
+def run_review_and_checks(
+    snapshot: dict[str, Any],
+    review: dict[str, Any],
+    **attempt_metadata: Any,
+) -> dict[str, Any]:
+    """Validate one review, run the frozen checks, and build combined evidence."""
     task = snapshot.get("task")
     workspace = snapshot.get("workspace")
     check_workspace = snapshot.get("check_workspace")
-    fixture = snapshot.get("internal_review_fixture")
-    if not all(isinstance(value, dict) for value in (
-        task, workspace, check_workspace, fixture,
-    )):
-        raise ContractError("offline review snapshot is incomplete")
+    if not all(isinstance(value, dict) for value in (task, workspace, check_workspace)):
+        raise ContractError("branch review snapshot is incomplete")
+    normalized_review = validate_review_document(review, task, workspace)
     review_root = Path(workspace["path"]).resolve(strict=True)
     checks_root = Path(check_workspace["path"]).resolve(strict=True)
     reset_check_workspace(
@@ -154,8 +159,7 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     )
     if dirty_paths(review_root):
         raise ContractError("frozen review workspace is dirty before reviewer execution")
-    review = fixture
-    _verify_finding_locations(review, review_root)
+    _verify_finding_locations(normalized_review, review_root)
     if dirty_paths(review_root):
         raise ContractError("reviewer modified the frozen read-only workspace")
     checks = [
@@ -167,7 +171,18 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         )
         for check in task["checks"]
     ]
-    return make_branch_review_evidence(snapshot, review, checks)
+    return make_branch_review_evidence(
+        snapshot, normalized_review, checks, **attempt_metadata,
+    )
+
+
+def run(snapshot: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(snapshot, dict):
+        raise ContractError("workflow snapshot must be an object")
+    fixture = snapshot.get("internal_review_fixture")
+    if not isinstance(fixture, dict):
+        raise ContractError("offline review snapshot is incomplete")
+    return run_review_and_checks(snapshot, fixture)
 
 
 def main() -> int:

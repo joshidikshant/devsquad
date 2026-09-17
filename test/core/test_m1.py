@@ -190,6 +190,25 @@ class NativeProtocolTest(unittest.TestCase):
         state.consume({"method": "turn/completed", "params": {"threadId":"th1", "turn":{"id":"t1", "status":"interrupted"}}})
         self.assertTrue(state.terminal)
 
+    def test_completed_agent_message_is_output_fallback_without_duplication(self):
+        state = NativeTurnState(thread_id="th1", turn_id="t1")
+        state.consume({
+            "method": "item/completed",
+            "params": {
+                "threadId": "th1", "turnId": "t1",
+                "item": {"type": "agentMessage", "text": "fallback"},
+            },
+        })
+        self.assertEqual(state.output, ["fallback"])
+        state.consume({
+            "method": "item/completed",
+            "params": {
+                "threadId": "th1", "turnId": "t1",
+                "item": {"type": "agentMessage", "text": "duplicate"},
+            },
+        })
+        self.assertEqual(state.output, ["fallback"])
+
     def test_unrelated_turn_cannot_complete_ours_and_disconnect_is_visible(self):
         state = NativeTurnState(thread_id="th1", turn_id="ours")
         state.consume({"method":"turn/completed", "params":{"threadId":"th1", "turn":{"id":"other", "status":"completed"}}})
@@ -199,6 +218,11 @@ class NativeProtocolTest(unittest.TestCase):
     def test_typed_native_requests_match_installed_contract(self):
         thread = thread_start_request(1, cwd="/tmp/repo", model="gpt-test", permission="read_only")
         self.assertEqual(thread["params"]["sandbox"], "read-only")
+        self.assertFalse(thread["params"]["ephemeral"])
+        self.assertTrue(thread_start_request(
+            5, cwd="/tmp/repo", model="gpt-test", permission="read_only",
+            ephemeral=True,
+        )["params"]["ephemeral"])
         turn = turn_start_request(2, thread_id="th", prompt="p", model="gpt-test", effort="low", cwd="/tmp/repo", permission="read_only", output_schema={"type":"object"})
         self.assertEqual(turn["params"]["sandboxPolicy"], {"type":"readOnly", "networkAccess":False})
         self.assertEqual(turn["params"]["outputSchema"]["type"], "object")

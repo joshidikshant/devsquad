@@ -403,7 +403,9 @@ class Supervisor:
                 path,digest,size=self.store.finalize_artifact(run_id,logical,data)
                 artifacts.append({"name":logical,"path":path,"sha256":digest,"byte_size":size})
             snapshot=json.loads(self.store.run(run_id)["mutable_snapshot"])
-            workflow_review="internal_review_fixture" in snapshot
+            workflow_review = (
+                "internal_review_fixture" in snapshot or "review_adapter" in snapshot
+            )
             semantic_error=None
             if (workflow_review and not receipt["cancelled"]
                     and not receipt["timed_out"] and receipt["returncode"]==0):
