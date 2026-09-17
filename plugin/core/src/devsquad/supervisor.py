@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ctypes
+from datetime import datetime, timezone
 import hashlib
 import os
 import signal
@@ -17,6 +18,7 @@ from pathlib import Path
 import json
 
 from .contracts import ContractError, LaunchSpec
+from .reports import build_early_terminal_reports
 from .store import AttemptReservation, ConflictError, Store, canonical_json
 from .workflows import decode_branch_review_evidence
 
@@ -417,15 +419,64 @@ class Supervisor:
                     semantic_error=str(exc)
                     receipt["error"]="WORKFLOW_OUTPUT_INVALID"
                     receipt["message"]=semantic_error
-            receipt_bytes=canonical_json(receipt).encode()
-            path,digest,size=self.store.finalize_artifact(run_id,"result-receipt.json",receipt_bytes)
-            artifacts.append({"name":"result-receipt.json","path":path,"sha256":digest,"byte_size":size})
             terminal="cancelled" if receipt["cancelled"] else ("failed" if receipt["timed_out"] or receipt["returncode"]!=0 or semantic_error else "succeeded")
             payload={"returncode":receipt["returncode"],"receipt":"result-receipt.json"}
             if receipt["timed_out"]: payload["error"]="TIMEOUT"
             if semantic_error:
                 payload["error"]="WORKFLOW_OUTPUT_INVALID"
                 payload["message"]=semantic_error
+            if workflow_review:
+                if receipt["cancelled"]:
+                    report_error = None
+                elif receipt["timed_out"]:
+                    report_error = {
+                        "error": "TIMEOUT",
+                        "message": "branch review worker exceeded its deadline",
+                    }
+                elif semantic_error:
+                    report_error = {
+                        "error": "WORKFLOW_OUTPUT_INVALID",
+                        "message": semantic_error,
+                    }
+                else:
+                    report_error = {
+                        "error": "REVIEW_WORKER_FAILED",
+                        "message": "branch review worker exited before producing a valid handoff",
+                        "returncode": receipt["returncode"],
+                    }
+                    payload.update(report_error)
+                reports = build_early_terminal_reports(
+                    run_id=run_id,
+                    state=terminal,
+                    task=snapshot["task"],
+                    snapshot=snapshot,
+                    run_artifacts=artifacts,
+                    events=self.store.events_for_run(run_id),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    phase="reviewer",
+                    error=report_error,
+                    attempt={
+                        "id": attempt["id"],
+                        "returncode": receipt["returncode"],
+                        "cancelled": receipt["cancelled"],
+                        "timed_out": receipt["timed_out"],
+                    },
+                )
+                for name in sorted(reports):
+                    content = reports[name]
+                    path,digest,size=self.store.finalize_artifact(
+                        run_id, name, content,
+                    )
+                    artifacts.append({
+                        "name": name,
+                        "path": path,
+                        "sha256": digest,
+                        "byte_size": size,
+                    })
+            else:
+                receipt_bytes=canonical_json(receipt).encode()
+                path,digest,size=self.store.finalize_artifact(run_id,"result-receipt.json",receipt_bytes)
+                artifacts.append({"name":"result-receipt.json","path":path,"sha256":digest,"byte_size":size})
             return self.store.commit_durable_import(
                 run_id,attempt["attempt_token"],artifacts,metadata,terminal,payload,
             )

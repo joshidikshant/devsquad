@@ -20,6 +20,16 @@ TERMINAL_REPORT_NAMES = frozenset({
     "artifact-manifest.json",
     "result-receipt.json",
 })
+HANDOFF_REPORT_BASE_NAMES = frozenset({"handoff.json", "handoff.md"})
+
+
+def handoff_report_names(sequence: int) -> tuple[str, str]:
+    """Keep the first public names stable and retain later revision packets."""
+    if type(sequence) is not int or sequence < 1:
+        raise ContractError("handoff report sequence is invalid")
+    if sequence == 1:
+        return "handoff.json", "handoff.md"
+    return f"handoff-{sequence}.json", f"handoff-{sequence}.md"
 
 
 def _artifact_projection(artifact: dict[str, Any]) -> dict[str, Any]:
@@ -55,6 +65,273 @@ def _event_export(events: list[dict[str, Any]]) -> tuple[bytes, int, int]:
         lines.append(canonical_json(event))
     content = (("\n".join(lines) + "\n") if lines else "").encode()
     return content, last_cursor, last_version
+
+
+def _unreferenced_artifact_projection(artifact: dict[str, Any]) -> dict[str, Any]:
+    """Project an artifact before the atomic import has assigned its database id."""
+    required = {"name", "sha256", "byte_size"}
+    if not isinstance(artifact, dict) or not required <= set(artifact):
+        raise ContractError("unreferenced report artifact projection is invalid")
+    name, digest, size = (
+        artifact["name"], artifact["sha256"], artifact["byte_size"],
+    )
+    if (not isinstance(name, str) or not name
+            or not isinstance(digest, str) or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            or type(size) is not int or size < 0):
+        raise ContractError("unreferenced report artifact values are invalid")
+    return {"id": None, "name": name, "sha256": digest, "byte_size": size}
+
+
+def _contents_with_manifest(
+    run_id: str,
+    receipt: dict[str, Any],
+    markdown: str,
+    events_content: bytes,
+    projected_artifacts: list[dict[str, Any]],
+) -> dict[str, bytes]:
+    receipt_content = (canonical_json(receipt) + "\n").encode()
+    contents = {
+        "receipt.json": receipt_content,
+        "receipt.md": markdown.encode(),
+        "events.jsonl": events_content,
+        "result-receipt.json": receipt_content,
+    }
+    manifest_entries = list(projected_artifacts)
+    for name, content in contents.items():
+        manifest_entries.append({
+            "id": None,
+            "name": name,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "byte_size": len(content),
+        })
+    manifest = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "candidate_sha256": receipt["candidate"]["sha256"],
+        "artifacts": manifest_entries,
+        "self_excluded": True,
+    }
+    contents["artifact-manifest.json"] = (
+        canonical_json(manifest) + "\n"
+    ).encode()
+    if set(contents) != TERMINAL_REPORT_NAMES:
+        raise ContractError("terminal report set is incomplete")
+    return contents
+
+
+def build_handoff_reports(
+    *,
+    run_id: str,
+    handoff_id: str,
+    sequence: int,
+    packet: dict[str, Any],
+    packet_sha256: str,
+    created_at: str,
+) -> dict[str, bytes]:
+    """Build the portable JSON and Markdown view of an open host handoff."""
+    if not all(isinstance(value, str) and value for value in (
+        run_id, handoff_id, packet_sha256, created_at,
+    )):
+        raise ContractError("handoff report identity is invalid")
+    packet_json = canonical_json(packet)
+    if hashlib.sha256(packet_json.encode()).hexdigest() != packet_sha256:
+        raise ContractError("handoff report packet hash is invalid")
+    json_name, markdown_name = handoff_report_names(sequence)
+    report = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "workflow": "branch-review",
+        "state": "awaiting_host",
+        "created_at": created_at,
+        "handoff_id": handoff_id,
+        "sequence": sequence,
+        "packet_sha256": packet_sha256,
+        "candidate": {
+            "sha256": packet.get("candidate_sha256"),
+            "base_oid": packet.get("base_oid"),
+            "target_oid": packet.get("target_oid"),
+        },
+        "packet": packet,
+        "next_action": "claim_handoff",
+    }
+    review = packet.get("review") if isinstance(packet.get("review"), dict) else {}
+    lines = [
+        "# DevSquad branch review handoff",
+        "",
+        f"- Run: `{run_id}`",
+        f"- Handoff: `{handoff_id}`",
+        f"- Sequence: `{sequence}`",
+        f"- Candidate: `{packet.get('candidate_sha256')}`",
+        f"- Review verdict: `{review.get('verdict', 'unavailable')}`",
+        "- Next action: claim this saved handoff and submit one disposition.",
+        "",
+        "## Review",
+        "",
+        str(review.get("summary") or "No review summary was supplied."),
+        "",
+        "## Findings",
+        "",
+    ]
+    findings = review.get("findings")
+    if isinstance(findings, list) and findings:
+        for finding in findings:
+            lines.append(
+                f"- **{str(finding.get('severity', 'unknown')).upper()} — "
+                f"{finding.get('title', 'Untitled finding')}** "
+                f"(`{finding.get('path', '?')}:{finding.get('start_line', '?')}`)"
+            )
+    else:
+        lines.append("- No supported findings were reported.")
+    lines.extend(["", "## Instructions", "", str(packet.get("instructions") or "")])
+    return {
+        json_name: (canonical_json(report) + "\n").encode(),
+        markdown_name: ("\n".join(lines) + "\n").encode(),
+    }
+
+
+def build_early_terminal_reports(
+    *,
+    run_id: str,
+    state: str,
+    task: dict[str, Any],
+    snapshot: dict[str, Any] | None,
+    run_artifacts: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    completed_at: str,
+    phase: str,
+    error: dict[str, Any] | None,
+    attempt: dict[str, Any] | None = None,
+) -> dict[str, bytes]:
+    """Build the M3 report set when no valid handoff/lead decision exists."""
+    if not isinstance(run_id, str) or not run_id:
+        raise ContractError("report run id is invalid")
+    if state not in {"failed", "cancelled"}:
+        raise ContractError("early terminal report state is invalid")
+    if not isinstance(task, dict) or task.get("workflow") != "branch-review":
+        raise ContractError("early terminal report task is invalid")
+    if snapshot is not None and not isinstance(snapshot, dict):
+        raise ContractError("early terminal report snapshot is invalid")
+    if not isinstance(completed_at, str) or not completed_at or not phase:
+        raise ContractError("early terminal report completion is invalid")
+    if error is not None and not isinstance(error, dict):
+        raise ContractError("early terminal report error is invalid")
+
+    frozen = snapshot or {}
+    workspace = frozen.get("workspace")
+    workspace = workspace if isinstance(workspace, dict) else {}
+    projected = [
+        _unreferenced_artifact_projection(artifact) for artifact in run_artifacts
+    ]
+    events_content, through_cursor, through_version = _event_export(events)
+    attempt_projection = None
+    if attempt is not None:
+        if not isinstance(attempt, dict) or not isinstance(attempt.get("id"), str):
+            raise ContractError("early terminal report attempt is invalid")
+        attempt_projection = {
+            "id": attempt["id"],
+            "role": "reviewer",
+            "status": state,
+            "returncode": attempt.get("returncode"),
+            "cancelled": bool(attempt.get("cancelled", state == "cancelled")),
+            "timed_out": bool(attempt.get("timed_out", False)),
+            "selected_profile": (
+                frozen.get("routing", {}).get("roles", {}).get("reviewer", {}).get(
+                    "selected"
+                )
+                if isinstance(frozen.get("routing"), dict) else None
+            ),
+            "observed_identity": None,
+            "worker_invocations": 1,
+            "native_model_requests": None,
+            "usage": {
+                "input_tokens": None,
+                "output_tokens": None,
+                "total_tokens": None,
+                "source": "unavailable",
+            },
+            "output_artifacts": projected,
+            "error": error,
+        }
+    criteria = [{
+        "id": criterion.get("id"),
+        "description": criterion.get("description"),
+        "evidence_kind": criterion.get("evidence_kind"),
+        "status": "not_evaluated",
+        "evidence_refs": [],
+    } for criterion in task.get("acceptance", []) if isinstance(criterion, dict)]
+    receipt = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "workflow": "branch-review",
+        "state": state,
+        "phase": phase,
+        "completed_at": completed_at,
+        "candidate": {
+            "sha256": workspace.get("candidate_sha256"),
+            "base_oid": workspace.get("base_oid", frozen.get("base_oid")),
+            "target_oid": workspace.get("target_oid", frozen.get("target_oid")),
+        },
+        "routing": frozen.get("routing"),
+        "review": None,
+        "checks": [],
+        "evaluation": None,
+        "criteria": criteria,
+        "attempts": [attempt_projection] if attempt_projection else [],
+        "dispositions": [],
+        "lead": {
+            "mode": task.get("lead", {}).get("mode"),
+            "status": "not_reached",
+            "disposition": None,
+            "reason": None,
+            "usage": {
+                "input_tokens": None,
+                "output_tokens": None,
+                "total_tokens": None,
+                "source": "unavailable",
+            },
+        },
+        "accounting": {
+            "worker_invocations": 1 if attempt_projection else 0,
+            "native_model_requests": None if attempt_projection else 0,
+            "attempt_usage": (
+                [attempt_projection["usage"]] if attempt_projection else []
+            ),
+            "host_usage_measured": False,
+        },
+        "artifacts": projected,
+        "evidence_artifacts": [],
+        "events_export": {
+            "through_cursor": through_cursor,
+            "through_run_version": through_version,
+            "includes_terminal_event": False,
+            "excludes_terminal_report_artifact_events": True,
+        },
+        "limitations": [
+            "No valid review handoff was produced, so lead disposition was not reached."
+        ],
+        "error": error,
+    }
+    lines = [
+        "# DevSquad branch review",
+        "",
+        f"- Run: `{run_id}`",
+        f"- State: `{state}`",
+        f"- Phase: `{phase}`",
+        "- Lead disposition: `not_reached`",
+        "",
+        "## Failure",
+        "",
+        str((error or {}).get("message") or (error or {}).get("error") or "Cancelled."),
+        "",
+        "## Recovery",
+        "",
+        "Start a new run with a new idempotency key after correcting the recorded error.",
+        "",
+    ]
+    return _contents_with_manifest(
+        run_id, receipt, "\n".join(lines), events_content, projected,
+    )
 
 
 def _decision(value: Any) -> dict[str, Any]:

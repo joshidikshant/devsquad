@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ContractError
+from devsquad.reports import TERMINAL_REPORT_NAMES, build_handoff_reports
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store, request_hash
 from devsquad_test_fixtures import branch_review_routing_documents
@@ -522,9 +523,75 @@ class DurableBranchReviewTest(unittest.TestCase):
                 self.assertIsNone(failed["handoff"])
                 result = self.service.result(started["run_id"])
                 self.assertTrue(result["ready"])
-                self.assertNotIn(
-                    "receipt.json", {artifact["name"] for artifact in result["artifacts"]},
+                artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+                self.assertTrue(TERMINAL_REPORT_NAMES <= set(artifacts))
+                receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+                self.assertEqual(receipt["state"], "failed")
+                self.assertEqual(receipt["lead"]["status"], "not_reached")
+                self.assertEqual(receipt["error"]["error"], "REVIEW_WORKER_FAILED")
+                self.assertEqual(receipt["accounting"]["worker_invocations"], 1)
+                self.assertEqual(len(receipt["attempts"]), 1)
+                self.assertEqual(receipt["attempts"][0]["status"], "failed")
+                self.assertEqual(
+                    {item["name"] for item in receipt["attempts"][0]["output_artifacts"]},
+                    {
+                        f"{receipt['attempts'][0]['id']}.stdout",
+                        f"{receipt['attempts'][0]['id']}.stderr",
+                    },
                 )
+                self.assertEqual(
+                    Path(artifacts["receipt.json"]["path"]).read_bytes(),
+                    Path(artifacts["result-receipt.json"]["path"]).read_bytes(),
+                )
+                manifest = json.loads(
+                    Path(artifacts["artifact-manifest.json"]["path"]).read_text()
+                )
+                for entry in manifest["artifacts"]:
+                    saved = Path(artifacts[entry["name"]]["path"]).read_bytes()
+                    self.assertEqual(hashlib.sha256(saved).hexdigest(), entry["sha256"])
+                    self.assertEqual(len(saved), entry["byte_size"])
+
+    def test_check_worker_failure_before_handoff_gets_full_terminal_reports(self):
+        self.task["checks"][0]["cwd"] = "missing-check-directory"
+        started = self.service.start(
+            self.task,
+            "check-worker-failure",
+            _internal_review_fixture=self.fixture,
+        )
+        failed = self.wait_state(started["run_id"], {"awaiting_host", "failed"})
+        self.assertEqual(failed["state"], "failed")
+        self.assertIsNone(failed["handoff"])
+        result = self.service.result(started["run_id"])
+        artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+        self.assertTrue(TERMINAL_REPORT_NAMES <= set(artifacts))
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["error"]["error"], "REVIEW_WORKER_FAILED")
+        self.assertIsNone(receipt["review"])
+        self.assertEqual(receipt["checks"], [])
+        self.assertEqual(receipt["lead"]["status"], "not_reached")
+
+    def test_waiting_handoff_report_builder_binds_packet_and_hash(self):
+        run_id, _ = self.start_waiting("handoff-report-builder")
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            handoff = store.handoff_snapshot(run_id)
+            self.assertIsNotNone(handoff)
+            reports = build_handoff_reports(
+                run_id=run_id,
+                handoff_id=handoff.handoff_id,
+                sequence=handoff.sequence,
+                packet=handoff.packet,
+                packet_sha256=handoff.packet_sha256,
+                created_at=handoff.created_at,
+            )
+        finally:
+            store.close()
+        self.assertEqual(set(reports), {"handoff.json", "handoff.md"})
+        document = json.loads(reports["handoff.json"])
+        self.assertEqual(document["state"], "awaiting_host")
+        self.assertEqual(document["packet"], handoff.packet)
+        self.assertEqual(document["packet_sha256"], handoff.packet_sha256)
+        self.assertIn(b"claim this saved handoff", reports["handoff.md"])
 
     def test_invalid_internal_review_fails_before_launch_with_a_receipt(self):
         invalid = dict(self.fixture, verdict="clean")
