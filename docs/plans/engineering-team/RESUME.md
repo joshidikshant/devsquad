@@ -2,7 +2,7 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 16, 2026
+## Current position — September 17, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` remains the published runtime
@@ -22,19 +22,22 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   bounded target. `ddb6f51` fixes both: lease authorization now samples time
   after acquiring the SQLite write transaction, and public cancel resumes an
   interrupted `recovery_cleanup`. Both have deterministic regressions.
-- M3 is in progress through `cd9a881`. `ca55990` adds strict deterministic
+- M3 is in progress through `30cf49e`. `ca55990` adds strict deterministic
   profile/policy routing, alias binding snapshots, pins/fallbacks, independent
   reviewer selection and typed pool capacity. `1c7b614` freezes those exact
   bytes and decisions during public preflight. `cd9a881` resolves base/target
   OIDs and creates a detached run-owned review worktree without changing the
-  submitted checkout, index or HEAD; dirty scoped/config inputs and escaping
-  symlinks fail closed. The current gate is 144 core tests with
-  `ResourceWarning` promoted to failure plus 202 Bash assertions.
+  submitted checkout, index or HEAD. `a756307` defines strict review/check/
+  evaluation evidence, `97d2c6c` runs the durable offline reviewer and trusted
+  checks, and `30cf49e` completes fenced host accept/revise/reject continuation,
+  bounded review retries and terminal JSON/Markdown/event/manifest reports.
+  The current gate is 164 core tests with `ResourceWarning` promoted to failure
+  plus 202 Bash assertions.
 - Public `branch-review` still fails explicitly as `CAPABILITY_UNAVAILABLE`
-  after the now-tested M3 preflight. The reviewer, declared checks, lead
-  disposition and bound report/receipt pipeline are not implemented yet. Do
-  not advertise DevSquad as ready for real review until that end-to-end gate
-  passes.
+  after the now-tested M3 preflight. The complete offline fixture path passes,
+  but a real provider reviewer adapter and bounded live Codex proof are still
+  required. Do not advertise DevSquad as ready for real review until that live
+  end-to-end gate passes.
 - Current provider readiness is external to M2: Claude CLI is not logged in;
   Grok CLI authentication expired; Gemini CLI's individual-account path is
   unsupported and its supported successor is Antigravity; Antigravity is
@@ -60,7 +63,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 144 tests passed through the M3 frozen-workspace checkpoint |
+| Python core discovery | 164 tests passed through M3 offline host disposition and reporting |
 | Bash 3.2 regression suite | 10 test files, 202 assertions passed |
 | Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 5 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
@@ -68,6 +71,8 @@ Verified at the implementation/evidence checkpoints above:
 | M2 crash/race matrix | Real subprocess interruptions plus independent-process start, writer, cancel, import and host-handoff races passed at `ddb6f51` |
 | M3 deterministic routing | Strict profiles/policy, aliases, overrides, fallback and typed capacity tests passed at `ca55990` / `1c7b614` |
 | M3 frozen review input | Exact OIDs/config hashes, detached worktree, moving-ref stability, dirty-input rejection and source checkout preservation passed at `cd9a881` |
+| M3 offline workflow evidence | Strict candidate-bound review/check evaluation and durable separate-worktree execution passed at `a756307` / `97d2c6c` |
+| M3 host disposition/reporting | Accept/reject/revise, required-check blocking, retry budgets, stale claims, crash resume and five terminal reports passed at `30cf49e` |
 
 The first two saved-probe invocations failed before `Popen` because of
 probe-only path/field defects, so neither launched Codex nor consumed a model
@@ -87,18 +92,17 @@ are not advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Preserve the M2 process/fencing boundaries and implement the next M3 slice:
-   the durable reviewer → trusted declared checks → lead disposition pipeline.
-   Add strict structured review/check/disposition artifacts bound to
-   `workspace.candidate_sha256`, explicit `required_to_pass` handling and host
-   handoff continuation. Do not bypass the supervisor with an in-process or
-   ad-hoc provider call.
-3. Add terminal `receipt.json`, `receipt.md`, `events.jsonl` and artifact
-   manifest generation for the workflow. Keep public review unavailable until
-   the complete fake-adapter end-to-end gate passes, then run one bounded real
-   Codex review before declaring the M3 product stop usable.
-4. Use offline fake adapters for development. Provider login/permission work is
-   a later live gate and must not block independent M3 implementation.
+2. Preserve the M2 process/fencing boundaries and add the real Codex reviewer
+   launch through the verified native adapter. Feed it the frozen prompt and
+   workspace, preserve requested/observed identity and strict JSON evidence,
+   and keep review-only permissions. Do not bypass the supervisor with an
+   in-process or ad-hoc provider call.
+3. Add focused adapter fault tests for denied writes, missing/malformed output,
+   protocol interruption and usage/accounting. Then run one bounded real Codex
+   branch review and save a redacted receipt before declaring the M3 product
+   stop usable.
+4. Keep Claude/Grok/Antigravity probes paused until their normal login or trust
+   blockers are resolved. They do not block the independent Codex M3 gate.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 

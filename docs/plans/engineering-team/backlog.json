@@ -111,6 +111,33 @@
           "artifact": "../../../test/core/test_workspaces.py",
           "recorded_at": "2026-09-16T01:08:00+05:30",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "a756307",
+          "command_or_action": "154 core tests with ResourceWarning promoted to error and 202 shell assertions covering strict candidate-bound review, check, evaluation and attempt evidence",
+          "outcome": "Reviewer output and trusted check results are schema-bound to the frozen candidate; required failures cannot be overridden and usage remains explicitly unknown when unavailable",
+          "artifact": "../../../test/core/test_review_workflow.py",
+          "recorded_at": "2026-09-16T01:21:23+05:30",
+          "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "97d2c6c",
+          "command_or_action": "159 core tests with ResourceWarning promoted to error and 202 shell assertions covering durable offline review, isolated declared checks and atomic host handoff publication",
+          "outcome": "A frozen offline reviewer and separate check worktree now produce durable evidence and a claimable host packet without changing the submitted checkout",
+          "artifact": "../../../test/core/test_review_runtime.py",
+          "recorded_at": "2026-09-16T01:34:41+05:30",
+          "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "30cf49e",
+          "command_or_action": "164 core tests with ResourceWarning promoted to error and 202 shell assertions covering host accept/reject/revise, retry budgets, exact evidence binding, crash resume and terminal reports",
+          "outcome": "The offline M3 path now completes end to end with attempt-specific evidence, required-check enforcement, clean retry workspaces and durable receipt.json, receipt.md, events.jsonl, artifact manifest and result receipt; real provider execution remains pending",
+          "artifact": "../../../test/core/test_review_runtime.py",
+          "recorded_at": "2026-09-17T16:35:24+05:30",
+          "availability": "tracked_tests"
         }
       ],
       "blocker": null
