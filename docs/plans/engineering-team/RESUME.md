@@ -22,7 +22,7 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   bounded target. `ddb6f51` fixes both: lease authorization now samples time
   after acquiring the SQLite write transaction, and public cancel resumes an
   interrupted `recovery_cleanup`. Both have deterministic regressions.
-- M3 is in progress through `459ff3f`. `ca55990` adds strict deterministic
+- M3 is in progress through `9478796`. `ca55990` adds strict deterministic
   profile/policy routing, alias binding snapshots, pins/fallbacks, independent
   reviewer selection and typed pool capacity. `1c7b614` freezes those exact
   bytes and decisions during public preflight. `cd9a881` resolves base/target
@@ -34,15 +34,19 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   `459ff3f` adds the public native Codex reviewer: it freezes the verified CLI,
   launches one ephemeral read-only app-server turn inside the existing M2
   process group, verifies observed model/effort/sandbox identity, accepts only
-  strict candidate-bound JSON, and records native usage. The current gate is
-  167 core tests with `ResourceWarning` promoted to failure plus 202 Bash
-  assertions.
-- Public `branch-review` now reaches the complete native Codex path in offline
-  protocol tests. Malformed output, denial, disconnect and identity drift all
-  fail without becoming valid reviews. A bounded real Codex end-to-end proof
-  is still required before advertising it as ready for real review. M3 also
-  still needs rich reports for early terminal failures, materialized waiting
-  handoff reports and the configured headless-lead path.
+  strict candidate-bound JSON, and records native usage. `e10db94` pins the
+  compatible bundled Codex 0.153.4 runtime and isolates each review from old
+  sessions, config, plugins, skills and MCPs while exposing only existing
+  subscription auth. `9478796` makes the structured-output schema provider
+  compatible. The current gate is 169 core tests with `ResourceWarning`
+  promoted to failure plus 202 Bash assertions.
+- The bounded real public `branch-review` gate passed at `9478796` with
+  verified gpt-5.5/low, read-only ephemeral execution, one supported finding,
+  a passing required check, native-reported usage and all five terminal report
+  hashes. See the [portable redacted evidence](evidence/M3-native-codex-review-2026-09-17.json).
+  M3 still needs rich reports for early terminal failures, materialized waiting
+  handoff reports and the configured headless-lead path before milestone
+  acceptance.
 - Current provider readiness is external to M2: Claude CLI is not logged in;
   Grok CLI authentication expired; Gemini CLI's individual-account path is
   unsupported and its supported successor is Antigravity; Antigravity is
@@ -68,7 +72,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 167 tests passed through the M3 native Codex reviewer path |
+| Python core discovery | 169 tests passed through the provider-compatible M3 native Codex reviewer path |
 | Bash 3.2 regression suite | 10 test files, 202 assertions passed |
 | Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 5 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
@@ -79,6 +83,7 @@ Verified at the implementation/evidence checkpoints above:
 | M3 offline workflow evidence | Strict candidate-bound review/check evaluation and durable separate-worktree execution passed at `a756307` / `97d2c6c` |
 | M3 host disposition/reporting | Accept/reject/revise, required-check blocking, retry budgets, stale claims, crash resume and five terminal reports passed at `30cf49e` |
 | M3 native Codex reviewer | Public start, exact identity verification, ephemeral read-only structured output, native usage and four provider-fault classes passed offline at `459ff3f` |
+| M3 live public review | Passed at `9478796`; gpt-5.5/low found one supported regression, the required check passed, host acceptance terminalized succeeded and five report hashes were retained |
 
 The first two saved-probe invocations failed before `Popen` because of
 probe-only path/field defects, so neither launched Codex nor consumed a model
@@ -98,15 +103,11 @@ are not advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Add a reproducible, opt-in bounded live M3 probe that uses the public
-   service, keeps raw provider material under `~/.devsquad/private-probes`, and
-   emits only a redacted receipt/hash. Run it once with the existing
-   subscription-backed Codex login and retain the evidence.
-3. Close the remaining M3 contract gaps: rich terminal reports for failures
+2. Close the remaining M3 contract gaps: rich terminal reports for failures
    before host disposition, materialized waiting handoff reports, and the
    configured headless-lead path. Rerun the full core/Bash gates and audit M3
    against its acceptance section before marking it complete.
-4. Keep Claude/Grok/Antigravity probes paused until their normal login or trust
+3. Keep Claude/Grok/Antigravity probes paused until their normal login or trust
    blockers are resolved. They do not block the independent Codex M3 gate.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.

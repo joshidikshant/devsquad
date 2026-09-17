@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "milestone": "M3",
+  "status": "in_progress",
+  "implementation_revision": "9478796247486ead4e62578cff4035f418534ac7",
+  "recorded_at": "2026-09-17T21:34:40+05:30",
+  "evidence": [
+    {
+      "kind": "offline_test",
+      "command_or_action": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s test/core -p 'test_*.py' -q",
+      "outcome": "169 core tests passed after the current-version, isolated-auth and provider-compatible structured-output fixes",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "offline_test",
+      "command_or_action": "bash test/run.sh",
+      "outcome": "10 Bash test files passed; all 202 Bash 3.2 and optional-jq assertions passed",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "live_public_branch_review",
+      "command_or_action": "test/core/probes/m3_codex_review.py --run-live --codex-binary /Applications/ChatGPT.app/Contents/Resources/codex --model gpt-5.5 --effort low --timeout 180",
+      "outcome": "Public Service.start reached a host handoff, the required unit-tests check passed, the native reviewer returned one supported finding, the host accepted the evidence and the run terminalized succeeded with all five required reports",
+      "availability": "private artifacts retained locally; portable redacted hashes below"
+    },
+    {
+      "kind": "execution_identity",
+      "command_or_action": "Freeze and re-observe the selected app-server identity before accepting review evidence",
+      "outcome": "codex-cli 0.153.4; OpenAI gpt-5.5; low effort; read_only; verified; correlated native thread and turn IDs present; ephemeral thread; isolated temporary CODEX_HOME with only existing subscription auth exposed and apps/plugins/browser/computer-use/multi-agent disabled",
+      "availability": "portable redacted summary"
+    },
+    {
+      "kind": "native_usage",
+      "command_or_action": "Read the correlated thread/tokenUsage/updated event from the successful review turn",
+      "outcome": "52,271 input tokens; 1,429 output tokens; 53,700 total tokens; source native_reported",
+      "availability": "portable redacted summary"
+    }
+  ],
+  "candidate_sha256": "2b3bc90aee56082b4df943e4f5877c83ee41fb75a760980d1364e06820efabe7",
+  "successful_private_probe_receipt_sha256": "a9166be2c2e1a7946d5288a83685d96049e69ccba833a0634d1a4844ad23dd53",
+  "terminal_report_sha256": {
+    "artifact-manifest.json": "b2a84aea8419b451bc12ce3c1e9f00be4ecc16b70475366c166fc458af13850e",
+    "events.jsonl": "24442a87aedc085fcfc038d5382870105a585d8642aa4f8b72e524b21c270529",
+    "receipt.json": "ba1e13861f4e5b02e6ed22e2118b6a4e125872c7452eb2ebea3007408130f2a3",
+    "receipt.md": "802594961f53387bfa201fdf4bbb9af871f422e6f835309314f37aa3738b36dd",
+    "result-receipt.json": "ba1e13861f4e5b02e6ed22e2118b6a4e125872c7452eb2ebea3007408130f2a3"
+  },
+  "failed_probe_evidence": [
+    {
+      "receipt_sha256": "7e096bb8e47cd2081067f535fae4bc71616d1b9c3386927a8024840a82388026",
+      "outcome": "codex-cli 0.135.0 could no longer decode the current server model catalog after max reasoning metadata was introduced; no valid review evidence was accepted"
+    },
+    {
+      "receipt_sha256": "bd7d43e7900810307eaba7b5400d218be0427d7204c4222f7b5bd67a3ae1f5fb",
+      "outcome": "codex-cli 0.153.4 reached the provider but strict structured output rejected the untyped schema_version property with invalid_json_schema; no valid review evidence was accepted"
+    }
+  ],
+  "residual_blockers": [
+    "Materialize waiting handoff JSON and Markdown reports",
+    "Generate rich terminal reports for failures before host disposition",
+    "Implement and verify the configured headless-lead disposition path",
+    "Complete an independent M3 acceptance audit before marking the milestone complete"
+  ]
+}

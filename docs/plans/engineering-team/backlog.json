@@ -147,6 +147,15 @@
           "artifact": "../../../test/core/test_review_runtime.py",
           "recorded_at": "2026-09-17T16:55:37+05:30",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "live_acceptance",
+          "revision": "9478796",
+          "command_or_action": "Run the public branch-review service with the isolated subscription-backed codex-cli 0.153.4 app-server, gpt-5.5/low, read-only permissions, one required check and host acceptance",
+          "outcome": "Succeeded with one supported finding, a passing required check, verified observed identity, 53,700 native-reported tokens and all five terminal report hashes; M3 remains in progress for waiting/failure reports, headless lead and final audit",
+          "artifact": "evidence/M3-native-codex-review-2026-09-17.json",
+          "recorded_at": "2026-09-17T21:34:40+05:30",
+          "availability": "portable_redacted"
         }
       ],
       "blocker": null
