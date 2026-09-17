@@ -94,7 +94,7 @@ class M1ContractsTest(unittest.TestCase):
         temp, binary = self.fake_path("codex"); self.addCleanup(temp.cleanup)
         manifest = self.manifest("codex").with_model_efforts({"gpt-test": ("low",)})
         with patch.dict(os.environ, {"PATH": str(binary.parent)}):
-            spec = prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.135.0")
+            spec = prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.153.4")
             self.assertEqual(spec.transport, "native_protocol")
             self.assertEqual(spec.argv[-2:], ("--listen", "stdio://"))
             self.assertIn('model_reasoning_effort="low"', spec.argv)
@@ -105,13 +105,13 @@ class M1ContractsTest(unittest.TestCase):
     def test_discovered_snapshot_feeds_native_preparation_and_rejects_drift(self):
         temp, binary = self.fake_path("codex"); self.addCleanup(temp.cleanup)
         manifest = self.manifest("codex")
-        snapshot = {"complete":True,"harness":"codex","harness_version":"codex-cli 0.135.0","models":[{"id":"gpt-test","supported_efforts":["low"]}]}
+        snapshot = {"complete":True,"harness":"codex","harness_version":"codex-cli 0.153.4","models":[{"id":"gpt-test","supported_efforts":["low"]}]}
         with patch.dict(os.environ, {"PATH": str(binary.parent)}):
-            spec = prepare_native_codex_from_catalog(manifest, snapshot, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.135.0")
+            spec = prepare_native_codex_from_catalog(manifest, snapshot, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.153.4")
             self.assertEqual(spec.requested.model, "gpt-test")
             drifted = dict(snapshot); drifted["harness_version"] = "codex-cli future"
             with self.assertRaises(ContractError):
-                prepare_native_codex_from_catalog(manifest, drifted, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.135.0")
+                prepare_native_codex_from_catalog(manifest, drifted, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.153.4")
 
     def test_launch_round_trip_is_strict(self):
         temp, binary = self.fake_path("grok"); self.addCleanup(temp.cleanup)
@@ -214,6 +214,21 @@ class NativeProtocolTest(unittest.TestCase):
         state.consume({"method":"turn/completed", "params":{"threadId":"th1", "turn":{"id":"other", "status":"completed"}}})
         self.assertFalse(state.terminal)
         state.disconnected(); self.assertEqual(state.terminal_status, "transport_disconnected")
+
+    def test_failed_terminal_turn_preserves_typed_provider_error(self):
+        state = NativeTurnState(thread_id="th1", turn_id="ours")
+        state.consume({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "th1",
+                "turn": {
+                    "id": "ours", "status": "failed",
+                    "error": {"code": "model_error", "message": "bounded detail"},
+                },
+            },
+        })
+        self.assertEqual(state.terminal_status, "failed")
+        self.assertEqual(state.error["code"], "model_error")
 
     def test_typed_native_requests_match_installed_contract(self):
         thread = thread_start_request(1, cwd="/tmp/repo", model="gpt-test", permission="read_only")

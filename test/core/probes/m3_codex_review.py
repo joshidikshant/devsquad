@@ -221,6 +221,10 @@ def main() -> int:
     )
     parser.add_argument("--model", default="gpt-5.5")
     parser.add_argument(
+        "--codex-binary", type=Path,
+        help="optional absolute codex binary; its directory is prepended for this probe only",
+    )
+    parser.add_argument(
         "--effort", default="low",
         choices=("minimal", "low", "medium", "high", "xhigh"),
     )
@@ -232,6 +236,15 @@ def main() -> int:
         parser.error("--model must contain only letters, numbers, dot, underscore or hyphen")
     if args.timeout < 30 or args.timeout > 600:
         parser.error("--timeout must be between 30 and 600 seconds")
+    if args.codex_binary is not None:
+        try:
+            binary = args.codex_binary.expanduser().resolve(strict=True)
+        except OSError as exc:
+            parser.error(f"--codex-binary cannot be resolved: {exc}")
+        if (not binary.is_file() or binary.name != "codex"
+                or not os.access(binary, os.X_OK)):
+            parser.error("--codex-binary must be an executable absolute path named codex")
+        os.environ["PATH"] = f"{binary.parent}{os.pathsep}{os.environ.get('PATH', '')}"
 
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     revision = _git(ROOT, "rev-parse", "HEAD")

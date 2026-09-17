@@ -185,6 +185,11 @@ class NativeTurnState:
         if method == "turn/completed" and self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
             self.terminal = True
             self.terminal_status = turn.get("status")
+            turn_error = turn.get("error")
+            if turn_error is not None:
+                if not isinstance(turn_error, dict):
+                    raise ContractError("native terminal turn error must be an object")
+                self.error = turn_error
         if method == "error" and self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id and not params.get("willRetry", False):
             self.terminal = True
             self.terminal_status = "failed"

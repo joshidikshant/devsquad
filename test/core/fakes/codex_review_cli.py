@@ -7,7 +7,7 @@ import sys
 
 
 if "--version" in sys.argv:
-    print("codex-cli 0.135.0")
+    print("codex-cli 0.153.4")
     raise SystemExit(0)
 
 
@@ -30,7 +30,7 @@ for line in sys.stdin:
     if method == "initialize":
         print(json.dumps({
             "id": request_id,
-            "result": {"serverInfo": {"name": "fake-codex", "version": "0.135.0"}},
+            "result": {"serverInfo": {"name": "fake-codex", "version": "0.153.4"}},
         }), flush=True)
     elif method == "initialized":
         initialized = True
@@ -65,7 +65,7 @@ for line in sys.stdin:
             "result": {
                 "thread": {
                     "id": thread_id,
-                    "cliVersion": "0.135.0",
+                    "cliVersion": "0.153.4",
                     "modelProvider": "openai",
                 },
                 "model": params["model"],

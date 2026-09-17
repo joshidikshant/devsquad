@@ -433,8 +433,13 @@ class DurableBranchReviewTest(unittest.TestCase):
         (fake_bin / "codex").symlink_to(
             ROOT / "test/core/fakes/codex_review_cli.py"
         )
+        fake_home = self.root / "fake-codex-home"
+        fake_home.mkdir()
+        (fake_home / "auth.json").write_text("{}\n")
+        (fake_home / "auth.json").chmod(0o600)
         environment = {
             "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "CODEX_HOME": str(fake_home),
         }
         with patch.dict(os.environ, environment, clear=False):
             started = self.service.start(self.task, "native-codex-review")
@@ -448,7 +453,7 @@ class DurableBranchReviewTest(unittest.TestCase):
         observed = packet["attempt"]["observed_identity"]
         self.assertEqual(
             (observed["harness"], observed["harness_version"], observed["model_id"]),
-            ("codex", "codex-cli 0.135.0", "gpt-fake-review"),
+            ("codex", "codex-cli 0.153.4", "gpt-fake-review"),
         )
         self.assertEqual(packet["attempt"]["usage"], {
             "input_tokens": 120,
@@ -485,8 +490,13 @@ class DurableBranchReviewTest(unittest.TestCase):
         (fake_bin / "codex").symlink_to(
             ROOT / "test/core/fakes/codex_review_cli.py"
         )
+        fake_home = self.root / "fault-codex-home"
+        fake_home.mkdir()
+        (fake_home / "auth.json").write_text("{}\n")
+        (fake_home / "auth.json").chmod(0o600)
         environment = {
             "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "CODEX_HOME": str(fake_home),
         }
         for mode in ("malformed", "denied", "disconnect", "identity-drift"):
             with self.subTest(mode=mode):

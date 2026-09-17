@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Any
 
@@ -41,7 +42,7 @@ MAX_PROTOCOL_EVENTS = 10_000
 MAX_SERVER_STDERR_BYTES = 256 * 1024
 ADAPTER_FIELDS = {
     "schema_version", "harness", "transport", "binary", "binary_sha256",
-    "harness_version", "model_provider", "output_schema_sha256",
+    "harness_version", "model_provider", "output_schema_sha256", "auth_file",
 }
 
 
@@ -53,6 +54,26 @@ def _adapter_manifest_path() -> Path:
     if installed.is_file():
         return installed
     raise CapabilityUnavailable("Codex adapter manifest is unavailable")
+
+
+def _subscription_auth_file(value: str | None = None) -> Path:
+    try:
+        if value is None:
+            configured_home = os.environ.get("CODEX_HOME")
+            root = Path(configured_home).expanduser() if configured_home else Path.home() / ".codex"
+            auth_file = (root / "auth.json").resolve(strict=True)
+        else:
+            auth_file = Path(value).resolve(strict=True)
+        metadata = auth_file.stat()
+    except OSError as exc:
+        raise CapabilityUnavailable("Codex subscription auth file is unavailable") from exc
+    if not auth_file.is_file():
+        raise CapabilityUnavailable("Codex subscription auth path is not a file")
+    if hasattr(os, "getuid") and metadata.st_uid != os.getuid():
+        raise CapabilityUnavailable("Codex subscription auth file is not user-owned")
+    if os.name != "nt" and metadata.st_mode & 0o077:
+        raise CapabilityUnavailable("Codex subscription auth file permissions are too broad")
+    return auth_file
 
 
 def freeze_codex_reviewer(selected: dict[str, Any]) -> dict[str, Any]:
@@ -100,6 +121,7 @@ def freeze_codex_reviewer(selected: dict[str, Any]) -> dict[str, Any]:
         "harness_version": version,
         "model_provider": manifest.model_provider or "openai",
         "output_schema_sha256": schema_hash,
+        "auth_file": str(_subscription_auth_file()),
     }
 
 
@@ -117,12 +139,17 @@ def _validated_adapter(snapshot: dict[str, Any]) -> tuple[dict[str, Any], dict[s
             or adapter["transport"] != "native_protocol"
             or adapter["model_provider"] != "openai"):
         raise ContractError("frozen Codex review adapter identity is invalid")
-    for field in ("binary", "binary_sha256", "harness_version", "output_schema_sha256"):
+    for field in (
+        "binary", "binary_sha256", "harness_version", "output_schema_sha256",
+        "auth_file",
+    ):
         if not isinstance(adapter[field], str) or not adapter[field]:
             raise ContractError("frozen Codex review adapter value is invalid")
     if (len(adapter["binary_sha256"]) != 64
             or len(adapter["output_schema_sha256"]) != 64):
         raise ContractError("frozen Codex review adapter hash is invalid")
+    if not Path(adapter["auth_file"]).is_absolute():
+        raise ContractError("frozen Codex auth path is not absolute")
     if (not isinstance(profile, dict) or profile.get("harness") != "codex"
             or profile.get("permission_policy") != "read_only"):
         raise ContractError("frozen profile is not a read-only Codex reviewer")
@@ -204,6 +231,24 @@ def _stop_server(
             )
 
 
+def _isolated_codex_environment(
+    auth_file_value: str,
+) -> tuple[tempfile.TemporaryDirectory, dict[str, str]]:
+    """Expose subscription auth without loading user sessions, config or plugins."""
+    auth_file = _subscription_auth_file(auth_file_value)
+    home = tempfile.TemporaryDirectory(prefix="devsquad-codex-home-")
+    root = Path(home.name)
+    try:
+        root.chmod(0o700)
+        (root / "auth.json").symlink_to(auth_file)
+    except Exception:
+        home.cleanup()
+        raise
+    environment = os.environ.copy()
+    environment["CODEX_HOME"] = str(root)
+    return home, environment
+
+
 def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(snapshot, dict):
         raise ContractError("workflow snapshot must be an object")
@@ -239,11 +284,18 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         str(binary),
         "-c", f'model="{model}"',
         "-c", f'model_reasoning_effort="{effort}"',
+        "--disable", "apps",
+        "--disable", "plugins",
+        "--disable", "browser_use",
+        "--disable", "computer_use",
+        "--disable", "multi_agent",
+        "--enable", "skip_host_skill_discovery",
         "app-server", "--listen", "stdio://",
     ]
     process: subprocess.Popen[bytes] | None = None
     writer = None
     stderr = None
+    codex_home: tempfile.TemporaryDirectory | None = None
     protocol_events: list[dict[str, Any]] = []
     protocol_bytes = 0
     deadline = time.monotonic() + snapshot["task"]["budget"]["wall_seconds"]
@@ -258,10 +310,11 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         protocol_events.append(message)
 
     try:
+        codex_home, environment = _isolated_codex_environment(adapter["auth_file"])
         process = subprocess.Popen(
             argv,
             cwd=review_root,
-            env=os.environ.copy(),
+            env=environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -374,8 +427,13 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
             if output_bytes > MAX_REVIEW_BYTES:
                 raise ContractError("native Codex review output exceeds its byte limit")
         if state.terminal_status != "completed":
+            detail = (
+                canonical_json(state.error)[:2000]
+                if state.error is not None else "no provider error was reported"
+            )
             raise ContractError(
-                f"native Codex review did not complete successfully: {state.terminal_status}"
+                "native Codex review did not complete successfully: "
+                f"{state.terminal_status}; {detail}"
             )
         review = decode_review_document(
             "".join(state.output).strip(), snapshot["task"], workspace,
@@ -384,6 +442,8 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     finally:
         if process is not None:
             _stop_server(process, writer, stderr)
+        if codex_home is not None:
+            codex_home.cleanup()
 
     observed_identity = {
         "harness": "codex",
