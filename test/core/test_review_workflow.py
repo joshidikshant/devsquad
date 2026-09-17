@@ -15,6 +15,7 @@ from devsquad.workflows import (
     decode_review_document,
     evaluate_branch_review,
     make_branch_review_evidence,
+    review_output_schema,
     validate_branch_review_evidence,
     validate_check_results,
     validate_review_document,
@@ -79,6 +80,22 @@ class BranchReviewWorkflowTest(unittest.TestCase):
             "truncated": False,
             "full_sha256": hashlib.sha256(encoded).hexdigest(),
         }
+
+    def test_native_output_schema_types_every_property(self):
+        schema = review_output_schema()
+
+        def visit(value):
+            if "properties" in value:
+                self.assertEqual(set(value["required"]), set(value["properties"]))
+                self.assertFalse(value["additionalProperties"])
+                for child in value["properties"].values():
+                    self.assertIn("type", child)
+                    visit(child)
+            if isinstance(value.get("items"), dict):
+                visit(value["items"])
+
+        visit(schema)
+        self.assertEqual(schema["properties"]["schema_version"]["enum"], [1])
 
     def check_result(self, status, *, returncode=None, error_code=None):
         configured = self.task["checks"][0]

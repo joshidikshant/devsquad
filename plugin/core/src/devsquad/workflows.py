@@ -35,13 +35,15 @@ def review_output_schema() -> dict[str, Any]:
             "review_mode", "verdict", "summary", "findings",
         ],
         "properties": {
-            "schema_version": {"const": 1},
+            "schema_version": {"type": "integer", "enum": [1]},
             "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
             "base_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
             "target_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-            "review_mode": {"enum": ["standard", "adversarial"]},
-            "verdict": {"enum": ["clean", "findings"]},
-            "summary": {"type": "string", "minLength": 1, "maxLength": 20_000},
+            "review_mode": {
+                "type": "string", "enum": ["standard", "adversarial"],
+            },
+            "verdict": {"type": "string", "enum": ["clean", "findings"]},
+            "summary": {"type": "string"},
             "findings": {
                 "type": "array",
                 "maxItems": MAX_FINDINGS,
@@ -53,20 +55,16 @@ def review_output_schema() -> dict[str, Any]:
                         "start_line", "end_line", "evidence",
                     ],
                     "properties": {
-                        "id": {"type": "string", "minLength": 1, "maxLength": 200},
-                        "severity": {"enum": sorted(FINDING_SEVERITIES)},
-                        "title": {"type": "string", "minLength": 1, "maxLength": 500},
-                        "description": {
-                            "type": "string", "minLength": 1,
-                            "maxLength": MAX_TEXT_CHARS,
+                        "id": {"type": "string"},
+                        "severity": {
+                            "type": "string", "enum": sorted(FINDING_SEVERITIES),
                         },
-                        "path": {"type": "string", "minLength": 1},
+                        "title": {"type": "string"},
+                        "description": {"type": "string"},
+                        "path": {"type": "string"},
                         "start_line": {"type": "integer", "minimum": 1},
                         "end_line": {"type": "integer", "minimum": 1},
-                        "evidence": {
-                            "type": "string", "minLength": 1,
-                            "maxLength": MAX_TEXT_CHARS,
-                        },
+                        "evidence": {"type": "string"},
                     },
                 },
             },
