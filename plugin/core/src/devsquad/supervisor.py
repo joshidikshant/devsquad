@@ -20,7 +20,7 @@ import json
 from .contracts import ContractError, LaunchSpec
 from .reports import build_early_terminal_reports
 from .store import AttemptReservation, ConflictError, Store, canonical_json
-from .workflows import decode_branch_review_evidence
+from .workflows import decode_branch_review_evidence, decode_headless_lead_evidence
 
 
 def _open_stdin_artifact(path: str) -> BinaryIO:
@@ -209,8 +209,19 @@ class Supervisor:
         stdout.start(); stderr.start()
         return RunningAttempt(reservation, process, started, stdout, stderr)
 
-    def launch_durable(self, run_id: str, expected_version: int, spec: LaunchSpec, owner_id: str, package_digest: str) -> DurableAttempt:
-        reservation = self.store.reserve_attempt(run_id, expected_version, owner_id, package_digest)
+    def launch_durable(
+        self,
+        run_id: str,
+        expected_version: int,
+        spec: LaunchSpec,
+        owner_id: str,
+        package_digest: str,
+        *,
+        role: str = "worker",
+    ) -> DurableAttempt:
+        reservation = self.store.reserve_attempt(
+            run_id, expected_version, owner_id, package_digest, role,
+        )
         directory = self.store.artifacts / run_id / f".{reservation.attempt_id}.spool"
         directory.mkdir(parents=True, exist_ok=False)
         paths = {name: str(directory / filename) for name, filename in {
@@ -408,8 +419,36 @@ class Supervisor:
             workflow_review = (
                 "internal_review_fixture" in snapshot or "review_adapter" in snapshot
             )
+            role = attempt.get("role", "worker")
             semantic_error=None
-            if (workflow_review and not receipt["cancelled"]
+            if (role == "lead" and workflow_review and not receipt["cancelled"]
+                    and not receipt["timed_out"] and receipt["returncode"]==0):
+                try:
+                    handoff = self.store.handoff_snapshot(run_id)
+                    if handoff is None or handoff.status != "open":
+                        raise ContractError("headless lead handoff is missing")
+                    frozen_handoff = {
+                        "handoff_id": handoff.handoff_id,
+                        "packet": handoff.packet,
+                        "packet_sha256": handoff.packet_sha256,
+                    }
+                    evidence = decode_headless_lead_evidence(
+                        captures["stdout"], snapshot, frozen_handoff,
+                    )
+                    content = (canonical_json(evidence) + "\n").encode()
+                    name = f"lead-attempt-{attempt['id']}.json"
+                    path,digest,size=self.store.finalize_artifact(run_id,name,content)
+                    artifacts.append({
+                        "name":name,"path":path,"sha256":digest,"byte_size":size,
+                    })
+                    return self.store.commit_headless_lead(
+                        run_id, attempt["attempt_token"], artifacts, metadata,
+                    )
+                except ContractError as exc:
+                    semantic_error=str(exc)
+                    receipt["error"]="HEADLESS_LEAD_OUTPUT_INVALID"
+                    receipt["message"]=semantic_error
+            elif (workflow_review and not receipt["cancelled"]
                     and not receipt["timed_out"] and receipt["returncode"]==0):
                 try:
                     return self._commit_review_handoff(
@@ -423,9 +462,26 @@ class Supervisor:
             payload={"returncode":receipt["returncode"],"receipt":"result-receipt.json"}
             if receipt["timed_out"]: payload["error"]="TIMEOUT"
             if semantic_error:
-                payload["error"]="WORKFLOW_OUTPUT_INVALID"
+                payload["error"]=(
+                    "HEADLESS_LEAD_OUTPUT_INVALID"
+                    if role == "lead" else "WORKFLOW_OUTPUT_INVALID"
+                )
                 payload["message"]=semantic_error
             if workflow_review:
+                prior_attempts = []
+                if role == "lead":
+                    handoff = self.store.handoff_snapshot(run_id)
+                    if handoff is not None and isinstance(handoff.packet, dict):
+                        prior = handoff.packet.get("attempt")
+                        if isinstance(prior, dict):
+                            prior_attempts.append({
+                                "id": handoff.packet.get("attempt_id"),
+                                "status": "succeeded",
+                                **prior,
+                                "review": handoff.packet.get("review"),
+                                "checks": handoff.packet.get("checks"),
+                                "evaluation": handoff.packet.get("evaluation"),
+                            })
                 if receipt["cancelled"]:
                     report_error = None
                 elif receipt["timed_out"]:
@@ -435,13 +491,23 @@ class Supervisor:
                     }
                 elif semantic_error:
                     report_error = {
-                        "error": "WORKFLOW_OUTPUT_INVALID",
+                        "error": (
+                            "HEADLESS_LEAD_OUTPUT_INVALID"
+                            if role == "lead" else "WORKFLOW_OUTPUT_INVALID"
+                        ),
                         "message": semantic_error,
                     }
                 else:
                     report_error = {
-                        "error": "REVIEW_WORKER_FAILED",
-                        "message": "branch review worker exited before producing a valid handoff",
+                        "error": (
+                            "HEADLESS_LEAD_FAILED"
+                            if role == "lead" else "REVIEW_WORKER_FAILED"
+                        ),
+                        "message": (
+                            "headless lead exited before producing a valid disposition"
+                            if role == "lead"
+                            else "branch review worker exited before producing a valid handoff"
+                        ),
                         "returncode": receipt["returncode"],
                     }
                     payload.update(report_error)
@@ -450,17 +516,22 @@ class Supervisor:
                     state=terminal,
                     task=snapshot["task"],
                     snapshot=snapshot,
-                    run_artifacts=artifacts,
+                    run_artifacts=(
+                        self.store.artifacts_for_run(run_id) + artifacts
+                        if role == "lead" else artifacts
+                    ),
                     events=self.store.events_for_run(run_id),
                     completed_at=datetime.now(timezone.utc).isoformat(),
-                    phase="reviewer",
+                    phase="lead" if role == "lead" else "reviewer",
                     error=report_error,
                     attempt={
                         "id": attempt["id"],
+                        "role": role,
                         "returncode": receipt["returncode"],
                         "cancelled": receipt["cancelled"],
                         "timed_out": receipt["timed_out"],
                     },
+                    prior_attempts=prior_attempts,
                 )
                 for name in sorted(reports):
                     content = reports[name]

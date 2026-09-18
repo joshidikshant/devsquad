@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from .contracts import ExecutionIdentity, LaunchSpec
+from .service import Service
 from .store import ConflictError, Store, canonical_json
 from .supervisor import Supervisor
 
@@ -28,9 +29,21 @@ def main(argv=None):
             "DEVSQUAD_DELEGATION_DEPTH": "1",
         }
         stdin_path = None
-        if "internal_review_fixture" in snapshot or "review_adapter" in snapshot:
-            selected = snapshot["routing"]["roles"]["reviewer"]["selected"]["profile"]
-            adapter = snapshot.get("review_adapter")
+        adapter = None
+        handoff = store.handoff_snapshot(args.run_id)
+        headless_lead = (
+            snapshot["task"]["lead"]["mode"] == "headless"
+            and handoff is not None
+            and handoff.status == "open"
+        )
+        role = "lead" if headless_lead else "reviewer"
+        workflow_role = (
+            "internal_review_fixture" in snapshot or "review_adapter" in snapshot
+        )
+        if workflow_role:
+            selected = snapshot["routing"]["roles"][role]["selected"]["profile"]
+            adapter_key = "lead_adapter" if headless_lead else "review_adapter"
+            adapter = snapshot.get(adapter_key)
             identity = ExecutionIdentity(
                 selected["harness"],
                 adapter["harness_version"] if adapter else "fixture",
@@ -44,14 +57,22 @@ def main(argv=None):
                 "verified" if adapter else "unknown",
             )
             module = (
-                "devsquad.codex_review_worker"
-                if adapter else "devsquad.review_worker"
+                ("devsquad.codex_lead_worker" if adapter else "devsquad.lead_worker")
+                if headless_lead
+                else ("devsquad.codex_review_worker" if adapter else "devsquad.review_worker")
             )
             command = [sys.executable, "-P", "-m", module]
+            worker_snapshot = dict(snapshot)
+            if headless_lead:
+                worker_snapshot["headless_handoff"] = {
+                    "handoff_id": handoff.handoff_id,
+                    "packet": handoff.packet,
+                    "packet_sha256": handoff.packet_sha256,
+                }
             input_path, _, _ = store.finalize_artifact(
                 args.run_id,
-                "workflow-input.json",
-                canonical_json(snapshot).encode(),
+                "lead-workflow-input.json" if headless_lead else "workflow-input.json",
+                canonical_json(worker_snapshot).encode(),
             )
             stdin_path = str(input_path)
         else:
@@ -62,7 +83,7 @@ def main(argv=None):
         spec = LaunchSpec(
             1,
             identity.harness,
-            "native_protocol" if "review_adapter" in snapshot else "cli_exec",
+            "native_protocol" if adapter else "cli_exec",
             tuple(command),
             run["worktree_path"],
             stdin_path,
@@ -71,9 +92,18 @@ def main(argv=None):
             environment,
         )
         supervisor = Supervisor(store)
-        try: handle = supervisor.launch_durable(args.run_id, args.expected_version, spec, f"daemon:{os.getpid()}", args.package_digest)
+        try: handle = supervisor.launch_durable(args.run_id, args.expected_version, spec, f"daemon:{os.getpid()}", args.package_digest, role=role if workflow_role else "worker")
         except ConflictError: return 0
-        return 0 if supervisor.wait_durable(handle, spec.timeout_seconds) == 0 else 1
-    finally: store.close()
+        returncode = supervisor.wait_durable(handle, spec.timeout_seconds)
+        current = store.run(args.run_id)
+    finally:
+        store.close()
+    if (current["state"] == "awaiting_host"
+            and snapshot["task"]["lead"]["mode"] == "headless"):
+        try:
+            Service(Path(args.database).parent).resume(args.run_id)
+        except ConflictError:
+            pass
+    return 0 if returncode == 0 else 1
 
 if __name__ == "__main__": raise SystemExit(main())

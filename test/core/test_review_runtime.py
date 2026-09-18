@@ -135,6 +135,35 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertEqual(waiting["state"], "awaiting_host")
         return started["run_id"], waiting
 
+    def configure_fixture_headless(self):
+        profiles = json.loads((self.repo / "devsquad/profiles.json").read_text())
+        lead = dict(profiles["profiles"][0])
+        lead.update({
+            "id": "fixture-lead",
+            "model_family": "fixture-family-lead",
+            "model_id": "fixture-lead-model",
+        })
+        profiles["profiles"].append(lead)
+        profiles["bindings"]["lead.primary"] = {
+            "profile_id": "fixture-lead", "version": 1,
+        }
+        policy = json.loads((self.repo / "devsquad/policy.json").read_text())
+        policy["roles"]["lead"] = [{"kind": "alias", "id": "lead.primary"}]
+        (self.repo / "devsquad/profiles.json").write_text(
+            json.dumps(profiles, sort_keys=True) + "\n"
+        )
+        (self.repo / "devsquad/policy.json").write_text(
+            json.dumps(policy, sort_keys=True) + "\n"
+        )
+        subprocess.run(["git", "-C", str(self.repo), "add", "devsquad"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", "headless routing"],
+            check=True,
+        )
+        self.task["project"]["target_ref"] = self.git_text("rev-parse", "HEAD").strip()
+        self.task["lead"] = {"mode": "headless"}
+        self.task["budget"]["max_worker_invocations"] = 2
+
     def test_detached_review_imports_bound_evidence_and_publishes_host_handoff(self):
         (self.repo / "notes.txt").write_text("unrelated local work\n")
         before_head = self.git_bytes("rev-parse", "HEAD")
@@ -177,6 +206,8 @@ class DurableBranchReviewTest(unittest.TestCase):
                 f"checks-{attempt_id}.json",
                 f"evaluation-{attempt_id}.json",
                 f"review-attempt-{attempt_id}.json",
+                "handoff.json",
+                "handoff.md",
             } <= names)
             self.assertNotIn("result-receipt.json", names)
             handoff = store.handoff_snapshot(started["run_id"])
@@ -551,6 +582,93 @@ class DurableBranchReviewTest(unittest.TestCase):
                     self.assertEqual(hashlib.sha256(saved).hexdigest(), entry["sha256"])
                     self.assertEqual(len(saved), entry["byte_size"])
 
+    def test_native_codex_headless_lead_verifies_its_own_identity_and_usage(self):
+        profiles = {
+            "schema_version": 1,
+            "profiles": [
+                {
+                    "id": profile_id,
+                    "harness": "codex",
+                    "model_family": "gpt-fixture",
+                    "model_id": model_id,
+                    "effort": {"value": "low", "transport": "native"},
+                    "required_tools": ["read"],
+                    "permission_policy": "read_only",
+                    "account_pool_id": "codex-subscription",
+                    "billing_mode": "subscription",
+                    "quality_status": "proven",
+                    "evidence_refs": ["native-fixture"],
+                }
+                for profile_id, model_id in (
+                    ("native-reviewer", "gpt-fake-review"),
+                    ("native-lead", "gpt-fake-lead"),
+                )
+            ],
+            "bindings": {},
+        }
+        policy = {
+            "schema_version": 1,
+            "id": "native-headless-policy",
+            "version": 1,
+            "roles": {
+                "reviewer": [{"kind": "profile", "id": "native-reviewer"}],
+                "lead": [{"kind": "profile", "id": "native-lead"}],
+            },
+            "task_classes": {"fixture-review-small": "proven"},
+            "require_different_model_for_review": True,
+            "prefer_different_harness_for_review": True,
+            "account_pools": {
+                "codex-subscription": {
+                    "allowed_billing_modes": ["subscription"],
+                    "max_concurrency": 1,
+                    "unknown_capacity_policy": "allow_bounded",
+                },
+            },
+            "experiment_budget": {},
+        }
+        (self.repo / "devsquad/profiles.json").write_text(
+            json.dumps(profiles, sort_keys=True) + "\n"
+        )
+        (self.repo / "devsquad/policy.json").write_text(
+            json.dumps(policy, sort_keys=True) + "\n"
+        )
+        subprocess.run(["git", "-C", str(self.repo), "add", "devsquad"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", "native headless config"],
+            check=True,
+        )
+        self.task["project"]["target_ref"] = self.git_text("rev-parse", "HEAD").strip()
+        self.task["lead"] = {"mode": "headless"}
+        self.task["budget"]["max_worker_invocations"] = 2
+        fake_bin = self.root / "native-headless-bin"
+        fake_bin.mkdir()
+        (fake_bin / "codex").symlink_to(ROOT / "test/core/fakes/codex_review_cli.py")
+        fake_home = self.root / "native-headless-home"
+        fake_home.mkdir()
+        (fake_home / "auth.json").write_text("{}\n")
+        (fake_home / "auth.json").chmod(0o600)
+        with patch.dict(os.environ, {
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+            "CODEX_HOME": str(fake_home),
+        }, clear=False):
+            started = self.service.start(self.task, "native-headless")
+        completed = self.wait_state(started["run_id"], {"succeeded", "failed"})
+        self.assertEqual(completed["state"], "succeeded")
+        result = self.service.result(started["run_id"])
+        receipt_artifact = next(
+            artifact for artifact in result["artifacts"]
+            if artifact["name"] == "receipt.json"
+        )
+        receipt = json.loads(Path(receipt_artifact["path"]).read_text())
+        self.assertEqual(receipt["lead"]["mode"], "headless")
+        self.assertEqual(
+            receipt["lead"]["attempts"][0]["observed_identity"]["model_id"],
+            "gpt-fake-lead",
+        )
+        self.assertEqual(receipt["lead"]["usage"]["total_tokens"], 160)
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 2)
+        self.assertEqual(receipt["accounting"]["attempt_usage"][1]["total_tokens"], 160)
+
     def test_check_worker_failure_before_handoff_gets_full_terminal_reports(self):
         self.task["checks"][0]["cwd"] = "missing-check-directory"
         started = self.service.start(
@@ -593,6 +711,89 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertEqual(document["packet_sha256"], handoff.packet_sha256)
         self.assertIn(b"claim this saved handoff", reports["handoff.md"])
 
+    def test_headless_lead_is_a_second_fenced_attempt_and_terminalizes_automatically(self):
+        self.configure_fixture_headless()
+        started = self.service.start(
+            self.task,
+            "headless-accept",
+            _internal_review_fixture=self.fixture,
+            _internal_lead_fixture={
+                "disposition": "accept",
+                "reason": "The frozen review evidence is sufficient.",
+            },
+        )
+        completed = self.wait_state(started["run_id"], {"succeeded", "failed"})
+        self.assertEqual(completed["state"], "succeeded")
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            attempts = store.attempts_for_run(started["run_id"])
+        finally:
+            store.close()
+        self.assertEqual([attempt["role"] for attempt in attempts], ["reviewer", "lead"])
+        self.assertTrue(all(attempt["status"] == "finished" for attempt in attempts))
+        result = self.service.result(started["run_id"])
+        artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+        self.assertIn("handoff.json", artifacts)
+        self.assertIn("handoff.md", artifacts)
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["lead"]["mode"], "headless")
+        self.assertEqual(receipt["lead"]["disposition"], "accept")
+        self.assertEqual(len(receipt["lead"]["attempts"]), 1)
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 2)
+        self.assertIsNone(receipt["accounting"]["host_usage_measured"])
+
+    def test_invalid_headless_accept_is_a_failed_attempt_not_invented_success(self):
+        self.configure_fixture_headless()
+        self.task["checks"][0]["required_to_pass"] = True
+        started = self.service.start(
+            self.task,
+            "headless-invalid-accept",
+            _internal_review_fixture=self.fixture,
+            _internal_lead_fixture={
+                "disposition": "accept",
+                "reason": "Attempt to override a required check.",
+            },
+        )
+        completed = self.wait_state(started["run_id"], {"succeeded", "failed"})
+        self.assertEqual(completed["state"], "failed")
+        result = self.service.result(started["run_id"])
+        artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["phase"], "lead")
+        self.assertEqual(receipt["lead"]["status"], "failed")
+        self.assertEqual(receipt["error"]["error"], "HEADLESS_LEAD_FAILED")
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 2)
+        self.assertEqual(
+            [attempt["role"] for attempt in receipt["attempts"]],
+            ["reviewer", "lead"],
+        )
+
+    def test_headless_revise_repeats_review_and_stops_at_both_budgets(self):
+        self.configure_fixture_headless()
+        self.task["budget"]["max_revisions"] = 1
+        self.task["budget"]["max_worker_invocations"] = 4
+        started = self.service.start(
+            self.task,
+            "headless-revise",
+            _internal_review_fixture=self.fixture,
+            _internal_lead_fixture={
+                "disposition": "revise",
+                "reason": "Repeat the review against the same frozen candidate.",
+            },
+        )
+        completed = self.wait_state(started["run_id"], {"succeeded", "failed"})
+        self.assertEqual(completed["state"], "failed")
+        result = self.service.result(started["run_id"])
+        artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["error"]["error"], "BUDGET_EXHAUSTED")
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 4)
+        self.assertEqual(len(receipt["attempts"]), 2)
+        self.assertEqual(len(receipt["lead"]["attempts"]), 2)
+        self.assertEqual(receipt["revisions"]["executed"], 1)
+        self.assertIn("handoff-2.json", artifacts)
+        self.assertIn("handoff-2.md", artifacts)
+
     def test_invalid_internal_review_fails_before_launch_with_a_receipt(self):
         invalid = dict(self.fixture, verdict="clean")
         started = self.service.start(
@@ -605,10 +806,11 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertIn("verdict and findings disagree", started["error"]["message"])
         result = self.service.result(started["run_id"])
         self.assertTrue(result["ready"])
-        self.assertEqual(
-            [artifact["name"] for artifact in result["artifacts"]],
-            ["result-receipt.json"],
-        )
+        artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+        self.assertEqual(set(artifacts), set(TERMINAL_REPORT_NAMES))
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["phase"], "preparing")
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 0)
 
 
 if __name__ == "__main__":

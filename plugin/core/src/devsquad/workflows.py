@@ -14,6 +14,7 @@ from .validation import validate_task
 
 
 MAX_REVIEW_BYTES = 512 * 1024
+MAX_LEAD_BYTES = 128 * 1024
 MAX_EVIDENCE_BYTES = 1024 * 1024
 MAX_FINDINGS = 100
 MAX_TEXT_CHARS = 20_000
@@ -68,6 +69,25 @@ def review_output_schema() -> dict[str, Any]:
                     },
                 },
             },
+        },
+    }
+
+
+def lead_output_schema() -> dict[str, Any]:
+    """Return the strict native structured-output schema for one lead choice."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "schema_version", "candidate_sha256", "disposition", "reason",
+        ],
+        "properties": {
+            "schema_version": {"type": "integer", "enum": [1]},
+            "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "disposition": {
+                "type": "string", "enum": ["accept", "revise", "reject"],
+            },
+            "reason": {"type": "string"},
         },
     }
 
@@ -446,6 +466,226 @@ def build_review_prompt(task: dict[str, Any], workspace: dict[str, Any]) -> str:
         "Frozen assignment:",
         canonical_json(assignment),
     ])
+
+
+def validate_headless_lead_choice(
+    value: dict[str, Any],
+    packet: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate a headless lead's bounded choice against trusted review gates."""
+    choice = _exact(value, {
+        "schema_version", "candidate_sha256", "disposition", "reason",
+    }, "headless lead choice")
+    if choice["schema_version"] != 1 or type(choice["schema_version"]) is not int:
+        raise ContractError("headless lead choice schema_version is invalid")
+    if _sha256(
+        choice["candidate_sha256"], "headless lead candidate_sha256",
+    ) != packet.get("candidate_sha256"):
+        raise ContractError("headless lead choice targets a different candidate")
+    disposition = choice["disposition"]
+    if disposition not in {"accept", "revise", "reject"}:
+        raise ContractError("headless lead disposition is invalid")
+    reason = choice["reason"]
+    if not isinstance(reason, str) or len(reason) > MAX_TEXT_CHARS:
+        raise ContractError("headless lead reason is invalid")
+    if disposition in {"revise", "reject"} and not reason.strip():
+        raise ContractError("headless lead revise/reject requires a reason")
+    if disposition == "accept" and packet.get("evaluation", {}).get("accept_allowed") is not True:
+        raise ContractError("headless lead acceptance is blocked by required evidence")
+    return json.loads(canonical_json(choice))
+
+
+def decode_headless_lead_choice(
+    payload: bytes | str,
+    packet: dict[str, Any],
+) -> dict[str, Any]:
+    return validate_headless_lead_choice(
+        _strict_json_object(payload, "headless lead output", maximum=MAX_LEAD_BYTES),
+        packet,
+    )
+
+
+def build_lead_prompt(task: dict[str, Any], packet: dict[str, Any]) -> str:
+    """Build the single frozen evidence-disposition prompt for a headless lead."""
+    validate_task(task)
+    if task["workflow"] != "branch-review" or task["lead"]["mode"] != "headless":
+        raise ContractError("headless lead prompt requires a headless branch review")
+    if not isinstance(packet, dict):
+        raise ContractError("headless lead packet must be an object")
+    assignment = {
+        "goal": task["goal"],
+        "acceptance": task["acceptance"],
+        "candidate_sha256": packet.get("candidate_sha256"),
+        "review": packet.get("review"),
+        "checks": packet.get("checks"),
+        "evaluation": packet.get("evaluation"),
+    }
+    return "\n".join([
+        "You are the single read-only lead for one frozen branch-review handoff.",
+        "Do not edit files, run commands, publish, delegate, or broaden scope.",
+        "Choose exactly one disposition: accept, revise, or reject.",
+        "Acceptance is forbidden when evaluation.accept_allowed is false.",
+        "Return exactly one JSON object and no Markdown or surrounding prose.",
+        "The object must contain exactly schema_version, candidate_sha256, disposition, reason.",
+        "Frozen handoff evidence:",
+        canonical_json(assignment),
+    ])
+
+
+def validate_headless_lead_evidence(
+    value: dict[str, Any],
+    snapshot: dict[str, Any],
+    handoff: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate one provider-bound headless lead attempt and its exact handoff."""
+    document = _exact(value, {
+        "schema_version", "workflow", "candidate_sha256", "handoff_id",
+        "packet_sha256", "choice", "attempt",
+    }, "headless lead evidence")
+    if document["schema_version"] != 1 or type(document["schema_version"]) is not int:
+        raise ContractError("headless lead evidence schema_version is invalid")
+    if document["workflow"] != "branch-review":
+        raise ContractError("headless lead evidence workflow is invalid")
+    if not isinstance(snapshot, dict) or not isinstance(handoff, dict):
+        raise ContractError("headless lead frozen inputs are invalid")
+    task = snapshot.get("task")
+    packet = handoff.get("packet")
+    if not isinstance(task, dict) or not isinstance(packet, dict):
+        raise ContractError("headless lead frozen inputs are incomplete")
+    if task.get("lead", {}).get("mode") != "headless":
+        raise ContractError("headless lead evidence requires headless mode")
+    handoff_id = _text(document["handoff_id"], "headless lead handoff id", maximum=200)
+    if handoff_id != handoff.get("handoff_id"):
+        raise ContractError("headless lead evidence targets a different handoff")
+    packet_sha256 = hashlib.sha256(canonical_json(packet).encode()).hexdigest()
+    if _sha256(document["packet_sha256"], "headless lead packet sha256") != packet_sha256:
+        raise ContractError("headless lead evidence changes the handoff packet")
+    if handoff.get("packet_sha256") != packet_sha256:
+        raise ContractError("headless lead input packet hash is invalid")
+    choice = validate_headless_lead_choice(document["choice"], packet)
+    if _sha256(
+        document["candidate_sha256"], "headless lead evidence candidate_sha256",
+    ) != choice["candidate_sha256"]:
+        raise ContractError("headless lead evidence changes the candidate")
+
+    attempt = _exact(document["attempt"], {
+        "role", "selected_profile", "prompt_sha256", "observed_identity",
+        "native_ids", "worker_invocations", "native_model_requests", "usage",
+    }, "headless lead attempt evidence")
+    if attempt["role"] != "lead":
+        raise ContractError("headless lead attempt role is invalid")
+    try:
+        frozen_lead = snapshot["routing"]["roles"]["lead"]["selected"]
+    except (KeyError, TypeError) as exc:
+        raise ContractError("frozen lead selection is missing") from exc
+    if canonical_json(attempt["selected_profile"]) != canonical_json(frozen_lead):
+        raise ContractError("headless lead attempt changes the selected profile")
+    prompt_sha256 = hashlib.sha256(build_lead_prompt(task, packet).encode()).hexdigest()
+    if _sha256(attempt["prompt_sha256"], "headless lead prompt sha256") != prompt_sha256:
+        raise ContractError("headless lead prompt hash does not match the handoff")
+
+    adapter = snapshot.get("lead_adapter")
+    observed = attempt["observed_identity"]
+    native_ids = attempt["native_ids"]
+    if adapter is None:
+        if observed is not None or native_ids != {}:
+            raise ContractError("fixture lead cannot claim a native observed identity")
+    else:
+        if not isinstance(adapter, dict):
+            raise ContractError("frozen lead adapter is invalid")
+        identity = _exact(observed, {
+            "harness", "harness_version", "model_provider", "model_id", "effort",
+            "permission_policy", "verification",
+        }, "observed lead identity")
+        expected_identity = {
+            "harness": adapter.get("harness"),
+            "harness_version": adapter.get("harness_version"),
+            "model_provider": adapter.get("model_provider"),
+            "model_id": frozen_lead["profile"]["model_id"],
+            "effort": frozen_lead["profile"]["effort"]["value"],
+            "permission_policy": frozen_lead["profile"]["permission_policy"],
+            "verification": "verified",
+        }
+        if canonical_json(identity) != canonical_json(expected_identity):
+            raise ContractError("observed lead identity does not match the frozen adapter")
+        ids = _exact(native_ids, {"thread_id", "turn_id"}, "native lead ids")
+        for field in ("thread_id", "turn_id"):
+            _text(ids[field], f"native lead {field}", maximum=500)
+    if attempt["worker_invocations"] != 1 or type(attempt["worker_invocations"]) is not int:
+        raise ContractError("headless lead worker invocation accounting is invalid")
+    native_requests = attempt["native_model_requests"]
+    if native_requests is not None and (
+            type(native_requests) is not int or native_requests < 0):
+        raise ContractError("headless lead native request count is invalid")
+    usage = _exact(attempt["usage"], {
+        "input_tokens", "output_tokens", "total_tokens", "source",
+    }, "headless lead usage")
+    for field in ("input_tokens", "output_tokens", "total_tokens"):
+        if usage[field] is not None and (
+                type(usage[field]) is not int or usage[field] < 0):
+            raise ContractError("headless lead token usage is invalid")
+    if usage["source"] not in {"native_reported", "unavailable"}:
+        raise ContractError("headless lead usage source is invalid")
+    if usage["source"] == "unavailable" and any(
+            usage[field] is not None
+            for field in ("input_tokens", "output_tokens", "total_tokens")
+    ):
+        raise ContractError("unavailable lead usage cannot invent token counts")
+    return json.loads(canonical_json(document))
+
+
+def make_headless_lead_evidence(
+    snapshot: dict[str, Any],
+    handoff: dict[str, Any],
+    choice: dict[str, Any],
+    *,
+    observed_identity: dict[str, Any] | None = None,
+    native_ids: dict[str, str] | None = None,
+    native_model_requests: int | None = None,
+    usage: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    packet = handoff["packet"]
+    normalized_choice = validate_headless_lead_choice(choice, packet)
+    document = {
+        "schema_version": 1,
+        "workflow": "branch-review",
+        "candidate_sha256": normalized_choice["candidate_sha256"],
+        "handoff_id": handoff["handoff_id"],
+        "packet_sha256": handoff["packet_sha256"],
+        "choice": normalized_choice,
+        "attempt": {
+            "role": "lead",
+            "selected_profile": snapshot["routing"]["roles"]["lead"]["selected"],
+            "prompt_sha256": hashlib.sha256(
+                build_lead_prompt(snapshot["task"], packet).encode()
+            ).hexdigest(),
+            "observed_identity": observed_identity,
+            "native_ids": native_ids if native_ids is not None else {},
+            "worker_invocations": 1,
+            "native_model_requests": native_model_requests,
+            "usage": usage if usage is not None else {
+                "input_tokens": None,
+                "output_tokens": None,
+                "total_tokens": None,
+                "source": "unavailable",
+            },
+        },
+    }
+    return validate_headless_lead_evidence(document, snapshot, handoff)
+
+
+def decode_headless_lead_evidence(
+    payload: bytes | str,
+    snapshot: dict[str, Any],
+    handoff: dict[str, Any],
+) -> dict[str, Any]:
+    return validate_headless_lead_evidence(
+        _strict_json_object(
+            payload, "headless lead evidence", maximum=MAX_EVIDENCE_BYTES,
+        ),
+        snapshot,
+        handoff,
+    )
 
 
 def validate_branch_review_evidence(

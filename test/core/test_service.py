@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ExecutionIdentity, LaunchSpec
+from devsquad.reports import TERMINAL_REPORT_NAMES
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store, canonical_json
 from devsquad.supervisor import Supervisor, inspect_process
@@ -468,14 +469,18 @@ class ServiceTest(unittest.TestCase):
         try: store.finalize_artifact(started["run_id"],"orphan",b"bytes")
         finally: store.close()
         artifacts=self.service.result(started["run_id"])["artifacts"]
-        self.assertEqual([item["name"] for item in artifacts],["result-receipt.json"])
+        self.assertEqual({item["name"] for item in artifacts},set(TERMINAL_REPORT_NAMES))
+        self.assertNotIn("orphan", {item["name"] for item in artifacts})
 
     def test_pre_attempt_failure_and_cancellation_have_durable_receipts(self):
         failed=self.service.start(self.task,"capability-unavailable")
         self.assertEqual(failed["state"],"failed")
         failure_result=self.service.result(failed["run_id"])
         self.assertTrue(failure_result["ready"])
-        failure_receipt=json.loads(Path(failure_result["artifacts"][0]["path"]).read_text())
+        failure_artifact=next(
+            item for item in failure_result["artifacts"] if item["name"]=="receipt.json"
+        )
+        failure_receipt=json.loads(Path(failure_artifact["path"]).read_text())
         self.assertEqual(failure_receipt["state"],"failed")
         self.assertEqual(failure_receipt["error"]["error"],"CAPABILITY_UNAVAILABLE")
 
@@ -673,7 +678,10 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("superseded run",started["error"]["message"])
         result=self.service.result(started["run_id"])
         self.assertTrue(result["ready"])
-        self.assertEqual([item["name"] for item in result["artifacts"]],["result-receipt.json"])
+        self.assertEqual(
+            {item["name"] for item in result["artifacts"]},
+            set(TERMINAL_REPORT_NAMES),
+        )
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
         try:
             self.assertIsNone(store.run(started["run_id"])["supersedes_run_id"])
@@ -725,7 +733,10 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("does not resolve",started["error"]["message"])
         result=self.service.result(started["run_id"])
         self.assertTrue(result["ready"])
-        receipt=json.loads(Path(result["artifacts"][0]["path"]).read_text())
+        receipt_artifact=next(
+            item for item in result["artifacts"] if item["name"]=="receipt.json"
+        )
+        receipt=json.loads(Path(receipt_artifact["path"]).read_text())
         self.assertEqual(receipt["run_id"],started["run_id"])
         self.assertEqual(receipt["error"],started["error"])
 

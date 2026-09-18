@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import ContractError
 
-SUPPORTED_SCHEMA_VERSION = 5
+SUPPORTED_SCHEMA_VERSION = 6
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -425,8 +425,15 @@ class Store:
         *,
         mutable_snapshot: Any | None = None,
         supersedes_run_id: str | None = None,
+        terminal_artifacts: list[dict[str, Any]] | None = None,
     ) -> int:
         encoded = canonical_json(error)
+        prepared = (
+            self._prepare_exact_artifacts(
+                run_id, terminal_artifacts, BRANCH_REVIEW_TERMINAL_ARTIFACTS,
+            )
+            if terminal_artifacts is not None else None
+        )
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             row = self.connection.execute(
@@ -443,10 +450,18 @@ class Store:
                 if (not predecessor or predecessor["project_id"] != row["project_id"]
                         or predecessor["state"] not in TERMINAL_STATES):
                     raise ConflictError("superseded run must be terminal and belong to the same project")
-            path, digest, size, now = self._terminal_receipt(run_id, "failed", "preparing", error)
-            version = self._reference_terminal_receipt(
-                run_id, row["version"], path, digest, size, now,
-            )
+            now = _utc_now()
+            if prepared is None:
+                path, digest, size, now = self._terminal_receipt(
+                    run_id, "failed", "preparing", error, now=now,
+                )
+                version = self._reference_terminal_receipt(
+                    run_id, row["version"], path, digest, size, now,
+                )
+            else:
+                version, _ = self._reference_prepared_artifacts(
+                    run_id, row["version"], prepared,
+                )
             version += 1
             snapshot = canonical_json(mutable_snapshot) if mutable_snapshot is not None else None
             self.connection.execute(
@@ -581,9 +596,18 @@ class Store:
         path, digest, _ = self.finalize_artifact(run_id, name, content)
         return self.reference_artifact(run_id, name, path, digest)
 
-    def reserve_attempt(self, run_id: str, expected_version: int, owner_id: str, package_digest: str) -> AttemptReservation:
+    def reserve_attempt(
+        self,
+        run_id: str,
+        expected_version: int,
+        owner_id: str,
+        package_digest: str,
+        role: str = "worker",
+    ) -> AttemptReservation:
         if not owner_id or not package_digest:
             raise ContractError("supervisor owner and package digest are required")
+        if role not in {"worker", "implementer", "reviewer", "lead", "researcher"}:
+            raise ContractError("attempt role is invalid")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             run = self.connection.execute("SELECT project_id,worktree_path,state,phase,version FROM runs WHERE id=?", (run_id,)).fetchone()
@@ -598,7 +622,7 @@ class Store:
             supervisor_token, attempt_id, attempt_token = old + 1, str(uuid.uuid4()), uuid.uuid4().hex
             now, version = _utc_now(), expected_version + 1
             self.connection.execute("INSERT OR REPLACE INTO supervisor_claims(run_id,owner_id,fencing_token,package_digest,heartbeat_at,active) VALUES(?,?,?,?,?,1)", (run_id, owner_id, supervisor_token, package_digest, now))
-            self.connection.execute("INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,status,heartbeat_at,package_digest,created_at) VALUES(?,?,?,?,?,'reserved',?,?,?)", (attempt_id, run_id, run["project_id"], run["worktree_path"], attempt_token, now, package_digest, now))
+            self.connection.execute("INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,status,heartbeat_at,package_digest,created_at,role) VALUES(?,?,?,?,?,'reserved',?,?,?,?)", (attempt_id, run_id, run["project_id"], run["worktree_path"], attempt_token, now, package_digest, now, role))
             self.connection.execute("UPDATE runs SET phase='launching',version=?,updated_at=? WHERE id=?", (version, now, run_id))
             event = canonical_json({"attempt_id": attempt_id, "supervisor_token": supervisor_token})
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'supervisor.claimed',?,?)", (run_id, version, event, now))
@@ -997,6 +1021,32 @@ class Store:
                 (run_id,),
             ).fetchone()[0]
             handoff_id, now = str(uuid.uuid4()), _utc_now()
+            from .reports import build_handoff_reports, handoff_report_names
+            handoff_reports = build_handoff_reports(
+                run_id=run_id,
+                handoff_id=handoff_id,
+                sequence=sequence,
+                packet=frozen_packet,
+                packet_sha256=packet_sha256,
+                created_at=now,
+            )
+            report_artifacts = []
+            for name, content in handoff_reports.items():
+                path, digest, size = self.finalize_artifact(run_id, name, content)
+                report_artifacts.append({
+                    "name": name,
+                    "path": path,
+                    "sha256": digest,
+                    "byte_size": size,
+                })
+            prepared_reports = self._prepare_exact_artifacts(
+                run_id,
+                report_artifacts,
+                frozenset(handoff_report_names(sequence)),
+            )
+            version, _ = self._reference_prepared_artifacts(
+                run_id, version, prepared_reports,
+            )
             version += 1
             self.connection.execute(
                 "INSERT INTO handoffs(id,run_id,sequence,packet_json,packet_sha256,status,"
@@ -1023,6 +1073,162 @@ class Store:
             self.connection.execute(
                 "INSERT INTO events(run_id,run_version,type,payload,created_at) "
                 "VALUES(?,?,'run.awaiting_host',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return "awaiting_host"
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def queue_headless_lead(
+        self,
+        run_id: str,
+        expected_version: int,
+    ) -> dict[str, Any]:
+        """Pause an open handoff only long enough to launch its configured lead."""
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT state,phase,version,mutable_snapshot FROM runs WHERE id=?",
+                (run_id,),
+            ).fetchone()
+            handoff = self.connection.execute(
+                "SELECT id,status,sequence FROM handoffs WHERE run_id=? "
+                "ORDER BY sequence DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            if not row or not handoff:
+                raise ConflictError("headless lead handoff is missing")
+            if row["version"] != expected_version:
+                raise ConflictError("headless lead run version changed")
+            try:
+                snapshot = json.loads(row["mutable_snapshot"])
+                budget = snapshot["task"]["budget"]["max_worker_invocations"]
+                lead_mode = snapshot["task"]["lead"]["mode"]
+            except (TypeError, KeyError, json.JSONDecodeError) as exc:
+                raise ConflictError("frozen headless lead configuration is invalid") from exc
+            if lead_mode != "headless" or type(budget) is not int or budget < 1:
+                raise ConflictError("run is not configured for a headless lead")
+            if (row["state"] != "awaiting_host" or row["phase"] is not None
+                    or handoff["status"] != "open"):
+                raise ConflictError("headless lead handoff is not queueable")
+            active = self.connection.execute(
+                "SELECT 1 FROM supervisor_claims WHERE run_id=? AND active=1",
+                (run_id,),
+            ).fetchone()
+            if active:
+                raise ConflictError("headless lead already has an active supervisor")
+            invocations = self.connection.execute(
+                "SELECT COUNT(*) FROM attempts WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            if invocations >= budget:
+                self.connection.execute("COMMIT")
+                return {
+                    "action": "budget_exhausted",
+                    "version": row["version"],
+                    "worker_invocations": invocations,
+                }
+            now, version = _utc_now(), row["version"] + 1
+            self.connection.execute(
+                "UPDATE runs SET state='queued',phase=NULL,version=?,updated_at=? "
+                "WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({
+                "handoff_id": handoff["id"],
+                "sequence": handoff["sequence"],
+                "worker_invocations": invocations,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.headless_lead_queued',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "action": "queued",
+                "version": version,
+                "worker_invocations": invocations,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def commit_headless_lead(
+        self,
+        run_id: str,
+        attempt_token: str,
+        artifacts: list[dict[str, Any]],
+        metadata: Any,
+    ) -> str:
+        """Import one valid headless-lead result and reopen its frozen handoff."""
+        prepared, stdout_name, stderr_name = self._prepare_durable_artifacts(
+            run_id, artifacts, require_result_receipt=False,
+        )
+        encoded_metadata = canonical_json(metadata)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status,role,stdout_artifact_id,stderr_artifact_id,"
+                "output_metadata FROM attempts WHERE run_id=? AND attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            handoff = self.connection.execute(
+                "SELECT id,status,sequence FROM handoffs WHERE run_id=? "
+                "ORDER BY sequence DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            if not run or not attempt or not handoff:
+                raise ConflictError("headless lead import is fenced")
+            if (attempt["status"] == "finished"
+                    and run["state"] == "awaiting_host"
+                    and handoff["status"] == "open"):
+                self.connection.execute("COMMIT")
+                return "awaiting_host"
+            if (attempt["status"] != "running" or attempt["role"] != "lead"
+                    or run["state"] != "running" or run["phase"] is not None
+                    or handoff["status"] != "open"):
+                raise ConflictError("headless lead import is fenced")
+            evidence_name = f"lead-attempt-{attempt['id']}.json"
+            if evidence_name not in {item[0] for item in prepared}:
+                raise ContractError("headless lead evidence artifact is missing")
+            version, artifact_ids = self._reference_prepared_artifacts(
+                run_id, run["version"], prepared,
+            )
+            version = self._record_prepared_output(
+                run_id,
+                version,
+                attempt,
+                artifact_ids,
+                stdout_name,
+                stderr_name,
+                encoded_metadata,
+            )
+            now, version = _utc_now(), version + 1
+            self.connection.execute(
+                "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
+                (now, attempt["id"]),
+            )
+            self.connection.execute(
+                "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='awaiting_host',phase=NULL,version=?,updated_at=? "
+                "WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = canonical_json({
+                "attempt_id": attempt["id"],
+                "handoff_id": handoff["id"],
+                "evidence": evidence_name,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.headless_lead_ready',?,?)",
                 (run_id, version, payload, now),
             )
             self.connection.execute("COMMIT")
@@ -1922,6 +2128,7 @@ class Store:
                 budget = snapshot["task"]["budget"]
                 max_revisions = budget["max_revisions"]
                 max_invocations = budget["max_worker_invocations"]
+                lead_mode = snapshot["task"]["lead"]["mode"]
             except (KeyError, TypeError) as exc:
                 raise ConflictError("frozen review budget is missing") from exc
             if (type(max_revisions) is not int or max_revisions < 0
@@ -1937,7 +2144,9 @@ class Store:
             invocations = self.connection.execute(
                 "SELECT COUNT(*) FROM attempts WHERE run_id=?", (run_id,),
             ).fetchone()[0]
-            if revisions > max_revisions or invocations >= max_invocations:
+            required_invocations = 2 if lead_mode == "headless" else 1
+            if (revisions > max_revisions
+                    or invocations + required_invocations > max_invocations):
                 self.connection.execute("COMMIT")
                 return {
                     "action": "budget_exhausted",
@@ -2233,6 +2442,14 @@ class Store:
     def attempt(self, run_id: str) -> dict[str, Any] | None:
         row = self.connection.execute("SELECT * FROM attempts WHERE run_id=? ORDER BY created_at DESC LIMIT 1", (run_id,)).fetchone()
         return dict(row) if row else None
+
+    def attempts_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(row) for row in self.connection.execute(
+                "SELECT * FROM attempts WHERE run_id=? ORDER BY created_at,id",
+                (run_id,),
+            )
+        ]
 
     def run(self, run_id: str) -> dict[str, Any]:
         row = self.connection.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()

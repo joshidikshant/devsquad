@@ -13,9 +13,10 @@ import tempfile
 import threading
 from typing import Any
 
+from .codex_lead_worker import freeze_codex_lead
 from .codex_review_worker import freeze_codex_reviewer
 from .contracts import CapabilityUnavailable, ContractError, ProfileUnsupported
-from .reports import build_terminal_reports
+from .reports import build_early_terminal_reports, build_terminal_reports
 from .router import load_routing
 from .store import (
     ConflictError,
@@ -24,10 +25,12 @@ from .store import (
     Store,
     TERMINAL_STATES,
     canonical_json,
+    request_hash,
 )
 from .validation import validate_task
 from .workflows import (
     apply_lead_disposition,
+    decode_headless_lead_evidence,
     review_mode,
     validate_branch_review_handoff,
     validate_handoff_decision_evidence,
@@ -52,6 +55,38 @@ class Service:
 
     def _store(self) -> Store:
         return Store(self.database, self.artifacts)
+
+    def _preparation_failure_artifacts(
+        self,
+        store: Store,
+        run_id: str,
+        task: dict[str, Any],
+        snapshot: dict[str, Any] | None,
+        error: dict[str, Any],
+    ) -> list[dict[str, Any]] | None:
+        if task.get("workflow") != "branch-review":
+            return None
+        reports = build_early_terminal_reports(
+            run_id=run_id,
+            state="failed",
+            task=task,
+            snapshot=snapshot,
+            run_artifacts=[],
+            events=store.events_for_run(run_id),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            phase="preparing",
+            error=error,
+        )
+        prepared = []
+        for name in sorted(reports):
+            path, digest, size = store.finalize_artifact(run_id, name, reports[name])
+            prepared.append({
+                "name": name,
+                "path": path,
+                "sha256": digest,
+                "byte_size": size,
+            })
+        return prepared
 
     def _freeze_package(self) -> tuple[Path, str]:
         source = Path(__file__).resolve().parent
@@ -173,6 +208,7 @@ class Service:
         project_id: str | None = None,
         run_id: str | None = None,
         internal_review_fixture: dict[str, Any] | None = None,
+        internal_lead_fixture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
         base_oid = resolve_commit(repo, task["project"]["base_ref"])
@@ -250,6 +286,17 @@ class Service:
                 snapshot["internal_review_fixture"] = validate_review_document(
                     fixture_document, task, snapshot["workspace"],
                 )
+            if internal_lead_fixture is not None:
+                if (task["lead"]["mode"] != "headless"
+                        or not isinstance(internal_lead_fixture, dict)
+                        or set(internal_lead_fixture) != {"disposition", "reason"}
+                        or internal_lead_fixture["disposition"]
+                        not in {"accept", "revise", "reject"}
+                        or not isinstance(internal_lead_fixture["reason"], str)):
+                    raise ContractError("internal lead fixture is invalid")
+                snapshot["internal_lead_fixture"] = json.loads(
+                    canonical_json(internal_lead_fixture)
+                )
         return snapshot
 
     def _continue_preparation(
@@ -266,9 +313,15 @@ class Service:
             task = submitted["task"]
             internal_delay = submitted.get("_internal_fake_delay")
             internal_review_fixture = submitted.get("_internal_review_fixture")
+            internal_lead_fixture = submitted.get("_internal_lead_fixture")
             store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
             validated_supersedes_run_id = supersedes_run_id
             validate_task(task, require_existing_repo=True)
+            if (task["lead"]["mode"] == "headless"
+                    and task["budget"]["max_worker_invocations"] < 2):
+                raise ContractError(
+                    "headless branch review requires at least two worker invocations"
+                )
             worktree = store.preparation_worktree(
                 run_id, fencing_token, Path(task["project"]["repo_path"]),
             )
@@ -280,10 +333,16 @@ class Service:
                 project_id=project_id,
                 run_id=run_id,
                 internal_review_fixture=internal_review_fixture,
+                internal_lead_fixture=internal_lead_fixture,
             )
             if internal_delay is None and internal_review_fixture is None:
                 snapshot["review_adapter"] = freeze_codex_reviewer(
                     snapshot["routing"]["roles"]["reviewer"]["selected"],
+                )
+            if (internal_delay is None and task["lead"]["mode"] == "headless"
+                    and internal_lead_fixture is None):
+                snapshot["lead_adapter"] = freeze_codex_lead(
+                    snapshot["routing"]["roles"]["lead"]["selected"],
                 )
             package, digest = self._freeze_package()
             version = store.complete_preparation(
@@ -298,17 +357,24 @@ class Service:
             return (version, package, digest), None
         except (CapabilityUnavailable, ProfileUnsupported) as exc:
             error = {"error": exc.code, "message": str(exc)}
+            terminal_artifacts = self._preparation_failure_artifacts(
+                store, run_id, task, snapshot, error,
+            )
             store.fail_preparation(
                 run_id,
                 fencing_token,
                 error,
                 mutable_snapshot=snapshot,
                 supersedes_run_id=validated_supersedes_run_id,
+                terminal_artifacts=terminal_artifacts,
             )
             return None, error
         except Exception as exc:
             error = {"error": "PREPARATION_FAILED", "message": str(exc)}
             try:
+                terminal_artifacts = self._preparation_failure_artifacts(
+                    store, run_id, task, snapshot, error,
+                )
                 # Preserve validated lineage through unrelated failures; a
                 # rejected predecessor remains only in submitted_request.
                 store.fail_preparation(
@@ -317,6 +383,7 @@ class Service:
                     error,
                     mutable_snapshot=snapshot,
                     supersedes_run_id=validated_supersedes_run_id,
+                    terminal_artifacts=terminal_artifacts,
                 )
             except ConflictError:
                 # Cancellation or another recovery owner may have fenced us.
@@ -331,15 +398,20 @@ class Service:
         *,
         _internal_fake_delay: float | None = None,
         _internal_review_fixture: dict[str, Any] | None = None,
+        _internal_lead_fixture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         validate_task(task, require_existing_repo=True)
         if _internal_fake_delay is not None and _internal_review_fixture is not None:
+            raise ContractError("internal lifecycle fixtures are mutually exclusive")
+        if _internal_lead_fixture is not None and _internal_fake_delay is not None:
             raise ContractError("internal lifecycle fixtures are mutually exclusive")
         submitted = {"task": task, "supersedes_run_id": supersedes_run_id}
         if _internal_fake_delay is not None:
             submitted["_internal_fake_delay"] = _internal_fake_delay
         if _internal_review_fixture is not None:
             submitted["_internal_review_fixture"] = _internal_review_fixture
+        if _internal_lead_fixture is not None:
+            submitted["_internal_lead_fixture"] = _internal_lead_fixture
         store = self._store()
         try:
             claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}")
@@ -377,7 +449,12 @@ class Service:
             if run["state"] == "blocked":
                 next_action = "recovery_file_required"
             elif run["state"] == "awaiting_host" and run["phase"] is None:
-                next_action = "claim_handoff"
+                try:
+                    snapshot = self._review_snapshot(run)
+                    headless = snapshot["task"]["lead"]["mode"] == "headless"
+                except (ConflictError, KeyError, TypeError):
+                    headless = False
+                next_action = "continue_headless_lead" if headless else "claim_handoff"
             elif run["state"] == "awaiting_host":
                 next_action = "handoff_submission_saved"
             else:
@@ -450,6 +527,15 @@ class Service:
         decoded = self._decode_claim(prior_claim) if prior_claim is not None else None
         store = self._store()
         try:
+            run = store.run(run_id)
+            handoff_before_claim = store.handoff_snapshot(run_id)
+            if (handoff_before_claim is not None
+                    and handoff_before_claim.packet.get("workflow") == "branch-review"
+                    and self._review_snapshot(run)["task"]["lead"]["mode"]
+                    == "headless"):
+                raise ConflictError(
+                    "headless branch review does not accept a host claim"
+                )
             claim = store.claim_handoff(run_id, expected_version, owner, decoded)
             snapshot = store.handoff_snapshot(run_id)
             if snapshot is None:  # Defensive: claim_handoff just verified it.
@@ -528,6 +614,29 @@ class Service:
                     or hashlib.sha256(path.read_bytes()).hexdigest()
                     != artifact["sha256"]):
                 raise ConflictError("branch review artifact is missing or corrupt")
+        headless_leads = []
+        if snapshot["task"]["lead"]["mode"] == "headless":
+            artifacts_by_name = {
+                artifact["name"]: artifact for artifact in run_artifacts
+            }
+            for item in history:
+                submission_id = item["decision"]["submission_id"]
+                if not submission_id.startswith("headless-"):
+                    raise ConflictError("headless lead submission identity is invalid")
+                attempt_id = submission_id[len("headless-"):]
+                artifact = artifacts_by_name.get(
+                    f"lead-attempt-{attempt_id}.json"
+                )
+                if artifact is None:
+                    raise ConflictError("headless lead evidence artifact is missing")
+                frozen_handoff = {
+                    "handoff_id": item["handoff_id"],
+                    "packet": item["packet"],
+                    "packet_sha256": item["packet_sha256"],
+                }
+                headless_leads.append(decode_headless_lead_evidence(
+                    Path(artifact["path"]).read_bytes(), snapshot, frozen_handoff,
+                ))
         reports = build_terminal_reports(
             run_id=run_id,
             state=terminal_state,
@@ -537,6 +646,7 @@ class Service:
             events=store.events_for_run(run_id),
             completed_at=datetime.now(timezone.utc).isoformat(),
             error=error,
+            headless_leads=headless_leads,
         )
         prepared = []
         for name in sorted(reports):
@@ -651,6 +761,111 @@ class Service:
             error,
         )
 
+    def _saved_headless_lead(
+        self,
+        store: Store,
+        run_id: str,
+        snapshot: dict[str, Any],
+        handoff: HandoffSnapshot,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        frozen_handoff = {
+            "handoff_id": handoff.handoff_id,
+            "packet": handoff.packet,
+            "packet_sha256": handoff.packet_sha256,
+        }
+        for attempt in reversed(store.attempts_for_run(run_id)):
+            if attempt.get("role") != "lead" or attempt.get("status") != "finished":
+                continue
+            artifact = store.artifact_named(
+                run_id, f"lead-attempt-{attempt['id']}.json",
+            )
+            if artifact is None:
+                continue
+            path = Path(artifact["path"])
+            try:
+                content = path.read_bytes()
+            except OSError as exc:
+                raise ConflictError("saved headless lead evidence is missing") from exc
+            if (len(content) != artifact["byte_size"]
+                    or hashlib.sha256(content).hexdigest() != artifact["sha256"]):
+                raise ConflictError("saved headless lead evidence is corrupt")
+            try:
+                evidence = decode_headless_lead_evidence(
+                    content, snapshot, frozen_handoff,
+                )
+            except ContractError:
+                continue
+            return attempt, evidence
+        return None
+
+    def _continue_headless_lead(
+        self,
+        store: Store,
+        run_id: str,
+        run: dict[str, Any],
+        handoff: HandoffSnapshot,
+        snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        saved = self._saved_headless_lead(
+            store, run_id, snapshot, handoff,
+        )
+        if saved is None:
+            queued = store.queue_headless_lead(run_id, run["version"])
+            if queued["action"] != "queued":
+                raise ConflictError(
+                    "headless lead worker invocation budget is exhausted"
+                )
+            prepared = store.run(run_id)
+            package, digest = self._verified_package(prepared)
+            return {
+                "action": "headless_lead_queued",
+                "state": prepared["state"],
+                "version": prepared["version"],
+                "replayed_continuation": False,
+                "launch": (prepared["version"], package, digest),
+            }
+
+        attempt, evidence = saved
+        claim = store.claim_handoff(
+            run_id,
+            run["version"],
+            f"headless-lead:{attempt['id']}",
+        )
+        choice = evidence["choice"]
+        body = {
+            "schema_version": 1,
+            "submission_id": f"headless-{attempt['id']}",
+            "disposition": choice["disposition"],
+            "reason": choice["reason"],
+            "evidence_refs": [
+                {
+                    "artifact_id": reference["artifact_id"],
+                    "sha256": reference["sha256"],
+                }
+                for reference in handoff.packet["artifacts"]
+            ],
+        }
+        decision = {**body, "submission_hash": request_hash(body)}
+        self._review_gate(store, run_id, handoff, snapshot, decision)
+        submission = store.record_handoff_submission(run_id, claim, decision)
+        entry = store.recorded_handoff_submission(run_id, handoff.handoff_id)
+        if entry is None:
+            raise ConflictError("recorded headless lead submission is missing")
+        continuation = self._continue_branch_review_submission(
+            store, run_id, handoff, snapshot, entry,
+        )
+        launch = continuation.pop("launch")
+        current = store.run(run_id)
+        return {
+            "action": continuation["action"],
+            "state": current["state"],
+            "version": current["version"],
+            "submission_id": submission.submission_id,
+            "disposition": submission.disposition,
+            "replayed_continuation": continuation["replayed_continuation"],
+            "launch": launch,
+        }
+
     def handoff_complete(
         self,
         run_id: str,
@@ -667,6 +882,11 @@ class Service:
             handoff = store.handoff_snapshot_by_id(run_id, decoded.handoff_id)
             branch_review = handoff.packet.get("workflow") == "branch-review"
             snapshot = self._review_snapshot(run) if branch_review else None
+            if (branch_review and snapshot["task"]["lead"]["mode"] == "headless"
+                    and not decoded.owner_id.startswith("headless-lead:")):
+                raise ConflictError(
+                    "headless branch review does not accept a host completion"
+                )
             if branch_review:
                 self._review_gate(store, run_id, handoff, snapshot, decision)
             submission = store.record_handoff_submission(run_id, decoded, decision)
@@ -712,7 +932,27 @@ class Service:
         try:
             run = store.run(run_id)
             if run["state"] in TERMINAL_STATES: raise ConflictError("terminal run cannot resume; start a superseding run")
-            if run["state"] == "awaiting_host" and run["phase"] == "handoff_submitted":
+            if run["state"] == "awaiting_host" and run["phase"] is None:
+                handoff = store.handoff_snapshot(run_id)
+                if handoff is None or handoff.packet.get("workflow") != "branch-review":
+                    raise ConflictError("run has no resumable branch review handoff")
+                snapshot = self._review_snapshot(run)
+                if snapshot["task"]["lead"]["mode"] == "headless":
+                    continuation = self._continue_headless_lead(
+                        store, run_id, run, handoff, snapshot,
+                    )
+                    launch = continuation.pop("launch")
+                    current = store.run(run_id)
+                    branch_response = {
+                        "run_id": run_id,
+                        "disposition": continuation["action"],
+                        "state": current["state"],
+                        "version": current["version"],
+                        "launched": launch is not None,
+                    }
+                else:
+                    raise ConflictError("host-led handoff must be completed by its host")
+            elif run["state"] == "awaiting_host" and run["phase"] == "handoff_submitted":
                 handoff = store.handoff_snapshot(run_id)
                 if handoff is None or handoff.packet.get("workflow") != "branch-review":
                     raise ConflictError("run has no resumable branch review submission")

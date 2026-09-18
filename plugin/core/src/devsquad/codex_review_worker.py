@@ -76,27 +76,32 @@ def _subscription_auth_file(value: str | None = None) -> Path:
     return auth_file
 
 
-def freeze_codex_reviewer(selected: dict[str, Any]) -> dict[str, Any]:
-    """Resolve and verify the non-model Codex launch identity during preflight."""
+def freeze_codex_role(
+    selected: dict[str, Any],
+    *,
+    role: str,
+    output_schema: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve and verify one read-only Codex role during preflight."""
     from .adapters import AdapterManifest, harness_version
 
     if not isinstance(selected, dict) or not isinstance(selected.get("profile"), dict):
-        raise ContractError("frozen reviewer selection is invalid")
+        raise ContractError(f"frozen {role} selection is invalid")
     profile = selected["profile"]
     if profile.get("harness") != "codex":
         raise CapabilityUnavailable(
-            f"selected reviewer harness is not implemented for M3: {profile.get('harness')}"
+            f"selected {role} harness is not implemented for M3: {profile.get('harness')}"
         )
     if profile.get("permission_policy") != "read_only":
-        raise ProfileUnsupported("Codex branch review requires read_only permission")
+        raise ProfileUnsupported(f"Codex {role} requires read_only permission")
     if set(profile.get("required_tools", [])) - {"read"}:
-        raise ProfileUnsupported("Codex branch review profile requests unsupported tools")
+        raise ProfileUnsupported(f"Codex {role} profile requests unsupported tools")
     effort = profile.get("effort")
     if (not isinstance(effort, dict) or effort.get("transport") != "native"
             or not isinstance(effort.get("value"), str) or not effort["value"]):
-        raise ProfileUnsupported("Codex branch review requires an explicit native effort")
+        raise ProfileUnsupported(f"Codex {role} requires an explicit native effort")
     if not isinstance(profile.get("model_id"), str) or not profile["model_id"]:
-        raise ProfileUnsupported("Codex branch review requires an exact model id")
+        raise ProfileUnsupported(f"Codex {role} requires an exact model id")
 
     manifest = AdapterManifest.load(_adapter_manifest_path())
     if manifest.name != "codex" or manifest.transport != "native_protocol":
@@ -111,7 +116,7 @@ def freeze_codex_reviewer(selected: dict[str, Any]) -> dict[str, Any]:
     if version not in manifest.verified_versions:
         raise ProfileUnsupported(f"unverified Codex app-server version: {version}")
     content = binary.read_bytes()
-    schema_hash = hashlib.sha256(canonical_json(review_output_schema()).encode()).hexdigest()
+    schema_hash = hashlib.sha256(canonical_json(output_schema).encode()).hexdigest()
     return {
         "schema_version": 1,
         "harness": "codex",
@@ -125,37 +130,51 @@ def freeze_codex_reviewer(selected: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validated_adapter(snapshot: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    adapter = snapshot.get("review_adapter")
+def freeze_codex_reviewer(selected: dict[str, Any]) -> dict[str, Any]:
+    """Resolve and verify the non-model Codex reviewer identity."""
+    return freeze_codex_role(
+        selected, role="reviewer", output_schema=review_output_schema(),
+    )
+
+
+def _validated_adapter(
+    snapshot: dict[str, Any],
+    *,
+    role: str = "reviewer",
+    adapter_key: str = "review_adapter",
+    output_schema: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    adapter = snapshot.get(adapter_key)
     try:
-        selected = snapshot["routing"]["roles"]["reviewer"]["selected"]
+        selected = snapshot["routing"]["roles"][role]["selected"]
         profile = selected["profile"]
     except (KeyError, TypeError) as exc:
-        raise ContractError("frozen Codex reviewer selection is missing") from exc
+        raise ContractError(f"frozen Codex {role} selection is missing") from exc
     if not isinstance(adapter, dict) or set(adapter) != ADAPTER_FIELDS:
-        raise ContractError("frozen Codex review adapter fields are invalid")
+        raise ContractError(f"frozen Codex {role} adapter fields are invalid")
     if (adapter["schema_version"] != 1 or type(adapter["schema_version"]) is not int
             or adapter["harness"] != "codex"
             or adapter["transport"] != "native_protocol"
             or adapter["model_provider"] != "openai"):
-        raise ContractError("frozen Codex review adapter identity is invalid")
+        raise ContractError(f"frozen Codex {role} adapter identity is invalid")
     for field in (
         "binary", "binary_sha256", "harness_version", "output_schema_sha256",
         "auth_file",
     ):
         if not isinstance(adapter[field], str) or not adapter[field]:
-            raise ContractError("frozen Codex review adapter value is invalid")
+            raise ContractError(f"frozen Codex {role} adapter value is invalid")
     if (len(adapter["binary_sha256"]) != 64
             or len(adapter["output_schema_sha256"]) != 64):
-        raise ContractError("frozen Codex review adapter hash is invalid")
+        raise ContractError(f"frozen Codex {role} adapter hash is invalid")
     if not Path(adapter["auth_file"]).is_absolute():
         raise ContractError("frozen Codex auth path is not absolute")
     if (not isinstance(profile, dict) or profile.get("harness") != "codex"
             or profile.get("permission_policy") != "read_only"):
-        raise ContractError("frozen profile is not a read-only Codex reviewer")
-    schema_hash = hashlib.sha256(canonical_json(review_output_schema()).encode()).hexdigest()
+        raise ContractError(f"frozen profile is not a read-only Codex {role}")
+    schema = review_output_schema() if output_schema is None else output_schema
+    schema_hash = hashlib.sha256(canonical_json(schema).encode()).hexdigest()
     if schema_hash != adapter["output_schema_sha256"]:
-        raise ContractError("frozen review output schema changed")
+        raise ContractError(f"frozen {role} output schema changed")
     return adapter, profile
 
 

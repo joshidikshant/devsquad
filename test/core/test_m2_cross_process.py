@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin" / "core" / "src"))
 
 from devsquad.service import Service
+from devsquad.reports import TERMINAL_REPORT_NAMES
 from devsquad.store import Store, request_hash
 from devsquad.supervisor import inspect_process
 from devsquad_test_fixtures import branch_review_routing_documents
@@ -164,7 +165,10 @@ class CrossProcessServiceTest(unittest.TestCase):
         run_id = outcomes[0][1]
         result = Service(self.runtime).result(run_id)
         self.assertTrue(result["ready"])
-        self.assertEqual([item["name"] for item in result["artifacts"]], ["result-receipt.json"])
+        self.assertEqual(
+            {item["name"] for item in result["artifacts"]},
+            set(TERMINAL_REPORT_NAMES),
+        )
 
     def test_changed_body_conflicts_with_same_key_across_processes(self):
         changed = json.loads(json.dumps(self.task))

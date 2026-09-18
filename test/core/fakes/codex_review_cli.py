@@ -86,16 +86,24 @@ for line in sys.stdin:
             continue
         prompt = params["input"][0]["text"]
         assignment = json.loads(prompt.splitlines()[-1])
-        review = {
-            "schema_version": 1,
-            "candidate_sha256": assignment["candidate_sha256"],
-            "base_oid": assignment["base_oid"],
-            "target_oid": assignment["target_oid"],
-            "review_mode": assignment["review_mode"],
-            "verdict": "clean",
-            "summary": "The bounded native fixture found no supported defect.",
-            "findings": [],
-        }
+        if "single read-only lead" in prompt:
+            review = {
+                "schema_version": 1,
+                "candidate_sha256": assignment["candidate_sha256"],
+                "disposition": "reject" if model.endswith("lead-reject") else "accept",
+                "reason": "The frozen review and checks support this disposition.",
+            }
+        else:
+            review = {
+                "schema_version": 1,
+                "candidate_sha256": assignment["candidate_sha256"],
+                "base_oid": assignment["base_oid"],
+                "target_oid": assignment["target_oid"],
+                "review_mode": assignment["review_mode"],
+                "verdict": "clean",
+                "summary": "The bounded native fixture found no supported defect.",
+                "findings": [],
+            }
         output = (
             "{}" if model.endswith("malformed")
             else json.dumps(review, sort_keys=True, separators=(",", ":"))

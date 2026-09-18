@@ -202,6 +202,7 @@ def build_early_terminal_reports(
     phase: str,
     error: dict[str, Any] | None,
     attempt: dict[str, Any] | None = None,
+    prior_attempts: list[dict[str, Any]] | None = None,
 ) -> dict[str, bytes]:
     """Build the M3 report set when no valid handoff/lead decision exists."""
     if not isinstance(run_id, str) or not run_id:
@@ -225,12 +226,16 @@ def build_early_terminal_reports(
     ]
     events_content, through_cursor, through_version = _event_export(events)
     attempt_projection = None
+    prior = [] if prior_attempts is None else prior_attempts
+    if not isinstance(prior, list) or not all(
+            isinstance(item, dict) for item in prior):
+        raise ContractError("early terminal prior attempts are invalid")
     if attempt is not None:
         if not isinstance(attempt, dict) or not isinstance(attempt.get("id"), str):
             raise ContractError("early terminal report attempt is invalid")
         attempt_projection = {
             "id": attempt["id"],
-            "role": "reviewer",
+            "role": attempt.get("role", "reviewer"),
             "status": state,
             "returncode": attempt.get("returncode"),
             "cancelled": bool(attempt.get("cancelled", state == "cancelled")),
@@ -277,11 +282,11 @@ def build_early_terminal_reports(
         "checks": [],
         "evaluation": None,
         "criteria": criteria,
-        "attempts": [attempt_projection] if attempt_projection else [],
+        "attempts": prior + ([attempt_projection] if attempt_projection else []),
         "dispositions": [],
         "lead": {
             "mode": task.get("lead", {}).get("mode"),
-            "status": "not_reached",
+            "status": "failed" if phase == "lead" else "not_reached",
             "disposition": None,
             "reason": None,
             "usage": {
@@ -292,10 +297,13 @@ def build_early_terminal_reports(
             },
         },
         "accounting": {
-            "worker_invocations": 1 if attempt_projection else 0,
-            "native_model_requests": None if attempt_projection else 0,
+            "worker_invocations": sum(
+                item.get("worker_invocations", 0) for item in prior
+            ) + (1 if attempt_projection else 0),
+            "native_model_requests": None if (prior or attempt_projection) else 0,
             "attempt_usage": (
-                [attempt_projection["usage"]] if attempt_projection else []
+                [item["usage"] for item in prior]
+                + ([attempt_projection["usage"]] if attempt_projection else [])
             ),
             "host_usage_measured": False,
         },
@@ -307,9 +315,11 @@ def build_early_terminal_reports(
             "includes_terminal_event": False,
             "excludes_terminal_report_artifact_events": True,
         },
-        "limitations": [
-            "No valid review handoff was produced, so lead disposition was not reached."
-        ],
+        "limitations": [(
+            "The headless lead failed before a valid disposition was recorded."
+            if phase == "lead"
+            else "No valid review handoff was produced, so lead disposition was not reached."
+        )],
         "error": error,
     }
     lines = [
@@ -477,6 +487,7 @@ def build_terminal_reports(
     events: list[dict[str, Any]],
     completed_at: str,
     error: dict[str, Any] | None = None,
+    headless_leads: list[dict[str, Any]] | None = None,
 ) -> dict[str, bytes]:
     if not isinstance(run_id, str) or not run_id:
         raise ContractError("report run id is invalid")
@@ -493,6 +504,21 @@ def build_terminal_reports(
         raise ContractError("report completion timestamp is invalid")
     if error is not None and not isinstance(error, dict):
         raise ContractError("report error must be an object or null")
+    lead_mode = snapshot["task"]["lead"]["mode"]
+    lead_evidence = [] if headless_leads is None else headless_leads
+    if not isinstance(lead_evidence, list):
+        raise ContractError("headless lead report evidence must be an array")
+    if lead_mode == "headless":
+        if len(lead_evidence) != len(history):
+            raise ContractError("headless lead report history is incomplete")
+        for evidence, history_entry in zip(lead_evidence, history):
+            if (not isinstance(evidence, dict)
+                    or evidence.get("handoff_id") != history_entry["handoff_id"]
+                    or evidence.get("choice", {}).get("disposition")
+                    != history_entry["decision"]["disposition"]):
+                raise ContractError("headless lead report evidence changes its decision")
+    elif lead_evidence:
+        raise ContractError("host-led report cannot contain headless lead evidence")
 
     projected = [_artifact_projection(artifact) for artifact in run_artifacts]
     artifact_by_id = {artifact["id"]: artifact for artifact in projected}
@@ -519,7 +545,11 @@ def build_terminal_reports(
             "Reviewer output came from the explicit offline fixture; "
             "it is not live-provider evidence."
         )
-    native_counts = [attempt["native_model_requests"] for attempt in attempts]
+    lead_attempts = [evidence["attempt"] for evidence in lead_evidence]
+    all_attempts = attempts + lead_attempts
+    all_native_counts = [
+        attempt["native_model_requests"] for attempt in all_attempts
+    ]
     receipt = {
         "schema_version": 1,
         "run_id": run_id,
@@ -546,29 +576,32 @@ def build_terminal_reports(
             "maximum": snapshot["task"]["budget"]["max_revisions"],
         },
         "lead": {
-            "mode": "host",
+            "mode": lead_mode,
             "disposition": final_decision["disposition"],
             "reason": final_decision["reason"],
             "submission_id": final_decision["submission_id"],
             "submission_hash": final_decision["submission_hash"],
             "evidence_refs": final_decision["evidence_refs"],
-            "usage": {
-                "input_tokens": None,
-                "output_tokens": None,
-                "total_tokens": None,
-                "source": "unavailable",
-            },
+            "attempts": lead_attempts,
+            "usage": (
+                lead_attempts[-1]["usage"] if lead_attempts else {
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "total_tokens": None,
+                    "source": "unavailable",
+                }
+            ),
         },
         "accounting": {
             "worker_invocations": sum(
-                attempt["worker_invocations"] for attempt in attempts
+                attempt["worker_invocations"] for attempt in all_attempts
             ),
             "native_model_requests": (
-                None if any(value is None for value in native_counts)
-                else sum(native_counts)
+                None if any(value is None for value in all_native_counts)
+                else sum(all_native_counts)
             ),
-            "attempt_usage": [attempt["usage"] for attempt in attempts],
-            "host_usage_measured": False,
+            "attempt_usage": [attempt["usage"] for attempt in all_attempts],
+            "host_usage_measured": False if lead_mode == "host" else None,
         },
         "artifacts": projected,
         "evidence_artifacts": evidence_projected,
