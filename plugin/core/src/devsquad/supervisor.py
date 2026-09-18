@@ -165,6 +165,50 @@ class Supervisor:
             raise ContractError("supervisor bounds must be positive")
         self.store, self.output_limit, self.grace_seconds = store, output_limit, grace_seconds
 
+    def _failed_fallback_attempts(
+        self,
+        run_id: str,
+        snapshot: dict[str, Any],
+        current_attempt_id: str,
+    ) -> list[dict[str, Any]]:
+        failures = []
+        for attempt in self.store.attempts_for_run(run_id):
+            if attempt["id"] == current_attempt_id or not attempt.get("output_metadata"):
+                continue
+            try:
+                metadata = json.loads(attempt["output_metadata"])
+                if not isinstance(metadata, dict) or "failure" not in metadata:
+                    continue
+                error = metadata["failure"]
+                role = attempt["role"]
+                index = attempt["profile_index"]
+                routed = snapshot["routing"]["roles"][role]
+                candidates = [routed["selected"], *routed["fallbacks"]]
+                selected = candidates[index]
+            except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                raise ConflictError("saved fallback attempt is invalid") from exc
+            if (not isinstance(error, dict)
+                    or selected["profile_id"] != attempt["profile_id"]):
+                raise ConflictError("saved fallback attempt changed its profile")
+            failures.append({
+                "id": attempt["id"],
+                "role": role,
+                "status": "failed",
+                "profile_index": index,
+                "selected_profile": selected,
+                "observed_identity": None,
+                "worker_invocations": 1,
+                "native_model_requests": None,
+                "usage": {
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "total_tokens": None,
+                    "source": "unavailable",
+                },
+                "error": error,
+            })
+        return failures
+
     def launch(self, run_id: str, expected_version: int, spec: LaunchSpec, owner_id: str, package_digest: str) -> RunningAttempt:
         reservation = self.store.reserve_attempt(
             run_id,
@@ -224,6 +268,8 @@ class Supervisor:
         package_digest: str,
         *,
         role: str = "worker",
+        profile_id: str | None = None,
+        profile_index: int | None = None,
     ) -> DurableAttempt:
         reservation = self.store.reserve_attempt(
             run_id,
@@ -232,6 +278,8 @@ class Supervisor:
             package_digest,
             role,
             account_pool_id=spec.requested.account_pool,
+            profile_id=profile_id,
+            profile_index=profile_index,
         )
         directory = self.store.artifacts / run_id / f".{reservation.attempt_id}.spool"
         directory.mkdir(parents=True, exist_ok=False)
@@ -428,7 +476,9 @@ class Supervisor:
                 artifacts.append({"name":logical,"path":path,"sha256":digest,"byte_size":size})
             snapshot=json.loads(self.store.run(run_id)["mutable_snapshot"])
             workflow_review = (
-                "internal_review_fixture" in snapshot or "review_adapter" in snapshot
+                "internal_review_fixture" in snapshot
+                or "review_adapter" in snapshot
+                or "review_adapters" in snapshot
             )
             role = attempt.get("role", "worker")
             semantic_error=None
@@ -479,7 +529,9 @@ class Supervisor:
                 )
                 payload["message"]=semantic_error
             if workflow_review:
-                prior_attempts = []
+                prior_attempts = self._failed_fallback_attempts(
+                    run_id, snapshot, attempt["id"],
+                )
                 if role == "lead":
                     handoff = self.store.handoff_snapshot(run_id)
                     if handoff is not None and isinstance(handoff.packet, dict):
@@ -522,6 +574,42 @@ class Supervisor:
                         "returncode": receipt["returncode"],
                     }
                     payload.update(report_error)
+                candidates = []
+                profile_index = None
+                try:
+                    routed_role = snapshot["routing"]["roles"][role]
+                    candidates = [
+                        routed_role["selected"], *routed_role["fallbacks"],
+                    ]
+                    profile_index = attempt.get("profile_index")
+                    next_profile = candidates[profile_index + 1]
+                    can_fallback = (
+                        terminal == "failed"
+                        and type(profile_index) is int
+                        and profile_index >= 0
+                        and profile_index + 1 < len(candidates)
+                        and len(self.store.attempts_for_run(run_id))
+                        < snapshot["task"]["budget"]["max_worker_invocations"]
+                        and self.store.remaining_wall_seconds(run_id) not in {0}
+                    )
+                except (IndexError, KeyError, TypeError):
+                    can_fallback = False
+                    next_profile = None
+                if can_fallback:
+                    fallback_error = {
+                        **(report_error or {}),
+                        "role": role,
+                        "failed_profile_id": attempt.get("profile_id"),
+                        "failed_profile_index": profile_index,
+                        "next_profile_id": next_profile["profile_id"],
+                    }
+                    return self.store.commit_durable_fallback(
+                        run_id,
+                        attempt["attempt_token"],
+                        artifacts,
+                        metadata,
+                        fallback_error,
+                    )
                 reports = build_early_terminal_reports(
                     run_id=run_id,
                     state=terminal,
@@ -529,7 +617,6 @@ class Supervisor:
                     snapshot=snapshot,
                     run_artifacts=(
                         self.store.artifacts_for_run(run_id) + artifacts
-                        if role == "lead" else artifacts
                     ),
                     events=self.store.events_for_run(run_id),
                     completed_at=datetime.now(timezone.utc).isoformat(),
@@ -541,6 +628,12 @@ class Supervisor:
                         "returncode": receipt["returncode"],
                         "cancelled": receipt["cancelled"],
                         "timed_out": receipt["timed_out"],
+                        "selected_profile": (
+                            candidates[profile_index]
+                            if type(profile_index) is int
+                            and 0 <= profile_index < len(candidates)
+                            else None
+                        ),
                     },
                     prior_attempts=prior_attempts,
                 )

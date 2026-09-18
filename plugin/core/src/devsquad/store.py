@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 7
+SUPPORTED_SCHEMA_VERSION = 8
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -674,14 +674,24 @@ class Store:
         run_id: str,
         run: sqlite3.Row,
     ) -> None:
+        try:
+            snapshot = json.loads(run["mutable_snapshot"] or "null")
+            max_invocations = snapshot["task"]["budget"]["max_worker_invocations"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            max_invocations = None
+        if type(max_invocations) is int:
+            launched = self.connection.execute(
+                "SELECT COUNT(*) FROM attempts WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            if launched >= max_invocations:
+                raise BudgetExhausted("worker invocation budget is exhausted")
         wall_seconds = self._wall_seconds_from_run(run)
-        if wall_seconds is None:
-            return
-        elapsed_ms = self._execution_elapsed_ms(
-            run_id, run, _authoritative_now(),
-        )
-        if wall_seconds * 1000 - elapsed_ms < 1000:
-            raise BudgetExhausted("run wall-time budget is exhausted")
+        if wall_seconds is not None:
+            elapsed_ms = self._execution_elapsed_ms(
+                run_id, run, _authoritative_now(),
+            )
+            if wall_seconds * 1000 - elapsed_ms < 1000:
+                raise BudgetExhausted("run wall-time budget is exhausted")
 
     def active_pool_counts(self) -> dict[str, int]:
         return {
@@ -703,6 +713,8 @@ class Store:
         role: str = "worker",
         *,
         account_pool_id: str | None = None,
+        profile_id: str | None = None,
+        profile_index: int | None = None,
     ) -> AttemptReservation:
         if not owner_id or not package_digest:
             raise ContractError("supervisor owner and package digest are required")
@@ -728,11 +740,26 @@ class Store:
                     raise ContractError("attempt account pool is invalid")
                 try:
                     snapshot = json.loads(run["mutable_snapshot"])
-                    selected = snapshot["routing"]["roles"][role]["selected"]["profile"]
+                    routed_role = snapshot["routing"]["roles"][role]
+                    candidates = [
+                        routed_role["selected"], *routed_role.get("fallbacks", []),
+                    ]
+                    if profile_id is None and profile_index is None:
+                        selected = candidates[0]
+                    elif (type(profile_index) is int
+                            and 0 <= profile_index < len(candidates)
+                            and profile_id == candidates[profile_index]["profile_id"]):
+                        selected = candidates[profile_index]
+                    else:
+                        raise ConflictError(
+                            "attempt profile does not match frozen routing order"
+                        )
                     capacity = snapshot["routing"]["capacity"][account_pool_id]
-                    expected_pool = selected["account_pool_id"]
+                    expected_pool = selected["profile"]["account_pool_id"]
                     max_concurrency = capacity["max_concurrency"]
-                except (KeyError, TypeError, json.JSONDecodeError) as exc:
+                except ConflictError:
+                    raise
+                except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
                     raise ConflictError(
                         "frozen account-pool reservation is invalid"
                     ) from exc
@@ -749,16 +776,19 @@ class Store:
                 ).fetchone()[0]
                 if in_flight >= max_concurrency:
                     raise ConflictError("account pool concurrency is full")
+            elif profile_id is not None or profile_index is not None:
+                raise ContractError("attempt profile requires an account pool")
             old = self.connection.execute("SELECT COALESCE(MAX(fencing_token),0) FROM supervisor_claims WHERE run_id=?", (run_id,)).fetchone()[0]
             supervisor_token, attempt_id, attempt_token = old + 1, str(uuid.uuid4()), uuid.uuid4().hex
             now, version = _utc_now(), expected_version + 1
             self.connection.execute("INSERT OR REPLACE INTO supervisor_claims(run_id,owner_id,fencing_token,package_digest,heartbeat_at,active) VALUES(?,?,?,?,?,1)", (run_id, owner_id, supervisor_token, package_digest, now))
             self.connection.execute(
                 "INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,"
-                "status,heartbeat_at,package_digest,created_at,role,account_pool_id) "
-                "VALUES(?,?,?,?,?,'reserved',?,?,?,?,?)",
+                "status,heartbeat_at,package_digest,created_at,role,account_pool_id,"
+                "profile_id,profile_index) VALUES(?,?,?,?,?,'reserved',?,?,?,?,?,?,?)",
                 (attempt_id, run_id, run["project_id"], run["worktree_path"],
-                 attempt_token, now, package_digest, now, role, account_pool_id),
+                 attempt_token, now, package_digest, now, role, account_pool_id,
+                 profile_id, profile_index),
             )
             self.connection.execute("UPDATE runs SET phase='launching',version=?,updated_at=? WHERE id=?", (version, now, run_id))
             event = canonical_json({"attempt_id": attempt_id, "supervisor_token": supervisor_token})
@@ -1081,6 +1111,78 @@ class Store:
             )
             self.connection.execute("COMMIT")
             return effective_state
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def commit_durable_fallback(
+        self,
+        run_id: str,
+        attempt_token: str,
+        artifacts: list[dict[str, Any]],
+        metadata: Any,
+        error: dict[str, Any],
+    ) -> str:
+        """Record one failed profile attempt and queue its frozen fallback."""
+        prepared, stdout_name, stderr_name = self._prepare_durable_artifacts(
+            run_id, artifacts, require_result_receipt=False,
+        )
+        enriched_metadata = dict(metadata)
+        enriched_metadata["failure"] = json.loads(canonical_json(error))
+        encoded_metadata = canonical_json(enriched_metadata)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status,stdout_artifact_id,stderr_artifact_id,output_metadata "
+                "FROM attempts WHERE run_id=? AND attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            if not run or not attempt:
+                raise ConflictError("durable fallback import is fenced")
+            if (attempt["status"] == "finished" and run["state"] == "queued"
+                    and run["phase"] is None):
+                self.connection.execute("COMMIT")
+                return "queued"
+            if (attempt["status"] != "running" or run["state"] != "running"
+                    or run["phase"] is not None):
+                raise ConflictError("durable fallback import is fenced")
+            version, artifact_ids = self._reference_prepared_artifacts(
+                run_id, run["version"], prepared,
+            )
+            version = self._record_prepared_output(
+                run_id,
+                version,
+                attempt,
+                artifact_ids,
+                stdout_name,
+                stderr_name,
+                encoded_metadata,
+            )
+            now, version = _utc_now(), version + 1
+            self.connection.execute(
+                "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
+                (now, attempt["id"]),
+            )
+            self.connection.execute(
+                "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='queued',phase=NULL,version=?,updated_at=? "
+                "WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = dict(error)
+            payload["attempt_id"] = attempt["id"]
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.fallback_queued',?,?)",
+                (run_id, version, canonical_json(payload), now),
+            )
+            self.connection.execute("COMMIT")
+            return "queued"
         except Exception:
             self.connection.execute("ROLLBACK")
             raise

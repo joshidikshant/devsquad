@@ -182,6 +182,9 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     fixture = snapshot.get("internal_review_fixture")
     if not isinstance(fixture, dict):
         raise ContractError("offline review snapshot is incomplete")
+    selected = snapshot["routing"]["roles"]["reviewer"]["selected"]
+    if selected.get("profile_id", "").endswith("-fixture-fail"):
+        raise ContractError("offline reviewer fixture requested a failed attempt")
     return run_review_and_checks(snapshot, fixture)
 
 

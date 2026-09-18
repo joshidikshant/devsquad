@@ -241,9 +241,10 @@ def build_early_terminal_reports(
             "cancelled": bool(attempt.get("cancelled", state == "cancelled")),
             "timed_out": bool(attempt.get("timed_out", False)),
             "selected_profile": (
-                frozen.get("routing", {}).get("roles", {}).get("reviewer", {}).get(
-                    "selected"
-                )
+                attempt.get("selected_profile")
+                or frozen.get("routing", {}).get("roles", {}).get(
+                    attempt.get("role", "reviewer"), {}
+                ).get("selected")
                 if isinstance(frozen.get("routing"), dict) else None
             ),
             "observed_identity": None,
@@ -494,6 +495,7 @@ def build_terminal_reports(
     completed_at: str,
     error: dict[str, Any] | None = None,
     headless_leads: list[dict[str, Any]] | None = None,
+    failed_attempts: list[dict[str, Any]] | None = None,
 ) -> dict[str, bytes]:
     if not isinstance(run_id, str) or not run_id:
         raise ContractError("report run id is invalid")
@@ -552,7 +554,19 @@ def build_terminal_reports(
             "it is not live-provider evidence."
         )
     lead_attempts = [evidence["attempt"] for evidence in lead_evidence]
-    all_attempts = attempts + lead_attempts
+    failed = [] if failed_attempts is None else failed_attempts
+    if not isinstance(failed, list) or not all(
+            isinstance(attempt, dict)
+            and attempt.get("role") in {"reviewer", "lead"}
+            for attempt in failed):
+        raise ContractError("failed fallback attempts are invalid")
+    failed_reviewers = [
+        attempt for attempt in failed if attempt["role"] == "reviewer"
+    ]
+    failed_leads = [attempt for attempt in failed if attempt["role"] == "lead"]
+    reviewer_attempts = failed_reviewers + attempts
+    lead_attempts = failed_leads + lead_attempts
+    all_attempts = reviewer_attempts + lead_attempts
     all_native_counts = [
         attempt["native_model_requests"] for attempt in all_attempts
     ]
@@ -572,7 +586,7 @@ def build_terminal_reports(
         "checks": final_packet["checks"],
         "evaluation": final_packet["evaluation"],
         "criteria": final_packet["evaluation"]["criteria"],
-        "attempts": attempts,
+        "attempts": reviewer_attempts,
         "dispositions": dispositions,
         "revisions": {
             "requested": sum(

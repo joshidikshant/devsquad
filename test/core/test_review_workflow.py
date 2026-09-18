@@ -291,7 +291,7 @@ class BranchReviewWorkflowTest(unittest.TestCase):
              "derived gates"),
             (lambda value: value["attempt"].__setitem__(
                 "selected_profile", {"profile_id": "substituted"}),
-             "frozen selected profile"),
+             "frozen fallback set"),
             (lambda value: value["attempt"].__setitem__("worker_invocations", 2),
              "invocation accounting"),
             (lambda value: value["attempt"]["usage"].__setitem__("total_tokens", 0),

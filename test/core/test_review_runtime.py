@@ -164,6 +164,79 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.task["lead"] = {"mode": "headless"}
         self.task["budget"]["max_worker_invocations"] = 2
 
+    def configure_reviewer_fallback(self):
+        profiles = json.loads((self.repo / "devsquad/profiles.json").read_text())
+        failing = profiles["profiles"][0]
+        failing["id"] = "reviewer-fixture-fail"
+        failing["model_id"] = "fixture-model-fail"
+        fallback = dict(failing)
+        fallback.update({
+            "id": "reviewer-fallback",
+            "model_family": "fixture-family-b",
+            "model_id": "fixture-model-fallback",
+        })
+        profiles["profiles"].append(fallback)
+        profiles["bindings"]["review.deep"] = {
+            "profile_id": failing["id"], "version": 2,
+        }
+        policy = json.loads((self.repo / "devsquad/policy.json").read_text())
+        policy["roles"]["reviewer"] = [
+            {"kind": "alias", "id": "review.deep"},
+            {"kind": "profile", "id": fallback["id"]},
+        ]
+        (self.repo / "devsquad/profiles.json").write_text(
+            json.dumps(profiles, sort_keys=True) + "\n"
+        )
+        (self.repo / "devsquad/policy.json").write_text(
+            json.dumps(policy, sort_keys=True) + "\n"
+        )
+        subprocess.run(["git", "-C", str(self.repo), "add", "devsquad"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", "fallback routing"],
+            check=True,
+        )
+        self.task["project"]["target_ref"] = self.git_text("rev-parse", "HEAD").strip()
+        self.task["budget"]["max_fallbacks_per_step"] = 1
+
+    def configure_headless_lead_fallback(self):
+        self.configure_fixture_headless()
+        profiles = json.loads((self.repo / "devsquad/profiles.json").read_text())
+        failing = next(profile for profile in profiles["profiles"]
+                       if profile["id"] == "fixture-lead")
+        failing.update({
+            "id": "lead-fixture-fail",
+            "model_id": "fixture-lead-model-fail",
+        })
+        fallback = dict(failing)
+        fallback.update({
+            "id": "lead-fallback",
+            "model_family": "fixture-family-lead-fallback",
+            "model_id": "fixture-lead-model-fallback",
+        })
+        profiles["profiles"].append(fallback)
+        profiles["bindings"]["lead.primary"] = {
+            "profile_id": failing["id"], "version": 2,
+        }
+        policy = json.loads((self.repo / "devsquad/policy.json").read_text())
+        policy["roles"]["lead"] = [
+            {"kind": "alias", "id": "lead.primary"},
+            {"kind": "profile", "id": fallback["id"]},
+        ]
+        (self.repo / "devsquad/profiles.json").write_text(
+            json.dumps(profiles, sort_keys=True) + "\n"
+        )
+        (self.repo / "devsquad/policy.json").write_text(
+            json.dumps(policy, sort_keys=True) + "\n"
+        )
+        subprocess.run(["git", "-C", str(self.repo), "add", "devsquad"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", "lead fallback routing"],
+            check=True,
+        )
+        self.task["project"]["target_ref"] = self.git_text("rev-parse", "HEAD").strip()
+        self.task["budget"]["max_worker_invocations"] = 3
+        self.task["budget"]["max_fallbacks_per_step"] = 1
+
     def test_detached_review_imports_bound_evidence_and_publishes_host_handoff(self):
         (self.repo / "notes.txt").write_text("unrelated local work\n")
         before_head = self.git_bytes("rev-parse", "HEAD")
@@ -787,6 +860,116 @@ class DurableBranchReviewTest(unittest.TestCase):
             TERMINAL_REPORT_NAMES
             <= {artifact["name"] for artifact in result["artifacts"]}
         )
+
+    def test_failed_reviewer_uses_one_frozen_fallback_and_keeps_both_attempts(self):
+        self.configure_reviewer_fallback()
+        self.task["budget"]["max_worker_invocations"] = 2
+        run_id, waiting = self.start_waiting("reviewer-fallback")
+        claimed = self.service.handoff_claim(
+            run_id, waiting["version"], "host-fallback",
+        )
+        packet = claimed["handoff"]["packet"]
+        self.assertEqual(
+            packet["attempt"]["selected_profile"]["profile_id"],
+            "reviewer-fallback",
+        )
+        accepted = self.decision(
+            packet, "accept-fallback", "accept", "Fallback review accepted.",
+        )
+        completed = self.service.handoff_complete(
+            run_id, claimed["claim"], accepted,
+        )
+        self.assertEqual(completed["state"], "succeeded")
+        artifacts = {
+            artifact["name"]: artifact
+            for artifact in self.service.result(run_id)["artifacts"]
+        }
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 2)
+        self.assertEqual(
+            [attempt["selected_profile"]["profile_id"]
+             for attempt in receipt["attempts"]],
+            ["reviewer-fixture-fail", "reviewer-fallback"],
+        )
+        self.assertEqual(receipt["attempts"][0]["status"], "failed")
+        self.assertEqual(receipt["attempts"][1]["role"], "reviewer")
+
+    def test_fallback_none_does_not_retry_a_failed_reviewer(self):
+        self.configure_reviewer_fallback()
+        self.task["routing"]["overrides"] = {
+            "reviewer": {
+                "profile_id": "reviewer-fixture-fail",
+                "fallback": "none",
+            },
+        }
+        self.task["budget"]["max_worker_invocations"] = 3
+        started = self.service.start(
+            self.task, "reviewer-no-fallback", _internal_review_fixture=self.fixture,
+        )
+        completed = self.wait_state(started["run_id"], {"failed"})
+        self.assertEqual(completed["state"], "failed")
+        result = self.service.result(started["run_id"])
+        artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["routing"]["roles"]["reviewer"]["fallbacks"], [])
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 1)
+        self.assertEqual(len(receipt["attempts"]), 1)
+        self.assertEqual(
+            receipt["attempts"][0]["selected_profile"]["profile_id"],
+            "reviewer-fixture-fail",
+        )
+        self.assertNotIn(
+            "run.fallback_queued",
+            {event["type"] for event in self.service.events(started["run_id"])["events"]},
+        )
+
+    def test_worker_invocation_budget_blocks_a_frozen_reviewer_fallback(self):
+        self.configure_reviewer_fallback()
+        self.task["budget"]["max_worker_invocations"] = 1
+        started = self.service.start(
+            self.task, "reviewer-budget-no-fallback",
+            _internal_review_fixture=self.fixture,
+        )
+        completed = self.wait_state(started["run_id"], {"failed"})
+        self.assertEqual(completed["state"], "failed")
+        artifacts = {
+            artifact["name"]: artifact
+            for artifact in self.service.result(started["run_id"])["artifacts"]
+        }
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(
+            [item["profile_id"] for item in
+             receipt["routing"]["roles"]["reviewer"]["fallbacks"]],
+            ["reviewer-fallback"],
+        )
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 1)
+        self.assertEqual(len(receipt["attempts"]), 1)
+
+    def test_failed_headless_lead_uses_its_own_frozen_fallback(self):
+        self.configure_headless_lead_fallback()
+        started = self.service.start(
+            self.task,
+            "headless-lead-fallback",
+            _internal_review_fixture=self.fixture,
+            _internal_lead_fixture={
+                "disposition": "accept",
+                "reason": "The frozen review evidence is sufficient.",
+            },
+        )
+        completed = self.wait_state(started["run_id"], {"succeeded", "failed"})
+        self.assertEqual(completed["state"], "succeeded")
+        artifacts = {
+            artifact["name"]: artifact
+            for artifact in self.service.result(started["run_id"])["artifacts"]
+        }
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 3)
+        self.assertEqual(
+            [attempt["selected_profile"]["profile_id"]
+             for attempt in receipt["lead"]["attempts"]],
+            ["lead-fixture-fail", "lead-fallback"],
+        )
+        self.assertEqual(receipt["lead"]["attempts"][0]["status"], "failed")
 
     def test_headless_lead_is_a_second_fenced_attempt_and_terminalizes_automatically(self):
         self.configure_fixture_headless()

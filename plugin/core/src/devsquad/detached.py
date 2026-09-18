@@ -11,6 +11,37 @@ from .store import ConflictError, Store, canonical_json
 from .supervisor import Supervisor
 
 
+def _profile_index(
+    store: Store,
+    run_id: str,
+    role: str,
+    handoff,
+) -> int:
+    attempts = store.attempts_for_run(run_id)
+    if handoff is None:
+        return sum(attempt.get("role") == role for attempt in attempts)
+    reviewer_id = handoff.packet.get("attempt_id")
+    reviewer = next(
+        (attempt for attempt in attempts if attempt["id"] == reviewer_id), None,
+    )
+    if reviewer is None:
+        raise ConflictError("handoff reviewer attempt is missing")
+    if role == "reviewer":
+        seen = False
+        used = 0
+        for attempt in attempts:
+            if attempt["id"] == reviewer_id:
+                seen = True
+            elif seen and attempt.get("role") == "reviewer":
+                used += 1
+        return used
+    return sum(
+        attempt.get("role") == "lead"
+        and attempt["created_at"] >= reviewer["created_at"]
+        for attempt in attempts
+    )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", required=True); parser.add_argument("--artifacts", required=True)
@@ -38,12 +69,31 @@ def main(argv=None):
         )
         role = "lead" if headless_lead else "reviewer"
         workflow_role = (
-            "internal_review_fixture" in snapshot or "review_adapter" in snapshot
+            "internal_review_fixture" in snapshot
+            or "review_adapter" in snapshot
+            or "review_adapters" in snapshot
         )
+        profile_index = None
+        profile_id = None
         if workflow_role:
-            selected = snapshot["routing"]["roles"][role]["selected"]["profile"]
+            routed_role = snapshot["routing"]["roles"][role]
+            candidates = [routed_role["selected"], *routed_role["fallbacks"]]
+            profile_index = _profile_index(
+                store, args.run_id, role, handoff,
+            )
+            if profile_index >= len(candidates):
+                raise ConflictError("frozen role fallback set is exhausted")
+            attempt_selection = candidates[profile_index]
+            profile_id = attempt_selection["profile_id"]
+            selected = attempt_selection["profile"]
             adapter_key = "lead_adapter" if headless_lead else "review_adapter"
-            adapter = snapshot.get(adapter_key)
+            adapters_key = "lead_adapters" if headless_lead else "review_adapters"
+            adapters = snapshot.get(adapters_key)
+            adapter = (
+                adapters.get(profile_id)
+                if isinstance(adapters, dict)
+                else snapshot.get(adapter_key) if profile_index == 0 else None
+            )
             identity = ExecutionIdentity(
                 selected["harness"],
                 adapter["harness_version"] if adapter else "fixture",
@@ -62,7 +112,12 @@ def main(argv=None):
                 else ("devsquad.codex_review_worker" if adapter else "devsquad.review_worker")
             )
             command = [sys.executable, "-P", "-m", module]
-            worker_snapshot = dict(snapshot)
+            worker_snapshot = json.loads(canonical_json(snapshot))
+            worker_snapshot["routing"]["roles"][role]["selected"] = attempt_selection
+            if adapter is None:
+                worker_snapshot.pop(adapter_key, None)
+            else:
+                worker_snapshot[adapter_key] = adapter
             if headless_lead:
                 worker_snapshot["headless_handoff"] = {
                     "handoff_id": handoff.handoff_id,
@@ -71,7 +126,11 @@ def main(argv=None):
                 }
             input_path, _, _ = store.finalize_artifact(
                 args.run_id,
-                "lead-workflow-input.json" if headless_lead else "workflow-input.json",
+                (
+                    f"lead-workflow-input-{handoff.sequence}-{profile_index}.json"
+                    if headless_lead
+                    else f"workflow-input-{profile_index}.json"
+                ),
                 canonical_json(worker_snapshot).encode(),
             )
             stdin_path = str(input_path)
@@ -98,7 +157,17 @@ def main(argv=None):
             environment,
         )
         supervisor = Supervisor(store)
-        try: handle = supervisor.launch_durable(args.run_id, args.expected_version, spec, f"daemon:{os.getpid()}", args.package_digest, role=role if workflow_role else "worker")
+        try:
+            handle = supervisor.launch_durable(
+                args.run_id,
+                args.expected_version,
+                spec,
+                f"daemon:{os.getpid()}",
+                args.package_digest,
+                role=role if workflow_role else "worker",
+                profile_id=profile_id,
+                profile_index=profile_index,
+            )
         except ConflictError: return 0
         except BudgetExhausted:
             Service(Path(args.database).parent).fail_budget_exhausted(
@@ -111,6 +180,11 @@ def main(argv=None):
         store.close()
     if (current["state"] == "awaiting_host"
             and snapshot["task"]["lead"]["mode"] == "headless"):
+        try:
+            Service(Path(args.database).parent).resume(args.run_id)
+        except ConflictError:
+            pass
+    elif current["state"] == "queued" and current["phase"] is None:
         try:
             Service(Path(args.database).parent).resume(args.run_id)
         except ConflictError:

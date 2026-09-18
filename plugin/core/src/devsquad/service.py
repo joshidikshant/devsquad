@@ -131,8 +131,17 @@ class Service:
         }
         artifacts = store.artifacts_for_run(run_id)
         artifacts_by_name = {artifact["name"]: artifact for artifact in artifacts}
+        failed_by_id = {
+            attempt["id"]: attempt
+            for attempt in self._failed_fallback_attempts(
+                store, run_id, snapshot,
+            )
+        }
         attempts = []
         for attempt in store.attempts_for_run(run_id):
+            if attempt["id"] in failed_by_id:
+                attempts.append(failed_by_id[attempt["id"]])
+                continue
             if attempt.get("role") == "reviewer":
                 packet = packets_by_attempt.get(attempt["id"])
                 if packet is not None:
@@ -221,6 +230,9 @@ class Service:
                     error=error,
                     headless_leads=self._headless_leads_for_history(
                         snapshot, history, run_artifacts,
+                    ),
+                    failed_attempts=self._failed_fallback_attempts(
+                        store, run_id, snapshot,
                     ),
                 )
                 terminal_artifacts = []
@@ -504,14 +516,28 @@ class Service:
                 capacity_in_flight=store.active_pool_counts(),
             )
             if internal_delay is None and internal_review_fixture is None:
-                snapshot["review_adapter"] = freeze_codex_reviewer(
-                    snapshot["routing"]["roles"]["reviewer"]["selected"],
-                )
+                reviewer_route = snapshot["routing"]["roles"]["reviewer"]
+                reviewer_candidates = [
+                    reviewer_route["selected"], *reviewer_route["fallbacks"],
+                ]
+                snapshot["review_adapters"] = {
+                    candidate["profile_id"]: freeze_codex_reviewer(candidate)
+                    for candidate in reviewer_candidates
+                }
+                snapshot["review_adapter"] = snapshot["review_adapters"][
+                    reviewer_route["selected"]["profile_id"]
+                ]
             if (internal_delay is None and task["lead"]["mode"] == "headless"
                     and internal_lead_fixture is None):
-                snapshot["lead_adapter"] = freeze_codex_lead(
-                    snapshot["routing"]["roles"]["lead"]["selected"],
-                )
+                lead_route = snapshot["routing"]["roles"]["lead"]
+                lead_candidates = [lead_route["selected"], *lead_route["fallbacks"]]
+                snapshot["lead_adapters"] = {
+                    candidate["profile_id"]: freeze_codex_lead(candidate)
+                    for candidate in lead_candidates
+                }
+                snapshot["lead_adapter"] = snapshot["lead_adapters"][
+                    lead_route["selected"]["profile_id"]
+                ]
             if store.remaining_wall_seconds(run_id) == 0:
                 raise BudgetExhausted("run wall-time budget is exhausted in preflight")
             package, digest = self._freeze_package()
@@ -806,6 +832,51 @@ class Service:
             ))
         return evidence
 
+    @staticmethod
+    def _failed_fallback_attempts(
+        store: Store,
+        run_id: str,
+        snapshot: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        failures = []
+        for attempt in store.attempts_for_run(run_id):
+            encoded = attempt.get("output_metadata")
+            if not encoded:
+                continue
+            try:
+                metadata = json.loads(encoded)
+                if not isinstance(metadata, dict) or "failure" not in metadata:
+                    continue
+                error = metadata["failure"]
+                role = attempt["role"]
+                index = attempt["profile_index"]
+                routed = snapshot["routing"]["roles"][role]
+                candidates = [routed["selected"], *routed["fallbacks"]]
+                selected = candidates[index]
+            except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                raise ConflictError("saved fallback attempt is invalid") from exc
+            if (not isinstance(error, dict)
+                    or selected["profile_id"] != attempt["profile_id"]):
+                raise ConflictError("saved fallback attempt changed its profile")
+            failures.append({
+                "id": attempt["id"],
+                "role": role,
+                "status": "failed",
+                "profile_index": index,
+                "selected_profile": selected,
+                "observed_identity": None,
+                "worker_invocations": 1,
+                "native_model_requests": None,
+                "usage": {
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "total_tokens": None,
+                    "source": "unavailable",
+                },
+                "error": error,
+            })
+        return failures
+
     def _terminalize_branch_review(
         self,
         store: Store,
@@ -847,6 +918,9 @@ class Service:
             completed_at=datetime.now(timezone.utc).isoformat(),
             error=error,
             headless_leads=headless_leads,
+            failed_attempts=self._failed_fallback_attempts(
+                store, run_id, snapshot,
+            ),
         )
         prepared = []
         for name in sorted(reports):

@@ -468,6 +468,40 @@ def build_review_prompt(task: dict[str, Any], workspace: dict[str, Any]) -> str:
     ])
 
 
+def _frozen_attempt_selection(
+    snapshot: dict[str, Any],
+    role: str,
+    actual: Any,
+) -> dict[str, Any]:
+    try:
+        routed = snapshot["routing"]["roles"][role]
+        candidates = [routed["selected"], *routed.get("fallbacks", [])]
+    except (KeyError, TypeError) as exc:
+        raise ContractError(f"frozen {role} selection is missing") from exc
+    for candidate in candidates:
+        if canonical_json(actual) == canonical_json(candidate):
+            return candidate
+    raise ContractError(f"{role} attempt is outside the frozen fallback set")
+
+
+def _frozen_role_adapter(
+    snapshot: dict[str, Any],
+    role: str,
+    selection: dict[str, Any],
+) -> Any:
+    plural_key = "review_adapters" if role == "reviewer" else "lead_adapters"
+    singular_key = "review_adapter" if role == "reviewer" else "lead_adapter"
+    adapters = snapshot.get(plural_key)
+    if adapters is not None:
+        if not isinstance(adapters, dict):
+            raise ContractError(f"frozen {role} adapters are invalid")
+        adapter = adapters.get(selection["profile_id"])
+        if adapter is None:
+            raise ContractError(f"frozen {role} fallback adapter is missing")
+        return adapter
+    return snapshot.get(singular_key)
+
+
 def validate_headless_lead_choice(
     value: dict[str, Any],
     packet: dict[str, Any],
@@ -574,17 +608,14 @@ def validate_headless_lead_evidence(
     }, "headless lead attempt evidence")
     if attempt["role"] != "lead":
         raise ContractError("headless lead attempt role is invalid")
-    try:
-        frozen_lead = snapshot["routing"]["roles"]["lead"]["selected"]
-    except (KeyError, TypeError) as exc:
-        raise ContractError("frozen lead selection is missing") from exc
-    if canonical_json(attempt["selected_profile"]) != canonical_json(frozen_lead):
-        raise ContractError("headless lead attempt changes the selected profile")
+    frozen_lead = _frozen_attempt_selection(
+        snapshot, "lead", attempt["selected_profile"],
+    )
     prompt_sha256 = hashlib.sha256(build_lead_prompt(task, packet).encode()).hexdigest()
     if _sha256(attempt["prompt_sha256"], "headless lead prompt sha256") != prompt_sha256:
         raise ContractError("headless lead prompt hash does not match the handoff")
 
-    adapter = snapshot.get("lead_adapter")
+    adapter = _frozen_role_adapter(snapshot, "lead", frozen_lead)
     observed = attempt["observed_identity"]
     native_ids = attempt["native_ids"]
     if adapter is None:
@@ -726,19 +757,16 @@ def validate_branch_review_evidence(
     }, "review attempt evidence")
     if attempt["role"] != "reviewer":
         raise ContractError("review attempt role is invalid")
-    try:
-        frozen_reviewer = snapshot["routing"]["roles"]["reviewer"]["selected"]
-    except (KeyError, TypeError) as exc:
-        raise ContractError("frozen reviewer selection is missing") from exc
-    if canonical_json(attempt["selected_profile"]) != canonical_json(frozen_reviewer):
-        raise ContractError("review attempt changes the frozen selected profile")
+    frozen_reviewer = _frozen_attempt_selection(
+        snapshot, "reviewer", attempt["selected_profile"],
+    )
     prompt_sha256 = hashlib.sha256(build_review_prompt(task, workspace).encode()).hexdigest()
     if _sha256(attempt["prompt_sha256"], "review prompt_sha256") != prompt_sha256:
         raise ContractError("review prompt hash does not match the frozen prompt")
     review_sha256 = hashlib.sha256(canonical_json(review).encode()).hexdigest()
     if _sha256(attempt["review_sha256"], "review document sha256") != review_sha256:
         raise ContractError("review document hash is invalid")
-    adapter = snapshot.get("review_adapter")
+    adapter = _frozen_role_adapter(snapshot, "reviewer", frozen_reviewer)
     observed = attempt["observed_identity"]
     native_ids = attempt["native_ids"]
     if adapter is None:

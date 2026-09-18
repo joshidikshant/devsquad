@@ -18,6 +18,9 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     handoff = snapshot.get("headless_handoff")
     if not isinstance(fixture, dict) or not isinstance(handoff, dict):
         raise ContractError("offline headless lead snapshot is incomplete")
+    selected = snapshot["routing"]["roles"]["lead"]["selected"]
+    if selected.get("profile_id", "").endswith("-fixture-fail"):
+        raise ContractError("offline headless lead fixture requested a failed attempt")
     choice = {
         "schema_version": 1,
         "candidate_sha256": handoff["packet"]["candidate_sha256"],
