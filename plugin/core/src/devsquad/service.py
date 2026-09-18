@@ -15,9 +15,14 @@ from typing import Any
 
 from .codex_lead_worker import freeze_codex_lead
 from .codex_review_worker import freeze_codex_reviewer
-from .contracts import CapabilityUnavailable, ContractError, ProfileUnsupported
+from .contracts import (
+    BudgetExhausted,
+    CapabilityUnavailable,
+    ContractError,
+    ProfileUnsupported,
+)
 from .reports import build_early_terminal_reports, build_terminal_reports
-from .router import load_routing
+from .router import capacity_with_live_reservations, load_routing
 from .store import (
     ConflictError,
     HandoffClaim,
@@ -87,6 +92,164 @@ class Service:
                 "byte_size": size,
             })
         return prepared
+
+    def _paused_review_terminal_artifacts(
+        self,
+        store: Store,
+        run_id: str,
+        snapshot: dict[str, Any],
+        handoff: HandoffSnapshot | None,
+        *,
+        state: str,
+        phase: str,
+        error: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Materialize complete M3 reports before a paused run terminalizes."""
+        history = store.branch_review_history(run_id)
+        frozen_handoffs = {
+            item["handoff_id"]: {
+                "handoff_id": item["handoff_id"],
+                "packet": item["packet"],
+                "packet_sha256": item["packet_sha256"],
+            }
+            for item in history
+        }
+        if handoff is not None:
+            frozen_handoffs[handoff.handoff_id] = {
+                "handoff_id": handoff.handoff_id,
+                "packet": handoff.packet,
+                "packet_sha256": handoff.packet_sha256,
+            }
+        packets = [item["packet"] for item in history]
+        if (handoff is not None and not any(
+                packet.get("attempt_id") == handoff.packet.get("attempt_id")
+                for packet in packets)):
+            packets.append(handoff.packet)
+        packets_by_attempt = {
+            packet["attempt_id"]: validate_branch_review_handoff(packet, snapshot)
+            for packet in packets
+        }
+        artifacts = store.artifacts_for_run(run_id)
+        artifacts_by_name = {artifact["name"]: artifact for artifact in artifacts}
+        attempts = []
+        for attempt in store.attempts_for_run(run_id):
+            if attempt.get("role") == "reviewer":
+                packet = packets_by_attempt.get(attempt["id"])
+                if packet is not None:
+                    attempts.append({
+                        "id": attempt["id"],
+                        "status": "succeeded",
+                        **packet["attempt"],
+                        "review": packet["review"],
+                        "checks": packet["checks"],
+                        "evaluation": packet["evaluation"],
+                    })
+            elif attempt.get("role") == "lead" and attempt.get("status") == "finished":
+                artifact = artifacts_by_name.get(
+                    f"lead-attempt-{attempt['id']}.json"
+                )
+                if artifact is None:
+                    raise ConflictError("saved headless lead evidence is missing")
+                content = Path(artifact["path"]).read_bytes()
+                try:
+                    raw = json.loads(content)
+                    frozen_handoff = frozen_handoffs[raw["handoff_id"]]
+                except (KeyError, TypeError, json.JSONDecodeError) as exc:
+                    raise ConflictError(
+                        "saved headless lead evidence is invalid"
+                    ) from exc
+                evidence = decode_headless_lead_evidence(
+                    content, snapshot, frozen_handoff,
+                )
+                attempts.append({
+                    "id": attempt["id"],
+                    "status": "succeeded",
+                    **evidence["attempt"],
+                })
+        reports = build_early_terminal_reports(
+            run_id=run_id,
+            state=state,
+            task=snapshot["task"],
+            snapshot=snapshot,
+            run_artifacts=artifacts,
+            events=store.events_for_run(run_id),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            phase=phase,
+            error=error,
+            prior_attempts=attempts,
+        )
+        prepared = []
+        for name in sorted(reports):
+            path, digest, size = store.finalize_artifact(
+                run_id, name, reports[name],
+            )
+            prepared.append({
+                "name": name,
+                "path": path,
+                "sha256": digest,
+                "byte_size": size,
+            })
+        return prepared
+
+    def fail_budget_exhausted(
+        self,
+        run_id: str,
+        expected_version: int,
+    ) -> dict[str, Any]:
+        """Terminalize a queued branch review that cannot launch another worker."""
+        store = self._store()
+        try:
+            run = store.run(run_id)
+            snapshot = self._review_snapshot(run)
+            if snapshot.get("task", {}).get("workflow") != "branch-review":
+                raise ConflictError("queued budget failure is not a branch review")
+            error = {
+                "error": "BUDGET_EXHAUSTED",
+                "message": "run wall-time budget is exhausted",
+            }
+            history = store.branch_review_history(run_id)
+            if history:
+                run_artifacts = store.artifacts_for_run(run_id)
+                reports = build_terminal_reports(
+                    run_id=run_id,
+                    state="failed",
+                    snapshot=snapshot,
+                    history=history,
+                    run_artifacts=run_artifacts,
+                    events=store.events_for_run(run_id),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    error=error,
+                    headless_leads=self._headless_leads_for_history(
+                        snapshot, history, run_artifacts,
+                    ),
+                )
+                terminal_artifacts = []
+                for name in sorted(reports):
+                    path, digest, size = store.finalize_artifact(
+                        run_id, name, reports[name],
+                    )
+                    terminal_artifacts.append({
+                        "name": name,
+                        "path": path,
+                        "sha256": digest,
+                        "byte_size": size,
+                    })
+            else:
+                terminal_artifacts = self._paused_review_terminal_artifacts(
+                    store,
+                    run_id,
+                    snapshot,
+                    store.handoff_snapshot(run_id),
+                    state="failed",
+                    phase="budget",
+                    error=error,
+                )
+            version = store.fail_queued_budget(
+                run_id, expected_version, error, terminal_artifacts,
+            )
+            return {"run_id": run_id, "state": "failed", "version": version}
+        finally:
+            store.close()
 
     def _freeze_package(self) -> tuple[Path, str]:
         source = Path(__file__).resolve().parent
@@ -209,6 +372,7 @@ class Service:
         run_id: str | None = None,
         internal_review_fixture: dict[str, Any] | None = None,
         internal_lead_fixture: dict[str, Any] | None = None,
+        capacity_in_flight: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
         base_oid = resolve_commit(repo, task["project"]["base_ref"])
@@ -248,6 +412,9 @@ class Service:
                 task,
                 config_payloads["profiles_file"],
                 config_payloads["policy_file"],
+                availability=capacity_with_live_reservations(
+                    config_payloads["policy_file"], capacity_in_flight or {},
+                ),
             )
             if project_id is None or run_id is None:
                 raise ContractError("public preflight requires run-owned workspace identity")
@@ -334,6 +501,7 @@ class Service:
                 run_id=run_id,
                 internal_review_fixture=internal_review_fixture,
                 internal_lead_fixture=internal_lead_fixture,
+                capacity_in_flight=store.active_pool_counts(),
             )
             if internal_delay is None and internal_review_fixture is None:
                 snapshot["review_adapter"] = freeze_codex_reviewer(
@@ -344,6 +512,8 @@ class Service:
                 snapshot["lead_adapter"] = freeze_codex_lead(
                     snapshot["routing"]["roles"]["lead"]["selected"],
                 )
+            if store.remaining_wall_seconds(run_id) == 0:
+                raise BudgetExhausted("run wall-time budget is exhausted in preflight")
             package, digest = self._freeze_package()
             version = store.complete_preparation(
                 run_id,
@@ -355,7 +525,7 @@ class Service:
                 worktree_path=(snapshot.get("workspace") or {}).get("path"),
             )
             return (version, package, digest), None
-        except (CapabilityUnavailable, ProfileUnsupported) as exc:
+        except (BudgetExhausted, CapabilityUnavailable, ProfileUnsupported) as exc:
             error = {"error": exc.code, "message": str(exc)}
             terminal_artifacts = self._preparation_failure_artifacts(
                 store, run_id, task, snapshot, error,
@@ -504,7 +674,27 @@ class Service:
                 from .supervisor import Supervisor
                 version = Supervisor(store).cancel_orphan(run_id)
             elif run["state"] in {"running", "cancelling"}: version, _ = store.request_cancel(run_id)
-            elif run["state"] == "awaiting_host": version = store.cancel_host_wait(run_id)
+            elif run["state"] == "awaiting_host":
+                terminal_artifacts = None
+                try:
+                    snapshot = self._review_snapshot(run)
+                    handoff = store.handoff_snapshot(run_id)
+                    if (snapshot.get("task", {}).get("workflow") == "branch-review"
+                            and handoff is not None):
+                        terminal_artifacts = self._paused_review_terminal_artifacts(
+                            store,
+                            run_id,
+                            snapshot,
+                            handoff,
+                            state="cancelled",
+                            phase="awaiting_host",
+                            error=None,
+                        )
+                except (KeyError, TypeError):
+                    terminal_artifacts = None
+                version = store.cancel_host_wait(
+                    run_id, terminal_artifacts=terminal_artifacts,
+                )
             elif run["state"] == "blocked":
                 from .supervisor import Supervisor
                 version = Supervisor(store).cancel_orphan(run_id)
@@ -586,6 +776,36 @@ class Service:
         )
         return packet, gate
 
+    @staticmethod
+    def _headless_leads_for_history(
+        snapshot: dict[str, Any],
+        history: list[dict[str, Any]],
+        run_artifacts: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if snapshot["task"]["lead"]["mode"] != "headless":
+            return []
+        artifacts_by_name = {
+            artifact["name"]: artifact for artifact in run_artifacts
+        }
+        evidence = []
+        for item in history:
+            submission_id = item["decision"]["submission_id"]
+            if not submission_id.startswith("headless-"):
+                raise ConflictError("headless lead submission identity is invalid")
+            attempt_id = submission_id[len("headless-"):]
+            artifact = artifacts_by_name.get(f"lead-attempt-{attempt_id}.json")
+            if artifact is None:
+                raise ConflictError("headless lead evidence artifact is missing")
+            frozen_handoff = {
+                "handoff_id": item["handoff_id"],
+                "packet": item["packet"],
+                "packet_sha256": item["packet_sha256"],
+            }
+            evidence.append(decode_headless_lead_evidence(
+                Path(artifact["path"]).read_bytes(), snapshot, frozen_handoff,
+            ))
+        return evidence
+
     def _terminalize_branch_review(
         self,
         store: Store,
@@ -614,29 +834,9 @@ class Service:
                     or hashlib.sha256(path.read_bytes()).hexdigest()
                     != artifact["sha256"]):
                 raise ConflictError("branch review artifact is missing or corrupt")
-        headless_leads = []
-        if snapshot["task"]["lead"]["mode"] == "headless":
-            artifacts_by_name = {
-                artifact["name"]: artifact for artifact in run_artifacts
-            }
-            for item in history:
-                submission_id = item["decision"]["submission_id"]
-                if not submission_id.startswith("headless-"):
-                    raise ConflictError("headless lead submission identity is invalid")
-                attempt_id = submission_id[len("headless-"):]
-                artifact = artifacts_by_name.get(
-                    f"lead-attempt-{attempt_id}.json"
-                )
-                if artifact is None:
-                    raise ConflictError("headless lead evidence artifact is missing")
-                frozen_handoff = {
-                    "handoff_id": item["handoff_id"],
-                    "packet": item["packet"],
-                    "packet_sha256": item["packet_sha256"],
-                }
-                headless_leads.append(decode_headless_lead_evidence(
-                    Path(artifact["path"]).read_bytes(), snapshot, frozen_handoff,
-                ))
+        headless_leads = self._headless_leads_for_history(
+            snapshot, history, run_artifacts,
+        )
         reports = build_terminal_reports(
             run_id=run_id,
             state=terminal_state,

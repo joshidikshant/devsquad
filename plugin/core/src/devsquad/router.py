@@ -388,3 +388,26 @@ def load_routing(
         profiles_sha256=profiles_sha256,
         policy_sha256=policy_sha256,
     )
+
+
+def capacity_with_live_reservations(
+    policy_payload: bytes | str,
+    in_flight: dict[str, int],
+) -> dict[str, dict[str, Any]]:
+    """Bind transactionally observed local reservations to one policy snapshot."""
+    policy, _ = _strict_json(policy_payload, "policy file")
+    validate_policy(policy)
+    if (not isinstance(in_flight, dict)
+            or not all(
+                isinstance(pool_id, str) and pool_id
+                and type(count) is int and count >= 0
+                for pool_id, count in in_flight.items()
+            )):
+        raise ContractError("live capacity reservations are invalid")
+    return {
+        pool_id: {
+            "status": "unknown",
+            "in_flight": in_flight.get(pool_id, 0),
+        }
+        for pool_id in policy["account_pools"]
+    }

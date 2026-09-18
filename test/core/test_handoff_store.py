@@ -197,7 +197,7 @@ class HandoffStoreTest(unittest.TestCase):
         self.addCleanup(upgraded.close)
         self.assertEqual(
             upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],
-            6,
+            7,
         )
         tables = {
             row[0]
@@ -618,7 +618,7 @@ class InstalledWheelHandoffMigrationTest(unittest.TestCase):
                 return candidate
         return None
 
-    def test_installed_wheel_applies_schema_four_to_six(self):
+    def test_installed_wheel_applies_schema_four_to_seven(self):
         build_python = self.build_python()
         if build_python is None:
             self.skipTest("offline wheel gate requires setuptools>=68 and wheel")
@@ -684,7 +684,7 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 6
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 7
     assert store.connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='handoff_submissions'"
     ).fetchone()

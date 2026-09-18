@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -11,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 import sys
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
-from devsquad.contracts import ContractError
+from devsquad.contracts import BudgetExhausted, ContractError
 from devsquad.store import ConflictError, SchemaVersionError, Store, git_common_dir
 
 
@@ -230,9 +231,131 @@ class StoreTest(unittest.TestCase):
         row = self.store.connection.execute("SELECT sha256,byte_size FROM artifacts WHERE id=?", (artifact_id,)).fetchone()
         self.assertEqual(row[1], 13)
 
+    @staticmethod
+    def routed_snapshot(wall_seconds=300):
+        return {
+            "task": {"budget": {"wall_seconds": wall_seconds}},
+            "routing": {
+                "roles": {
+                    "reviewer": {
+                        "selected": {
+                            "profile": {"account_pool_id": "shared-pool"},
+                        },
+                    },
+                },
+                "capacity": {
+                    "shared-pool": {"max_concurrency": 1},
+                },
+            },
+        }
+
+    def test_shared_pool_reservation_is_transactional_and_releases_on_finish(self):
+        linked = self.root / "pool-linked"
+        subprocess.run(
+            ["git", "-C", str(self.repo), "worktree", "add", "--detach", "-q",
+             str(linked), "HEAD"],
+            check=True,
+        )
+        first = self.store.claim_start(
+            self.repo, "pool-first", {"task": {"budget": {"wall_seconds": 300}}},
+            "owner",
+        )
+        first_version = self.store.complete_preparation(
+            first.run_id,
+            first.fencing_token,
+            self.routed_snapshot(),
+            worktree_path=str(self.repo),
+        )
+        second = self.store.claim_start(
+            linked, "pool-second", {"task": {"budget": {"wall_seconds": 300}}},
+            "owner",
+        )
+        second_version = self.store.complete_preparation(
+            second.run_id,
+            second.fencing_token,
+            self.routed_snapshot(),
+            worktree_path=str(linked),
+        )
+        reservation = self.store.reserve_attempt(
+            first.run_id,
+            first_version,
+            "supervisor-one",
+            "package",
+            "reviewer",
+            account_pool_id="shared-pool",
+        )
+        self.assertEqual(self.store.active_pool_counts(), {"shared-pool": 1})
+        with self.assertRaisesRegex(ConflictError, "account pool concurrency"):
+            self.store.reserve_attempt(
+                second.run_id,
+                second_version,
+                "supervisor-two",
+                "package",
+                "reviewer",
+                account_pool_id="shared-pool",
+            )
+        self.store.mark_attempt_running(reservation, 1001, 1001, "fixture-process")
+        self.store.finish_attempt(
+            first.run_id, reservation.attempt_token, "succeeded", {},
+        )
+        self.assertEqual(self.store.active_pool_counts(), {})
+        released = self.store.reserve_attempt(
+            second.run_id,
+            second_version,
+            "supervisor-two",
+            "package",
+            "reviewer",
+            account_pool_id="shared-pool",
+        )
+        self.assertEqual(released.run_id, second.run_id)
+
+    def test_wall_budget_counts_preflight_and_prior_attempts_cumulatively(self):
+        claim = self.store.claim_start(
+            self.repo,
+            "wall-budget",
+            {"task": {"budget": {"wall_seconds": 5}}},
+            "owner",
+        )
+        version = self.store.complete_preparation(
+            claim.run_id, claim.fencing_token, self.routed_snapshot(5),
+        )
+        started = datetime(2026, 9, 18, 1, 0, tzinfo=timezone.utc)
+        self.store.connection.execute(
+            "UPDATE runs SET created_at=?,updated_at=? WHERE id=?",
+            (started.isoformat(), (started + timedelta(seconds=5)).isoformat(),
+             claim.run_id),
+        )
+        self.store.connection.execute(
+            "UPDATE events SET created_at=? WHERE run_id=? AND type='run.preparing'",
+            (started.isoformat(), claim.run_id),
+        )
+        self.store.connection.execute(
+            "UPDATE events SET created_at=? WHERE run_id=? AND type='run.queued'",
+            ((started + timedelta(milliseconds=200)).isoformat(), claim.run_id),
+        )
+        run = self.store.run(claim.run_id)
+        self.store.connection.execute(
+            "INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,"
+            "status,heartbeat_at,package_digest,created_at,finished_at,role,account_pool_id) "
+            "VALUES('prior-attempt',?,?,?,?, 'finished',?,?,?,?, 'reviewer','shared-pool')",
+            (claim.run_id, run["project_id"], run["worktree_path"], "prior-token",
+             (started + timedelta(seconds=5)).isoformat(), "package",
+             (started + timedelta(seconds=1)).isoformat(),
+             (started + timedelta(seconds=5, milliseconds=100)).isoformat()),
+        )
+        current = started + timedelta(seconds=6)
+        self.assertEqual(
+            self.store.remaining_wall_seconds(claim.run_id, now=current), 0,
+        )
+        with self.assertRaises(BudgetExhausted):
+            self.store.reserve_attempt(
+                claim.run_id, version, "supervisor", "package", "reviewer",
+                account_pool_id="shared-pool",
+            )
+
     def test_migration_records_version_and_refuses_newer_database(self):
-        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 6)
-        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(7,'future')")
+        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 7)
+        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(8,'future')")
         self.store.close()
         with self.assertRaises(SchemaVersionError):
             Store(self.database, self.artifacts)
@@ -247,12 +370,13 @@ class StoreTest(unittest.TestCase):
         connection.commit(); connection.close()
         upgraded = Store(old_db, self.root / "old-artifacts")
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 6)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 7)
         self.assertTrue(upgraded.connection.execute("SELECT 1 FROM sqlite_master WHERE name='attempts'").fetchone())
         attempt_columns = {
             row[1] for row in upgraded.connection.execute("PRAGMA table_info(attempts)")
         }
         self.assertIn("role", attempt_columns)
+        self.assertIn("account_pool_id", attempt_columns)
 
     def test_version_three_fixture_adds_run_snapshot_columns(self):
         old_db=self.root/"v3.sqlite3"; connection=sqlite3.connect(old_db)
@@ -261,7 +385,7 @@ class StoreTest(unittest.TestCase):
             connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",(version,"fixture"))
         connection.commit(); connection.close()
         upgraded=Store(old_db,self.root/"v3-artifacts"); self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],6)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],7)
         columns={row[1] for row in upgraded.connection.execute("PRAGMA table_info(runs)")}
         self.assertTrue({"package_path","package_digest","supersedes_run_id"} <= columns)
 

@@ -388,6 +388,49 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertEqual(receipt["error"]["error"], "BUDGET_EXHAUSTED")
         self.assertEqual(receipt["lead"]["disposition"], "revise")
 
+    def test_wall_budget_exhaustion_between_attempts_preserves_review_history(self):
+        self.task["budget"]["max_revisions"] = 1
+        self.task["budget"]["max_worker_invocations"] = 2
+        run_id, waiting = self.start_waiting("wall-budget-between-attempts")
+        claimed = self.service.handoff_claim(
+            run_id, waiting["version"], "host-wall-budget",
+        )
+        packet = claimed["handoff"]["packet"]
+        revise = self.decision(
+            packet, "wall-budget-revise", "revise", "Repeat once.",
+        )
+        with patch.object(self.service, "_spawn_daemon", return_value=12345):
+            requeued = self.service.handoff_complete(
+                run_id, claimed["claim"], revise,
+            )
+        self.assertEqual(requeued["state"], "queued")
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            attempt = store.attempt(run_id)
+            old = "2026-09-18T00:00:00+00:00"
+            finished = "2026-09-18T00:10:00+00:00"
+            store.connection.execute(
+                "UPDATE attempts SET created_at=?,finished_at=? WHERE id=?",
+                (old, finished, attempt["id"]),
+            )
+        finally:
+            store.close()
+        terminal = self.service.fail_budget_exhausted(
+            run_id, requeued["version"],
+        )
+        self.assertEqual(terminal["state"], "failed")
+        artifacts = {
+            artifact["name"]: artifact
+            for artifact in self.service.result(run_id)["artifacts"]
+        }
+        self.assertTrue(TERMINAL_REPORT_NAMES <= set(artifacts))
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["error"]["error"], "BUDGET_EXHAUSTED")
+        self.assertEqual(len(receipt["attempts"]), 1)
+        self.assertEqual(
+            [item["disposition"] for item in receipt["dispositions"]], ["revise"],
+        )
+
     def test_resume_finishes_submission_recorded_before_continuation(self):
         run_id, waiting = self.start_waiting("resume-submission")
         claimed = self.service.handoff_claim(run_id, waiting["version"], "host-crash")
@@ -710,6 +753,40 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertEqual(document["packet"], handoff.packet)
         self.assertEqual(document["packet_sha256"], handoff.packet_sha256)
         self.assertIn(b"claim this saved handoff", reports["handoff.md"])
+
+    def test_cancel_waiting_review_publishes_full_terminal_reports(self):
+        run_id, _ = self.start_waiting("cancel-waiting-review")
+        cancelled = self.service.cancel(run_id)
+        self.assertEqual(cancelled["state"], "cancelled")
+        result = self.service.result(run_id)
+        artifacts = {artifact["name"]: artifact for artifact in result["artifacts"]}
+        self.assertTrue(TERMINAL_REPORT_NAMES <= set(artifacts))
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["state"], "cancelled")
+        self.assertEqual(receipt["phase"], "awaiting_host")
+        self.assertEqual(receipt["lead"]["status"], "cancelled")
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 1)
+        self.assertEqual(len(receipt["attempts"]), 1)
+
+    def test_public_preflight_observes_live_shared_pool_reservations(self):
+        with patch.object(
+            Store, "active_pool_counts",
+            return_value={"fixture-subscription": 1},
+        ):
+            started = self.service.start(
+                self.task,
+                "pool-full-before-launch",
+                _internal_review_fixture=self.fixture,
+            )
+        self.assertEqual(started["state"], "failed")
+        self.assertEqual(started["error"]["error"], "CAPABILITY_UNAVAILABLE")
+        self.assertIn("no currently available profile", started["error"]["message"])
+        result = self.service.result(started["run_id"])
+        self.assertTrue(result["ready"])
+        self.assertTrue(
+            TERMINAL_REPORT_NAMES
+            <= {artifact["name"] for artifact in result["artifacts"]}
+        )
 
     def test_headless_lead_is_a_second_fenced_attempt_and_terminalizes_automatically(self):
         self.configure_fixture_headless()

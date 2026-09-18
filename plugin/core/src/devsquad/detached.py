@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import sys
 
-from .contracts import ExecutionIdentity, LaunchSpec
+from .contracts import BudgetExhausted, ExecutionIdentity, LaunchSpec
 from .service import Service
 from .store import ConflictError, Store, canonical_json
 from .supervisor import Supervisor
@@ -80,6 +80,12 @@ def main(argv=None):
             command = [sys.executable, "-P", "-m", "devsquad.fake_step"]
             if "internal_fake_delay" in snapshot:
                 command += ["--delay", str(snapshot["internal_fake_delay"])]
+        remaining_wall = store.remaining_wall_seconds(args.run_id)
+        if remaining_wall == 0:
+            Service(Path(args.database).parent).fail_budget_exhausted(
+                args.run_id, args.expected_version,
+            )
+            return 1
         spec = LaunchSpec(
             1,
             identity.harness,
@@ -87,13 +93,18 @@ def main(argv=None):
             tuple(command),
             run["worktree_path"],
             stdin_path,
-            snapshot["task"]["budget"]["wall_seconds"],
+            remaining_wall or snapshot["task"]["budget"]["wall_seconds"],
             identity,
             environment,
         )
         supervisor = Supervisor(store)
         try: handle = supervisor.launch_durable(args.run_id, args.expected_version, spec, f"daemon:{os.getpid()}", args.package_digest, role=role if workflow_role else "worker")
         except ConflictError: return 0
+        except BudgetExhausted:
+            Service(Path(args.database).parent).fail_budget_exhausted(
+                args.run_id, args.expected_version,
+            )
+            return 1
         returncode = supervisor.wait_durable(handle, spec.timeout_seconds)
         current = store.run(args.run_id)
     finally:

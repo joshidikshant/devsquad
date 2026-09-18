@@ -25,6 +25,10 @@ class CapabilityUnavailable(ContractError):
     code = "CAPABILITY_UNAVAILABLE"
 
 
+class BudgetExhausted(ContractError):
+    code = "BUDGET_EXHAUSTED"
+
+
 class PolicyDenied(ContractError):
     code = "POLICY_DENIED"
 

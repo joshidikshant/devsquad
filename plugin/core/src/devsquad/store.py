@@ -15,9 +15,9 @@ import tempfile
 import uuid
 from typing import Any
 
-from .contracts import ContractError
+from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 6
+SUPPORTED_SCHEMA_VERSION = 7
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -596,6 +596,104 @@ class Store:
         path, digest, _ = self.finalize_artifact(run_id, name, content)
         return self.reference_artifact(run_id, name, path, digest)
 
+    @staticmethod
+    def _wall_seconds_from_run(run: sqlite3.Row | dict[str, Any]) -> int | None:
+        documents = (run.get("mutable_snapshot"), run.get("submitted_request")) \
+            if isinstance(run, dict) else (run["mutable_snapshot"], run["submitted_request"])
+        for encoded in documents:
+            if not encoded:
+                continue
+            try:
+                document = json.loads(encoded)
+                task = document.get("task") if isinstance(document, dict) else None
+                budget = task.get("budget") if isinstance(task, dict) else None
+                wall_seconds = budget.get("wall_seconds") if isinstance(budget, dict) else None
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if type(wall_seconds) is int and wall_seconds > 0:
+                return wall_seconds
+        return None
+
+    def _execution_elapsed_ms(
+        self,
+        run_id: str,
+        run: sqlite3.Row | dict[str, Any],
+        current: datetime,
+    ) -> int:
+        """Count preflight and worker intervals while excluding saved host waits."""
+        now = current.astimezone(timezone.utc)
+        created_at = _parse_utc(run["created_at"])
+        queued = self.connection.execute(
+            "SELECT created_at FROM events WHERE run_id=? AND type='run.queued' "
+            "ORDER BY id LIMIT 1",
+            (run_id,),
+        ).fetchone()
+        if queued is not None:
+            preflight_end = _parse_utc(queued["created_at"])
+        elif run["state"] == "queued" and run["phase"] == "preparing":
+            preflight_end = now
+        else:
+            preflight_end = _parse_utc(run["updated_at"])
+        elapsed = max(0, int((preflight_end - created_at).total_seconds() * 1000))
+        for attempt in self.connection.execute(
+            "SELECT status,created_at,finished_at FROM attempts WHERE run_id=?",
+            (run_id,),
+        ):
+            started = _parse_utc(attempt["created_at"])
+            if (attempt["status"] == "ownership_ambiguous"
+                    or attempt["finished_at"] is None):
+                finished = now
+            else:
+                finished = _parse_utc(attempt["finished_at"])
+            elapsed += max(0, int((finished - started).total_seconds() * 1000))
+        return elapsed
+
+    def remaining_wall_seconds(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> int | None:
+        run = self.connection.execute(
+            "SELECT state,phase,created_at,updated_at,mutable_snapshot,submitted_request "
+            "FROM runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+        if run is None:
+            raise ContractError("run does not exist")
+        wall_seconds = self._wall_seconds_from_run(run)
+        if wall_seconds is None:
+            return None
+        elapsed_ms = self._execution_elapsed_ms(
+            run_id, run, _authoritative_now(now),
+        )
+        return max(0, (wall_seconds * 1000 - elapsed_ms) // 1000)
+
+    def _enforce_attempt_budget(
+        self,
+        run_id: str,
+        run: sqlite3.Row,
+    ) -> None:
+        wall_seconds = self._wall_seconds_from_run(run)
+        if wall_seconds is None:
+            return
+        elapsed_ms = self._execution_elapsed_ms(
+            run_id, run, _authoritative_now(),
+        )
+        if wall_seconds * 1000 - elapsed_ms < 1000:
+            raise BudgetExhausted("run wall-time budget is exhausted")
+
+    def active_pool_counts(self) -> dict[str, int]:
+        return {
+            row["account_pool_id"]: row["in_flight"]
+            for row in self.connection.execute(
+                "SELECT account_pool_id,COUNT(*) AS in_flight FROM attempts "
+                "WHERE account_pool_id IS NOT NULL AND status IN "
+                "('reserved','running','cancelling','ownership_ambiguous') "
+                "GROUP BY account_pool_id"
+            )
+        }
+
     def reserve_attempt(
         self,
         run_id: str,
@@ -603,6 +701,8 @@ class Store:
         owner_id: str,
         package_digest: str,
         role: str = "worker",
+        *,
+        account_pool_id: str | None = None,
     ) -> AttemptReservation:
         if not owner_id or not package_digest:
             raise ContractError("supervisor owner and package digest are required")
@@ -610,7 +710,11 @@ class Store:
             raise ContractError("attempt role is invalid")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            run = self.connection.execute("SELECT project_id,worktree_path,state,phase,version FROM runs WHERE id=?", (run_id,)).fetchone()
+            run = self.connection.execute(
+                "SELECT project_id,worktree_path,state,phase,version,created_at,updated_at,"
+                "mutable_snapshot,submitted_request FROM runs WHERE id=?",
+                (run_id,),
+            ).fetchone()
             if not run or run["version"] != expected_version or run["state"] != "queued" or run["phase"] is not None:
                 raise ConflictError("run is not available for supervisor claim")
             active = self.connection.execute("SELECT 1 FROM supervisor_claims WHERE run_id=? AND active=1", (run_id,)).fetchone()
@@ -618,11 +722,44 @@ class Store:
                 raise ConflictError("run already has a supervisor claim")
             if not run["worktree_path"]:
                 raise ContractError("run has no canonical worktree identity")
+            self._enforce_attempt_budget(run_id, run)
+            if account_pool_id is not None:
+                if not isinstance(account_pool_id, str) or not account_pool_id:
+                    raise ContractError("attempt account pool is invalid")
+                try:
+                    snapshot = json.loads(run["mutable_snapshot"])
+                    selected = snapshot["routing"]["roles"][role]["selected"]["profile"]
+                    capacity = snapshot["routing"]["capacity"][account_pool_id]
+                    expected_pool = selected["account_pool_id"]
+                    max_concurrency = capacity["max_concurrency"]
+                except (KeyError, TypeError, json.JSONDecodeError) as exc:
+                    raise ConflictError(
+                        "frozen account-pool reservation is invalid"
+                    ) from exc
+                if (expected_pool != account_pool_id
+                        or type(max_concurrency) is not int
+                        or max_concurrency < 1):
+                    raise ConflictError(
+                        "attempt account pool does not match frozen routing"
+                    )
+                in_flight = self.connection.execute(
+                    "SELECT COUNT(*) FROM attempts WHERE account_pool_id=? "
+                    "AND status IN ('reserved','running','cancelling','ownership_ambiguous')",
+                    (account_pool_id,),
+                ).fetchone()[0]
+                if in_flight >= max_concurrency:
+                    raise ConflictError("account pool concurrency is full")
             old = self.connection.execute("SELECT COALESCE(MAX(fencing_token),0) FROM supervisor_claims WHERE run_id=?", (run_id,)).fetchone()[0]
             supervisor_token, attempt_id, attempt_token = old + 1, str(uuid.uuid4()), uuid.uuid4().hex
             now, version = _utc_now(), expected_version + 1
             self.connection.execute("INSERT OR REPLACE INTO supervisor_claims(run_id,owner_id,fencing_token,package_digest,heartbeat_at,active) VALUES(?,?,?,?,?,1)", (run_id, owner_id, supervisor_token, package_digest, now))
-            self.connection.execute("INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,status,heartbeat_at,package_digest,created_at,role) VALUES(?,?,?,?,?,'reserved',?,?,?,?)", (attempt_id, run_id, run["project_id"], run["worktree_path"], attempt_token, now, package_digest, now, role))
+            self.connection.execute(
+                "INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,"
+                "status,heartbeat_at,package_digest,created_at,role,account_pool_id) "
+                "VALUES(?,?,?,?,?,'reserved',?,?,?,?,?)",
+                (attempt_id, run_id, run["project_id"], run["worktree_path"],
+                 attempt_token, now, package_digest, now, role, account_pool_id),
+            )
             self.connection.execute("UPDATE runs SET phase='launching',version=?,updated_at=? WHERE id=?", (version, now, run_id))
             event = canonical_json({"attempt_id": attempt_id, "supervisor_token": supervisor_token})
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'supervisor.claimed',?,?)", (run_id, version, event, now))
@@ -2269,7 +2406,19 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
-    def cancel_host_wait(self, run_id: str, *, now: datetime | None = None) -> int:
+    def cancel_host_wait(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+        terminal_artifacts: list[dict[str, Any]] | None = None,
+    ) -> int:
+        prepared = (
+            self._prepare_exact_artifacts(
+                run_id, terminal_artifacts, BRANCH_REVIEW_TERMINAL_ARTIFACTS,
+            )
+            if terminal_artifacts is not None else None
+        )
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             timestamp = _authoritative_now(now).isoformat()
@@ -2289,12 +2438,18 @@ class Store:
                     or handoff["status"] not in {"open", "submitted"}
                     or run["phase"] not in {None, "handoff_submitted"}):
                 raise ConflictError("run is not awaiting a cancellable host handoff")
-            path, digest, size, receipt_time = self._terminal_receipt(
-                run_id, "cancelled", "awaiting_host", None, now=timestamp,
-            )
-            version = self._reference_terminal_receipt(
-                run_id, run["version"], path, digest, size, receipt_time,
-            ) + 1
+            if prepared is None:
+                path, digest, size, receipt_time = self._terminal_receipt(
+                    run_id, "cancelled", "awaiting_host", None, now=timestamp,
+                )
+                version = self._reference_terminal_receipt(
+                    run_id, run["version"], path, digest, size, receipt_time,
+                )
+            else:
+                version, _ = self._reference_prepared_artifacts(
+                    run_id, run["version"], prepared,
+                )
+            version += 1
             self.connection.execute(
                 "UPDATE handoffs SET status='cancelled',closed_at=? WHERE id=?",
                 (timestamp, handoff["id"]),
@@ -2309,12 +2464,69 @@ class Store:
                 (version, timestamp, run_id),
             )
             payload = canonical_json({
-                "handoff_id": handoff["id"], "receipt": "result-receipt.json",
+                "handoff_id": handoff["id"],
+                "receipt": "result-receipt.json",
+                "terminal_reports": prepared is not None,
             })
             self.connection.execute(
                 "INSERT INTO events(run_id,run_version,type,payload,created_at) "
                 "VALUES(?,?,'run.cancelled',?,?)",
                 (run_id, version, payload, timestamp),
+            )
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def fail_queued_budget(
+        self,
+        run_id: str,
+        expected_version: int,
+        error: dict[str, Any],
+        terminal_artifacts: list[dict[str, Any]],
+    ) -> int:
+        """Fail a paused workflow before another worker launch can consume budget."""
+        prepared = self._prepare_exact_artifacts(
+            run_id, terminal_artifacts, BRANCH_REVIEW_TERMINAL_ARTIFACTS,
+        )
+        encoded_error = canonical_json(error)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if (not run or run["state"] != "queued" or run["phase"] is not None
+                    or run["version"] != expected_version):
+                raise ConflictError("budget exhaustion is no longer current")
+            if self.connection.execute(
+                "SELECT 1 FROM supervisor_claims WHERE run_id=? AND active=1",
+                (run_id,),
+            ).fetchone():
+                raise ConflictError("budget exhaustion raced with a supervisor")
+            version, _ = self._reference_prepared_artifacts(
+                run_id, run["version"], prepared,
+            )
+            now, version = _utc_now(), version + 1
+            self.connection.execute(
+                "UPDATE handoffs SET status='consumed',closed_at=? WHERE run_id=? "
+                "AND status IN ('open','submitted')",
+                (now, run_id),
+            )
+            self.connection.execute(
+                "UPDATE claims SET active=0 WHERE run_id=?", (run_id,),
+            )
+            self.connection.execute(
+                "UPDATE runs SET state='failed',phase=NULL,version=?,updated_at=? "
+                "WHERE id=?",
+                (version, now, run_id),
+            )
+            payload = dict(error)
+            payload["receipt"] = "result-receipt.json"
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'run.failed',?,?)",
+                (run_id, version, canonical_json(payload), now),
             )
             self.connection.execute("COMMIT")
             return version

@@ -166,7 +166,13 @@ class Supervisor:
         self.store, self.output_limit, self.grace_seconds = store, output_limit, grace_seconds
 
     def launch(self, run_id: str, expected_version: int, spec: LaunchSpec, owner_id: str, package_digest: str) -> RunningAttempt:
-        reservation = self.store.reserve_attempt(run_id, expected_version, owner_id, package_digest)
+        reservation = self.store.reserve_attempt(
+            run_id,
+            expected_version,
+            owner_id,
+            package_digest,
+            account_pool_id=spec.requested.account_pool,
+        )
         environment = os.environ.copy(); environment.update(spec.environment)
         try:
             stdin_stream: Any = subprocess.DEVNULL
@@ -220,7 +226,12 @@ class Supervisor:
         role: str = "worker",
     ) -> DurableAttempt:
         reservation = self.store.reserve_attempt(
-            run_id, expected_version, owner_id, package_digest, role,
+            run_id,
+            expected_version,
+            owner_id,
+            package_digest,
+            role,
+            account_pool_id=spec.requested.account_pool,
         )
         directory = self.store.artifacts / run_id / f".{reservation.attempt_id}.spool"
         directory.mkdir(parents=True, exist_ok=False)

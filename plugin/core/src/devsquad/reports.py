@@ -286,7 +286,11 @@ def build_early_terminal_reports(
         "dispositions": [],
         "lead": {
             "mode": task.get("lead", {}).get("mode"),
-            "status": "failed" if phase == "lead" else "not_reached",
+            "status": (
+                "cancelled"
+                if state == "cancelled" and phase in {"lead", "awaiting_host"}
+                else "failed" if phase == "lead" else "not_reached"
+            ),
             "disposition": None,
             "reason": None,
             "usage": {
@@ -316,7 +320,9 @@ def build_early_terminal_reports(
             "excludes_terminal_report_artifact_events": True,
         },
         "limitations": [(
-            "The headless lead failed before a valid disposition was recorded."
+            "The run was cancelled before a lead disposition became terminal."
+            if state == "cancelled"
+            else "The headless lead failed before a valid disposition was recorded."
             if phase == "lead"
             else "No valid review handoff was produced, so lead disposition was not reached."
         )],
