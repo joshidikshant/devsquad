@@ -2,6 +2,7 @@
   "schema_version": 1,
   "id": "claude-code",
   "display_name": "Claude Code",
+  "executable_paths": [],
   "executable_names": ["claude"],
   "server_name": "devsquad",
   "surface": "claude-code",

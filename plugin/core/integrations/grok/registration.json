@@ -2,6 +2,7 @@
   "schema_version": 1,
   "id": "grok",
   "display_name": "Grok Build",
+  "executable_paths": [],
   "executable_names": ["grok"],
   "server_name": "devsquad",
   "surface": "grok-build",

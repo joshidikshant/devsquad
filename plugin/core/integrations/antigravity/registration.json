@@ -2,6 +2,7 @@
   "schema_version": 1,
   "id": "antigravity",
   "display_name": "Antigravity",
+  "executable_paths": [],
   "executable_names": ["agy", "antigravity"],
   "server_name": "devsquad",
   "surface": "antigravity",

@@ -121,6 +121,7 @@ class MCPIntegrationTemplateTest(unittest.TestCase):
                 "schema_version": 1,
                 "id": "bad",
                 "display_name": "Bad",
+                "executable_paths": [],
                 "executable_names": ["bad"],
                 "server_name": "devsquad",
                 "surface": "bad",

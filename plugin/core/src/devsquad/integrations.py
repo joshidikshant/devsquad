@@ -30,6 +30,7 @@ TEMPLATE_FIELDS = {
     "schema_version",
     "id",
     "display_name",
+    "executable_paths",
     "executable_names",
     "server_name",
     "surface",
@@ -56,6 +57,7 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 class IntegrationTemplate:
     id: str
     display_name: str
+    executable_paths: tuple[str, ...]
     executable_names: tuple[str, ...]
     server_name: str
     surface: str
@@ -81,13 +83,20 @@ class IntegrationTemplate:
         for field in ("id", "display_name", "server_name", "surface"):
             if not isinstance(value[field], str) or not value[field]:
                 raise ContractError(f"integration {field} must be non-empty")
-        for field in ("executable_names", "register_argv", "inspect_argv"):
+        for field in (
+            "executable_paths", "executable_names", "register_argv", "inspect_argv",
+        ):
             sequence = value[field]
-            if (not isinstance(sequence, list) or not sequence
+            allow_empty = field == "executable_paths"
+            if (not isinstance(sequence, list) or (not allow_empty and not sequence)
                     or not all(isinstance(item, str) and item for item in sequence)):
-                raise ContractError(f"integration {field} must be a non-empty string array")
-            if field == "executable_names" and len(set(sequence)) != len(sequence):
-                raise ContractError("integration executable_names must be unique")
+                qualifier = "a string array" if allow_empty else "a non-empty string array"
+                raise ContractError(f"integration {field} must be {qualifier}")
+            if field in {"executable_paths", "executable_names"}:
+                if len(set(sequence)) != len(sequence):
+                    raise ContractError(f"integration {field} must be unique")
+        if not all(Path(item).is_absolute() for item in value["executable_paths"]):
+            raise ContractError("integration executable_paths must be absolute")
         remove_argv = value["remove_argv"]
         if (remove_argv is not None
                 and (not isinstance(remove_argv, list) or not remove_argv
@@ -102,6 +111,7 @@ class IntegrationTemplate:
         return cls(
             id=value["id"],
             display_name=value["display_name"],
+            executable_paths=tuple(value["executable_paths"]),
             executable_names=tuple(value["executable_names"]),
             server_name=value["server_name"],
             surface=value["surface"],
@@ -494,10 +504,13 @@ class LocalIntegrationManager:
         )
 
     def _host_executable(self, template: IntegrationTemplate) -> Path | None:
-        for name in template.executable_names:
-            found = self.which(name)
-            if not found:
-                continue
+        candidates: list[str] = list(template.executable_paths)
+        candidates.extend(
+            found
+            for name in template.executable_names
+            if (found := self.which(name)) is not None
+        )
+        for found in candidates:
             try:
                 resolved = Path(found).resolve(strict=True)
             except OSError:
