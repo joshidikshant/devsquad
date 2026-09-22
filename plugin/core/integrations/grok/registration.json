@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "grok",
+  "display_name": "Grok Build",
+  "executable_names": ["grok"],
+  "server_name": "devsquad",
+  "surface": "grok-build",
+  "register_argv": ["{host_executable}", "mcp", "add", "--scope", "user", "{server_name}", "--", "{squad_executable}", "mcp", "serve", "--surface", "{surface}"],
+  "inspect_argv": ["{host_executable}", "mcp", "list", "--json"],
+  "inspect_format": "json"
+}

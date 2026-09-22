@@ -2,6 +2,7 @@ import contextlib
 import asyncio
 import io
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -18,6 +19,7 @@ sys.path.insert(0, str(CORE / "src"))
 
 from devsquad import cli, mcp_server
 from devsquad.contracts import ContractError
+from devsquad.integrations import IntegrationTemplate, load_integrations
 from devsquad.store import ConflictError
 
 
@@ -64,6 +66,64 @@ assert not any(name == 'mcp' or name.startswith('mcp.') for name in sys.modules)
         self.assertEqual(code, 69)
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("devsquad-core[mcp]", stderr.getvalue())
+
+
+class MCPIntegrationTemplateTest(unittest.TestCase):
+    def test_four_host_templates_render_absolute_argv_without_a_shell(self):
+        templates = {template.id: template for template in load_integrations()}
+        self.assertEqual(set(templates), {
+            "codex", "claude-code", "antigravity", "grok",
+        })
+        host = Path(sys.executable)
+        squad = CORE / "bin/squad"
+        prefixes = {
+            "codex": ("mcp", "add", "devsquad", "--"),
+            "claude-code": (
+                "mcp", "add", "--scope", "user", "devsquad", "--",
+            ),
+            "antigravity": ("mcp", "add", "devsquad", "--"),
+            "grok": (
+                "mcp", "add", "--scope", "user", "devsquad", "--",
+            ),
+        }
+        for integration_id, template in templates.items():
+            with self.subTest(integration=integration_id):
+                command = template.registration_command(host, squad)
+                resolved_host = str(host.resolve(strict=True))
+                resolved_squad = str(squad.resolve(strict=True))
+                self.assertEqual(command[0], resolved_host)
+                self.assertEqual(command[1:1 + len(prefixes[integration_id])], prefixes[integration_id])
+                squad_index = command.index(resolved_squad)
+                self.assertEqual(command[squad_index + 1:squad_index + 4], (
+                    "mcp", "serve", "--surface",
+                ))
+                self.assertEqual(command[squad_index + 4], template.surface)
+                self.assertFalse(any("{" in argument for argument in command))
+                inspection = template.inspection_command(host, squad)
+                self.assertEqual(inspection[0], resolved_host)
+                self.assertIn("mcp", inspection)
+
+    def test_template_schema_rejects_unknown_placeholders_and_fields(self):
+        with tempfile.TemporaryDirectory(prefix="devsquad-template-") as directory:
+            path = Path(directory) / "registration.json"
+            template = {
+                "schema_version": 1,
+                "id": "bad",
+                "display_name": "Bad",
+                "executable_names": ["bad"],
+                "server_name": "devsquad",
+                "surface": "bad",
+                "register_argv": ["{unknown}"],
+                "inspect_argv": ["{host_executable}"],
+                "inspect_format": "text",
+            }
+            path.write_text(json.dumps(template))
+            with self.assertRaisesRegex(ContractError, "unknown integration placeholders"):
+                IntegrationTemplate.load(path)
+            template["unexpected"] = True
+            path.write_text(json.dumps(template))
+            with self.assertRaisesRegex(ContractError, "fields differ"):
+                IntegrationTemplate.load(path)
 
 
 class MCPBridgeTest(unittest.TestCase):
@@ -372,6 +432,22 @@ class InstalledWheelMCPBoundaryTest(unittest.TestCase):
                 [str(squad), "--version"], check=True, text=True, capture_output=True, env=environment,
             )
             self.assertEqual(version.stdout.strip(), "squad 0.1.0")
+            integrations = subprocess.run(
+                [
+                    str(python), "-P", "-c",
+                    "from devsquad.integrations import load_integrations; "
+                    "print(','.join(sorted(item.id for item in load_integrations())))",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+                cwd=root,
+                env=environment,
+            )
+            self.assertEqual(
+                integrations.stdout.strip(),
+                "antigravity,claude-code,codex,grok",
+            )
             missing = subprocess.run(
                 [str(squad), "mcp", "serve"], text=True, capture_output=True, env=environment,
             )

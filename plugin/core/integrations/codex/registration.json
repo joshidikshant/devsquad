@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "codex",
+  "display_name": "Codex",
+  "executable_names": ["codex"],
+  "server_name": "devsquad",
+  "surface": "codex-app",
+  "register_argv": ["{host_executable}", "mcp", "add", "{server_name}", "--", "{squad_executable}", "mcp", "serve", "--surface", "{surface}"],
+  "inspect_argv": ["{host_executable}", "mcp", "get", "{server_name}", "--json"],
+  "inspect_format": "json"
+}
