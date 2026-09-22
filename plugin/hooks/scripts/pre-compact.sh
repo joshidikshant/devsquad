@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prevent recursive hook firing from agent subshells
-if [[ "${DEVSQUAD_HOOK_DEPTH:-0}" -ge 1 ]]; then
+# Prevent recursive hook firing from durable workers and agent subshells.
+if [[ "${DEVSQUAD_WORKER:-0}" != "0" ]] \
+    || [[ "${DEVSQUAD_DELEGATION_DEPTH:-0}" != "0" ]] \
+    || [[ "${DEVSQUAD_HOOK_DEPTH:-0}" != "0" ]]; then
   echo '{"hookSpecificOutput":{"hookEventName":"PreCompact"}}'
   exit 0
 fi

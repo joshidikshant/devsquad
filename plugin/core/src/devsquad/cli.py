@@ -144,7 +144,11 @@ def command_mcp_serve(args: argparse.Namespace) -> int:
     from .mcp_server import MCPDependencyUnavailable, serve_stdio
 
     try:
-        serve_stdio(Path(args.runtime_dir))
+        serve_stdio(
+            Path(args.runtime_dir),
+            caller_surface=args.surface,
+            caller_session_ref=args.session_ref,
+        )
     except MCPDependencyUnavailable as exc:
         # stdout is the MCP protocol channel, including during startup.
         print(str(exc), file=sys.stderr)
@@ -207,6 +211,8 @@ def parser() -> argparse.ArgumentParser:
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
     serve = mcp_sub.add_parser("serve")
     serve.add_argument("--runtime-dir", default=runtime_default)
+    serve.add_argument("--surface")
+    serve.add_argument("--session-ref")
     serve.set_defaults(stream_func=command_mcp_serve)
     return p
 

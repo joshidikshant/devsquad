@@ -6,11 +6,13 @@ worker processes never pay for or depend on the optional transport package.
 
 from __future__ import annotations
 
+import copy
+import os
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from . import __version__
-from .contracts import ContractError, envelope, error_payload
+from .contracts import ContractError, PolicyDenied, envelope, error_payload
 from .service import Service
 from .store import ConflictError
 
@@ -39,9 +41,26 @@ def _server_type() -> Any:
 class MCPBridge:
     """Strict MCP-facing application functions over one saved runtime."""
 
-    def __init__(self, runtime: Path, service: Service | None = None):
+    def __init__(
+        self,
+        runtime: Path,
+        service: Service | None = None,
+        *,
+        caller_surface: str | None = None,
+        caller_session_ref: str | None = None,
+        environment: Mapping[str, str] | None = None,
+    ):
+        for label, value in (
+            ("caller_surface", caller_surface),
+            ("caller_session_ref", caller_session_ref),
+        ):
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ContractError(f"{label} must be a non-empty string or null")
         self.runtime = runtime.resolve()
         self.service = service or Service(runtime)
+        self.caller_surface = caller_surface
+        self.caller_session_ref = caller_session_ref
+        self.environment = os.environ if environment is None else environment
 
     @staticmethod
     def _response(operation: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -52,6 +71,37 @@ class MCPBridge:
         except Exception as exc:
             return envelope(error=error_payload("INTERNAL_ERROR", str(exc)))
 
+    def _mutation_response(
+        self, operation: Callable[[], dict[str, Any]],
+    ) -> dict[str, Any]:
+        def guarded() -> dict[str, Any]:
+            worker = self.environment.get("DEVSQUAD_WORKER", "0")
+            depth = self.environment.get("DEVSQUAD_DELEGATION_DEPTH", "0")
+            if worker not in {"", "0"} or depth not in {"", "0"}:
+                raise PolicyDenied(
+                    "DevSquad worker sessions cannot start or mutate team workflows"
+                )
+            return operation()
+
+        return self._response(guarded)
+
+    def _task_with_bound_origin(self, task: dict[str, Any]) -> dict[str, Any]:
+        if self.caller_surface is None and self.caller_session_ref is None:
+            return task
+        bound = copy.deepcopy(task)
+        if not isinstance(bound, dict):
+            raise ContractError("task must be an object")
+        saved_origin = bound.get("origin", {})
+        if not isinstance(saved_origin, dict):
+            raise ContractError("task origin must be an object")
+        origin = dict(saved_origin)
+        if self.caller_surface is not None:
+            origin["surface"] = self.caller_surface
+        if self.caller_session_ref is not None:
+            origin["session_ref"] = self.caller_session_ref
+        bound["origin"] = origin
+        return bound
+
     def start(
         self,
         task: dict[str, Any],
@@ -60,8 +110,12 @@ class MCPBridge:
     ) -> dict[str, Any]:
         """Validate and save a run, returning without observing its worker."""
 
-        return self._response(
-            lambda: self.service.start(task, idempotency_key, supersedes_run_id)
+        return self._mutation_response(
+            lambda: self.service.start(
+                self._task_with_bound_origin(task),
+                idempotency_key,
+                supersedes_run_id,
+            )
         )
 
     def status(self, run_id: str) -> dict[str, Any]:
@@ -123,14 +177,14 @@ class MCPBridge:
     def cancel(self, run_id: str) -> dict[str, Any]:
         """Persist cancellation intent without observing worker completion."""
 
-        return self._response(lambda: self.service.cancel(run_id))
+        return self._mutation_response(lambda: self.service.cancel(run_id))
 
     def resume(
         self, run_id: str, recovery: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Reconcile and safely resume a saved run."""
 
-        return self._response(lambda: self.service.resume(run_id, recovery))
+        return self._mutation_response(lambda: self.service.resume(run_id, recovery))
 
     def handoff_claim(
         self,
@@ -141,7 +195,7 @@ class MCPBridge:
     ) -> dict[str, Any]:
         """Claim or renew one fenced host handoff."""
 
-        return self._response(
+        return self._mutation_response(
             lambda: self.service.handoff_claim(
                 run_id, expected_version, owner, prior_claim,
             )
@@ -155,16 +209,29 @@ class MCPBridge:
     ) -> dict[str, Any]:
         """Submit a decision against a current fenced host claim."""
 
-        return self._response(
+        return self._mutation_response(
             lambda: self.service.handoff_complete(run_id, claim, decision)
         )
 
 
-def build_server(runtime: Path, service: Service | None = None) -> Any:
+def build_server(
+    runtime: Path,
+    service: Service | None = None,
+    *,
+    caller_surface: str | None = None,
+    caller_session_ref: str | None = None,
+    environment: Mapping[str, str] | None = None,
+) -> Any:
     """Build the local stdio server without starting it."""
 
     server_type = _server_type()
-    bridge = MCPBridge(runtime, service)
+    bridge = MCPBridge(
+        runtime,
+        service,
+        caller_surface=caller_surface,
+        caller_session_ref=caller_session_ref,
+        environment=environment,
+    )
     server = server_type(
         "DevSquad",
         version=__version__,
@@ -244,7 +311,16 @@ def build_server(runtime: Path, service: Service | None = None) -> Any:
     return server
 
 
-def serve_stdio(runtime: Path) -> None:
+def serve_stdio(
+    runtime: Path,
+    *,
+    caller_surface: str | None = None,
+    caller_session_ref: str | None = None,
+) -> None:
     """Run the local MCP server; stdout is owned exclusively by the SDK."""
 
-    build_server(runtime).run()
+    build_server(
+        runtime,
+        caller_surface=caller_surface,
+        caller_session_ref=caller_session_ref,
+    ).run()

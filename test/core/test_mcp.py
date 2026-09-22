@@ -51,7 +51,9 @@ assert not any(name == 'mcp' or name.startswith('mcp.') for name in sys.modules)
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 code = cli.main(["mcp", "serve", "--runtime-dir", str(runtime)])
         self.assertEqual((code, stdout.getvalue(), stderr.getvalue()), (0, "", ""))
-        serve.assert_called_once_with(runtime)
+        serve.assert_called_once_with(
+            runtime, caller_surface=None, caller_session_ref=None,
+        )
 
     def test_missing_sdk_is_actionable_and_keeps_stdout_clean(self):
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -70,7 +72,9 @@ class MCPBridgeTest(unittest.TestCase):
         self.runtime = Path(self.temp.name) / "runtime"
         (self.runtime / "artifacts").mkdir(parents=True)
         self.service = mock.Mock()
-        self.bridge = mcp_server.MCPBridge(self.runtime, self.service)
+        self.bridge = mcp_server.MCPBridge(
+            self.runtime, self.service, environment={},
+        )
 
     def tearDown(self):
         self.temp.cleanup()
@@ -194,6 +198,76 @@ class MCPBridgeTest(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "CONFLICT")
         self.assertIn("escapes", payload["error"]["message"])
 
+    def test_configured_origin_is_saved_as_provenance_not_authorization(self):
+        task = {"schema_version": 1, "origin": {"surface": "user-label"}}
+        self.service.start.return_value = {
+            "run_id": "run-1", "state": "queued", "created": True,
+        }
+        bridge = mcp_server.MCPBridge(
+            self.runtime,
+            self.service,
+            caller_surface="codex-app",
+            caller_session_ref="thread-7",
+            environment={},
+        )
+        payload = bridge.start(task, "key-1")
+        self.assertTrue(payload["ok"])
+        submitted = self.service.start.call_args.args[0]
+        self.assertEqual(submitted["origin"], {
+            "surface": "codex-app", "session_ref": "thread-7",
+        })
+        self.assertEqual(task["origin"], {"surface": "user-label"})
+
+        self.service.reset_mock()
+        user_label_only = mcp_server.MCPBridge(
+            self.runtime,
+            self.service,
+            caller_surface="worker",
+            environment={},
+        )
+        self.service.start.return_value = {
+            "run_id": "run-2", "state": "queued", "created": True,
+        }
+        self.assertTrue(user_label_only.start(task, "key-2")["ok"])
+        self.service.start.assert_called_once()
+
+    def test_worker_environment_rejects_every_mutation_but_allows_inspection(self):
+        worker_bridge = mcp_server.MCPBridge(
+            self.runtime,
+            self.service,
+            environment={
+                "DEVSQUAD_WORKER": "1",
+                "DEVSQUAD_RUN_ID": "run-1",
+                "DEVSQUAD_DELEGATION_DEPTH": "1",
+            },
+        )
+        mutations = [
+            lambda: worker_bridge.start({"schema_version": 1}, "key-1"),
+            lambda: worker_bridge.cancel("run-1"),
+            lambda: worker_bridge.resume("run-1"),
+            lambda: worker_bridge.handoff_claim("run-1", 2, "host"),
+            lambda: worker_bridge.handoff_complete("run-1", {}, {}),
+        ]
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                payload = mutate()
+                self.assertFalse(payload["ok"])
+                self.assertEqual(payload["error"]["code"], "POLICY_DENIED")
+        for method in (
+            self.service.start,
+            self.service.cancel,
+            self.service.resume,
+            self.service.handoff_claim,
+            self.service.handoff_complete,
+        ):
+            method.assert_not_called()
+
+        self.service.status.return_value = {
+            "run_id": "run-1", "state": "running", "version": 2,
+        }
+        self.assertTrue(worker_bridge.status("run-1")["ok"])
+        self.service.status.assert_called_once_with("run-1")
+
 
 @unittest.skipUnless(importlib.util.find_spec("mcp"), "optional MCP SDK is not installed")
 class OfficialSDKConformanceTest(unittest.TestCase):
@@ -205,7 +279,9 @@ class OfficialSDKConformanceTest(unittest.TestCase):
         service.start.return_value = {"run_id": "run-1", "state": "queued", "created": True}
         service.cancel.return_value = {"run_id": "run-1", "state": "cancelling", "version": 3}
         with tempfile.TemporaryDirectory(prefix="devsquad-sdk-server-") as directory:
-            server = mcp_server.build_server(Path(directory), service)
+            server = mcp_server.build_server(
+                Path(directory), service, environment={},
+            )
 
             async def probe():
                 async with Client(server) as client:
