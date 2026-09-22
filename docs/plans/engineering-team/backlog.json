@@ -11,7 +11,7 @@
   "execution_brief": "SOL-HANDOFF.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
-  "next_milestone": "M3",
+  "next_milestone": "M4",
   "milestones": [
     {
       "id": "M1",
@@ -82,7 +82,7 @@
       "id": "M3",
       "title": "Usable branch review from terminal",
       "depends_on": ["M2"],
-      "status": "in_progress",
+      "status": "complete",
       "acceptance_section": "M3 — Ship a useful branch review",
       "evidence": [
         {
@@ -155,6 +155,15 @@
           "outcome": "Succeeded with one supported finding, a passing required check, verified observed identity, 53,700 native-reported tokens and all five terminal report hashes; M3 remains in progress for waiting/failure reports, headless lead and final audit",
           "artifact": "evidence/M3-native-codex-review-2026-09-17.json",
           "recorded_at": "2026-09-17T21:34:40+05:30",
+          "availability": "portable_redacted"
+        },
+        {
+          "kind": "milestone_acceptance",
+          "revision": "1737667",
+          "command_or_action": "188 core tests with ResourceWarning promoted to error, 202 shell assertions, bounded reviewer/lead fallback, headless budget terminalization, transactional unknown-capacity trial limit and independent audit closure",
+          "outcome": "All M3 branch-review, routing, selection, accounting, headless-lead, terminal-report and live Codex acceptance gates are covered; four independent-audit findings are fixed with direct regressions",
+          "artifact": "evidence/M3-branch-review-2026-09-22.json",
+          "recorded_at": "2026-09-22T20:42:05+05:30",
           "availability": "portable_redacted"
         }
       ],

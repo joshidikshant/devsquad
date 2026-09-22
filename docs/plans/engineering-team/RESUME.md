@@ -2,7 +2,7 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 17, 2026
+## Current position — September 22, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` remains the published runtime
@@ -22,32 +22,26 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   bounded target. `ddb6f51` fixes both: lease authorization now samples time
   after acquiring the SQLite write transaction, and public cancel resumes an
   interrupted `recovery_cleanup`. Both have deterministic regressions.
-- M3 is in progress through `9478796`. `ca55990` adds strict deterministic
-  profile/policy routing, alias binding snapshots, pins/fallbacks, independent
-  reviewer selection and typed pool capacity. `1c7b614` freezes those exact
-  bytes and decisions during public preflight. `cd9a881` resolves base/target
-  OIDs and creates a detached run-owned review worktree without changing the
-  submitted checkout, index or HEAD. `a756307` defines strict review/check/
-  evaluation evidence, `97d2c6c` runs the durable offline reviewer and trusted
-  checks, and `30cf49e` completes fenced host accept/revise/reject continuation,
-  bounded review retries and terminal JSON/Markdown/event/manifest reports.
-  `459ff3f` adds the public native Codex reviewer: it freezes the verified CLI,
-  launches one ephemeral read-only app-server turn inside the existing M2
-  process group, verifies observed model/effort/sandbox identity, accepts only
-  strict candidate-bound JSON, and records native usage. `e10db94` pins the
-  compatible bundled Codex 0.153.4 runtime and isolates each review from old
-  sessions, config, plugins, skills and MCPs while exposing only existing
-  subscription auth. `9478796` makes the structured-output schema provider
-  compatible. The current gate is 169 core tests with `ResourceWarning`
-  promoted to failure plus 202 Bash assertions.
+- M3 is accepted at `1737667`. The branch-review path now includes frozen
+  routing/input, native and offline reviewers, trusted checks, fenced host and
+  headless lead disposition, complete waiting/terminal reports, cumulative
+  budgets, transactional pool capacity and bounded frozen fallbacks. The final
+  gate is 188 core tests with `ResourceWarning` promoted to failure plus 202
+  Bash assertions. See [M3-STATUS.md](M3-STATUS.md) and the
+  [portable closeout evidence](evidence/M3-branch-review-2026-09-22.json).
 - The bounded real public `branch-review` gate passed at `9478796` with
   verified gpt-5.5/low, read-only ephemeral execution, one supported finding,
   a passing required check, native-reported usage and all five terminal report
   hashes. See the [portable redacted evidence](evidence/M3-native-codex-review-2026-09-17.json).
-  M3 still needs rich reports for early terminal failures, materialized waiting
-  handoff reports and the configured headless-lead path before milestone
-  acceptance.
-- Current provider readiness is external to M2: Claude CLI is not logged in;
+  That live receipt remains the M3 provider gate; closeout used offline tests
+  and did not consume another provider turn.
+- The independent M3 audit at `84deb77` found four runtime/reporting defects.
+  `1737667` fixes all four with direct regressions: pre-launch recovery no
+  longer consumes a fallback/budget slot, headless lead exhaustion terminalizes,
+  unknown capacity allows one unresolved trial, and later failure/cancellation
+  retains earlier attempts and dispositions. A requested follow-up agent rerun
+  hit the shared Plus limit; the 188-test complete gate is green after the fixes.
+- Last-observed provider readiness outside accepted M3: Claude CLI is not logged in;
   Grok CLI authentication expired; Gemini CLI's individual-account path is
   unsupported and its supported successor is Antigravity; Antigravity is
   authenticated but headless execution still lacks scoped permission/trust.
@@ -60,7 +54,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   planning agents all hit the same Plus limit; continue locally until shared
   agent capacity is restored, then use only bounded leaf reviews.
 - Full assignment remains **M1–M7 plus C1**, as specified in
-  [SOL-HANDOFF.md](SOL-HANDOFF.md). M3 is next.
+  [SOL-HANDOFF.md](SOL-HANDOFF.md). M4 is next; M5 may proceed after the frozen
+  M3 service boundary and can be developed alongside M4 in isolated slices.
 
 ## Completed and preserved
 
@@ -72,9 +67,9 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 169 tests passed through the provider-compatible M3 native Codex reviewer path |
+| Python core discovery | 188 tests passed through M3 closeout with warnings promoted to errors |
 | Bash 3.2 regression suite | 10 test files, 202 assertions passed |
-| Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 5 |
+| Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 8 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
 | Integrated native adapter proof | Passed at `97a10f0`; gpt-5.5/low, read-only, correlated completion and confirmed process-group cleanup |
 | M2 crash/race matrix | Real subprocess interruptions plus independent-process start, writer, cancel, import and host-handoff races passed at `ddb6f51` |
@@ -84,6 +79,7 @@ Verified at the implementation/evidence checkpoints above:
 | M3 host disposition/reporting | Accept/reject/revise, required-check blocking, retry budgets, stale claims, crash resume and five terminal reports passed at `30cf49e` |
 | M3 native Codex reviewer | Public start, exact identity verification, ephemeral read-only structured output, native usage and four provider-fault classes passed offline at `459ff3f` |
 | M3 live public review | Passed at `9478796`; gpt-5.5/low found one supported regression, the required check passed, host acceptance terminalized succeeded and five report hashes were retained |
+| M3 closeout | Waiting/failure reports, headless leadership, cumulative budgets, live pool fencing, runtime fallbacks and all four independent-audit fixes pass at `1737667` |
 
 The first two saved-probe invocations failed before `Popen` because of
 probe-only path/field defects, so neither launched Codex nor consumed a model
@@ -94,19 +90,20 @@ The successful run retained separate stderr files of 138,030 and
 285,644 bytes, supporting the diagnosis that an undrained stderr pipe caused
 the earlier apparent nonresponses.
 
-The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md) and
-[M2-STATUS.md](M2-STATUS.md). [backlog.json](backlog.json) marks both complete
-and M3 next. Unauthenticated, unsupported or permission-blocked provider paths
-are not advertised as verified.
+The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md),
+[M2-STATUS.md](M2-STATUS.md) and [M3-STATUS.md](M3-STATUS.md).
+[backlog.json](backlog.json) marks all three complete and M4 next.
+Unauthenticated, unsupported or permission-blocked provider paths are not
+advertised as verified.
 
 ## Exact next work
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Close the remaining M3 contract gaps: rich terminal reports for failures
-   before host disposition, materialized waiting handoff reports, and the
-   configured headless-lead path. Rerun the full core/Bash gates and audit M3
-   against its acceptance section before marking it complete.
+2. Execute M4 from [IMPLEMENTATION.md](IMPLEMENTATION.md): pin/test the optional
+   MCP SDK without coupling it to core CLI imports, map the saved-run service
+   operations to strict stdio tools, enforce worker recursion guards, and add
+   idempotent local integration/doctor evidence.
 3. Keep Claude/Grok/Antigravity probes paused until their normal login or trust
    blockers are resolved. They do not block the independent Codex M3 gate.
 
