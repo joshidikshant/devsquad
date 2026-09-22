@@ -138,6 +138,20 @@ def command_handoff_complete(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).handoff_complete(args.run, claim, decision)), 0
 
 
+def command_mcp_serve(args: argparse.Namespace) -> int:
+    # Keep this import inside the explicitly requested command.  Importing the
+    # ordinary CLI must remain valid when the optional SDK is absent.
+    from .mcp_server import MCPDependencyUnavailable, serve_stdio
+
+    try:
+        serve_stdio(Path(args.runtime_dir))
+    except MCPDependencyUnavailable as exc:
+        # stdout is the MCP protocol channel, including during startup.
+        print(str(exc), file=sys.stderr)
+        return 69
+    return 0
+
+
 class ContractParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise ContractError(message)
@@ -189,12 +203,19 @@ def parser() -> argparse.ArgumentParser:
     complete.add_argument("--json", action="store_true")
     complete.add_argument("--runtime-dir", default=runtime_default)
     complete.set_defaults(func=command_handoff_complete)
+    mcp = sub.add_parser("mcp")
+    mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
+    serve = mcp_sub.add_parser("serve")
+    serve.add_argument("--runtime-dir", default=runtime_default)
+    serve.set_defaults(stream_func=command_mcp_serve)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parser().parse_args(argv)
+        if hasattr(args, "stream_func"):
+            return args.stream_func(args)
         response, code = args.func(args)
         print(json.dumps(response, sort_keys=True))
         return code
