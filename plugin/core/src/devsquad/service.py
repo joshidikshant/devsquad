@@ -21,7 +21,11 @@ from .contracts import (
     ContractError,
     ProfileUnsupported,
 )
-from .reports import build_early_terminal_reports, build_terminal_reports
+from .reports import (
+    build_early_terminal_reports,
+    build_terminal_reports,
+    project_branch_review_history,
+)
 from .router import capacity_with_live_reservations, load_routing
 from .store import (
     ConflictError,
@@ -93,19 +97,16 @@ class Service:
             })
         return prepared
 
-    def _paused_review_terminal_artifacts(
-        self,
+    @staticmethod
+    def _saved_review_progress(
         store: Store,
         run_id: str,
         snapshot: dict[str, Any],
         handoff: HandoffSnapshot | None,
-        *,
-        state: str,
-        phase: str,
-        error: dict[str, Any] | None,
-    ) -> list[dict[str, Any]]:
-        """Materialize complete M3 reports before a paused run terminalizes."""
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Project every persisted attempt and completed disposition in DB order."""
         history = store.branch_review_history(run_id)
+        _, dispositions = project_branch_review_history(history, snapshot)
         frozen_handoffs = {
             item["handoff_id"]: {
                 "handoff_id": item["handoff_id"],
@@ -133,7 +134,7 @@ class Service:
         artifacts_by_name = {artifact["name"]: artifact for artifact in artifacts}
         failed_by_id = {
             attempt["id"]: attempt
-            for attempt in self._failed_fallback_attempts(
+            for attempt in Service._failed_fallback_attempts(
                 store, run_id, snapshot,
             )
         }
@@ -175,6 +176,24 @@ class Service:
                     "status": "succeeded",
                     **evidence["attempt"],
                 })
+        return attempts, dispositions
+
+    def _paused_review_terminal_artifacts(
+        self,
+        store: Store,
+        run_id: str,
+        snapshot: dict[str, Any],
+        handoff: HandoffSnapshot | None,
+        *,
+        state: str,
+        phase: str,
+        error: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Materialize complete M3 reports before a paused run terminalizes."""
+        attempts, dispositions = self._saved_review_progress(
+            store, run_id, snapshot, handoff,
+        )
+        artifacts = store.artifacts_for_run(run_id)
         reports = build_early_terminal_reports(
             run_id=run_id,
             state=state,
@@ -186,6 +205,7 @@ class Service:
             phase=phase,
             error=error,
             prior_attempts=attempts,
+            prior_dispositions=dispositions,
         )
         prepared = []
         for name in sorted(reports):
@@ -1085,10 +1105,32 @@ class Service:
         )
         if saved is None:
             queued = store.queue_headless_lead(run_id, run["version"])
-            if queued["action"] != "queued":
-                raise ConflictError(
-                    "headless lead worker invocation budget is exhausted"
+            if queued["action"] == "budget_exhausted":
+                error = {
+                    "error": "BUDGET_EXHAUSTED",
+                    "message": "headless lead worker invocation budget is exhausted",
+                }
+                terminal_artifacts = self._paused_review_terminal_artifacts(
+                    store,
+                    run_id,
+                    snapshot,
+                    handoff,
+                    state="failed",
+                    phase="lead",
+                    error=error,
                 )
+                version = store.fail_queued_budget(
+                    run_id, run["version"], error, terminal_artifacts,
+                )
+                return {
+                    "action": "budget_exhausted",
+                    "state": "failed",
+                    "version": version,
+                    "replayed_continuation": False,
+                    "launch": None,
+                }
+            if queued["action"] != "queued":
+                raise ConflictError("headless lead handoff was not queueable")
             prepared = store.run(run_id)
             package, digest = self._verified_package(prepared)
             return {

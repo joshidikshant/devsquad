@@ -894,6 +894,54 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertEqual(receipt["attempts"][0]["status"], "failed")
         self.assertEqual(receipt["attempts"][1]["role"], "reviewer")
 
+    def test_recovered_prelaunch_reservation_reuses_the_same_profile_and_budget(self):
+        self.task["budget"]["max_worker_invocations"] = 1
+        with patch.object(self.service, "_spawn_daemon"):
+            started = self.service.start(
+                self.task,
+                "recover-review-reservation",
+                _internal_review_fixture=self.fixture,
+            )
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            run = store.run(started["run_id"])
+            snapshot = json.loads(run["mutable_snapshot"])
+            selected = snapshot["routing"]["roles"]["reviewer"]["selected"]
+            abandoned = store.reserve_attempt(
+                started["run_id"],
+                run["version"],
+                "abandoned-review-supervisor",
+                run["package_digest"],
+                "reviewer",
+                account_pool_id=selected["profile"]["account_pool_id"],
+                profile_id=selected["profile_id"],
+                profile_index=0,
+            )
+            recovered_version = store.recover_launching(
+                started["run_id"], abandoned.version,
+            )
+            self.assertEqual(store.worker_invocations(started["run_id"]), 0)
+        finally:
+            store.close()
+
+        resumed = self.service.resume(started["run_id"])
+        self.assertEqual(resumed["disposition"], "continued")
+        self.assertTrue(resumed["launched"])
+        self.assertGreater(recovered_version, abandoned.version)
+        waiting = self.wait_state(started["run_id"], {"awaiting_host", "failed"})
+        self.assertEqual(waiting["state"], "awaiting_host")
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            attempts = store.attempts_for_run(started["run_id"])
+            self.assertEqual(
+                [(attempt["status"], attempt["profile_index"])
+                 for attempt in attempts],
+                [("recovery_required", 0), ("finished", 0)],
+            )
+            self.assertEqual(store.worker_invocations(started["run_id"]), 1)
+        finally:
+            store.close()
+
     def test_fallback_none_does_not_retry_a_failed_reviewer(self):
         self.configure_reviewer_fallback()
         self.task["routing"]["overrides"] = {
@@ -970,6 +1018,105 @@ class DurableBranchReviewTest(unittest.TestCase):
             ["lead-fixture-fail", "lead-fallback"],
         )
         self.assertEqual(receipt["lead"]["attempts"][0]["status"], "failed")
+
+    def test_reviewer_fallback_exhausts_headless_lead_budget_terminally(self):
+        self.configure_reviewer_fallback()
+        profiles = json.loads((self.repo / "devsquad/profiles.json").read_text())
+        lead = dict(profiles["profiles"][-1])
+        lead.update({
+            "id": "budgeted-headless-lead",
+            "model_family": "fixture-lead-family",
+            "model_id": "fixture-lead-model",
+        })
+        profiles["profiles"].append(lead)
+        policy = json.loads((self.repo / "devsquad/policy.json").read_text())
+        policy["roles"]["lead"] = [
+            {"kind": "profile", "id": lead["id"]},
+        ]
+        (self.repo / "devsquad/profiles.json").write_text(
+            json.dumps(profiles, sort_keys=True) + "\n"
+        )
+        (self.repo / "devsquad/policy.json").write_text(
+            json.dumps(policy, sort_keys=True) + "\n"
+        )
+        subprocess.run(["git", "-C", str(self.repo), "add", "devsquad"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", "budgeted lead"],
+            check=True,
+        )
+        self.task["project"]["target_ref"] = self.git_text("rev-parse", "HEAD").strip()
+        self.task["lead"] = {"mode": "headless"}
+        self.task["budget"]["max_worker_invocations"] = 2
+        started = self.service.start(
+            self.task,
+            "reviewer-fallback-exhausts-lead",
+            _internal_review_fixture=self.fixture,
+            _internal_lead_fixture={
+                "disposition": "accept",
+                "reason": "This lead must not launch beyond the budget.",
+            },
+        )
+        completed = self.wait_state(started["run_id"], {"succeeded", "failed"})
+        self.assertEqual(completed["state"], "failed")
+        artifacts = {
+            artifact["name"]: artifact
+            for artifact in self.service.result(started["run_id"])["artifacts"]
+        }
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["error"]["error"], "BUDGET_EXHAUSTED")
+        self.assertEqual(receipt["phase"], "lead")
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 2)
+        self.assertEqual(len(receipt["attempts"]), 2)
+        self.assertEqual(receipt["lead"]["status"], "failed")
+
+    def test_cancelled_later_revision_keeps_prior_attempt_and_disposition(self):
+        marker = self.root / "slow-second-review"
+        self.task["budget"]["max_revisions"] = 1
+        self.task["budget"]["max_worker_invocations"] = 2
+        self.task["checks"] = [{
+            "id": "slow-second-check",
+            "argv": [
+                sys.executable,
+                "-c",
+                "from pathlib import Path; import sys,time; p=Path(sys.argv[1]); "
+                "time.sleep(30) if p.exists() else p.write_text('first')",
+                str(marker),
+            ],
+            "cwd": ".",
+            "timeout_seconds": 40,
+            "required_to_pass": False,
+        }]
+        run_id, first_wait = self.start_waiting("cancel-second-review")
+        first_claim = self.service.handoff_claim(
+            run_id, first_wait["version"], "host-first-revision",
+        )
+        revise = self.decision(
+            first_claim["handoff"]["packet"],
+            "revise-before-cancel",
+            "revise",
+            "Run the frozen review one more time.",
+        )
+        requeued = self.service.handoff_complete(
+            run_id, first_claim["claim"], revise,
+        )
+        self.assertTrue(requeued["launched"])
+        self.wait_state(run_id, {"running"})
+        cancelled = self.service.cancel(run_id)
+        self.assertIn(cancelled["state"], {"cancelling", "cancelled"})
+        self.assertEqual(self.wait_state(run_id, {"cancelled"})["state"], "cancelled")
+        artifacts = {
+            artifact["name"]: artifact
+            for artifact in self.service.result(run_id)["artifacts"]
+        }
+        receipt = json.loads(Path(artifacts["receipt.json"]["path"]).read_text())
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 2)
+        self.assertEqual(len(receipt["attempts"]), 2)
+        self.assertEqual(
+            [item["disposition"] for item in receipt["dispositions"]],
+            ["revise"],
+        )
+        self.assertEqual(receipt["attempts"][0]["status"], "succeeded")
+        self.assertEqual(receipt["attempts"][1]["status"], "cancelled")
 
     def test_headless_lead_is_a_second_fenced_attempt_and_terminalizes_automatically(self):
         self.configure_fixture_headless()

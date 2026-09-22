@@ -203,6 +203,7 @@ def build_early_terminal_reports(
     error: dict[str, Any] | None,
     attempt: dict[str, Any] | None = None,
     prior_attempts: list[dict[str, Any]] | None = None,
+    prior_dispositions: list[dict[str, Any]] | None = None,
 ) -> dict[str, bytes]:
     """Build the M3 report set when no valid handoff/lead decision exists."""
     if not isinstance(run_id, str) or not run_id:
@@ -230,6 +231,10 @@ def build_early_terminal_reports(
     if not isinstance(prior, list) or not all(
             isinstance(item, dict) for item in prior):
         raise ContractError("early terminal prior attempts are invalid")
+    dispositions = [] if prior_dispositions is None else prior_dispositions
+    if not isinstance(dispositions, list) or not all(
+            isinstance(item, dict) for item in dispositions):
+        raise ContractError("early terminal prior dispositions are invalid")
     if attempt is not None:
         if not isinstance(attempt, dict) or not isinstance(attempt.get("id"), str):
             raise ContractError("early terminal report attempt is invalid")
@@ -284,7 +289,7 @@ def build_early_terminal_reports(
         "evaluation": None,
         "criteria": criteria,
         "attempts": prior + ([attempt_projection] if attempt_projection else []),
-        "dispositions": [],
+        "dispositions": dispositions,
         "lead": {
             "mode": task.get("lead", {}).get("mode"),
             "status": (
@@ -430,6 +435,16 @@ def _history(
         })
         prior_sequence = entry["sequence"]
     return attempts, dispositions
+
+
+def project_branch_review_history(
+    entries: list[dict[str, Any]],
+    snapshot: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Validate and project any completed review revisions for early reports."""
+    if entries == []:
+        return [], []
+    return _history(entries, snapshot)
 
 
 def _markdown(receipt: dict[str, Any]) -> str:

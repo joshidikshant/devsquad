@@ -11,6 +11,24 @@ from .store import ConflictError, Store, canonical_json
 from .supervisor import Supervisor
 
 
+def _is_saved_fallback_failure(attempt) -> bool:
+    encoded = attempt.get("output_metadata")
+    if not encoded:
+        return False
+    try:
+        metadata = json.loads(encoded)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ConflictError("saved attempt metadata is invalid") from exc
+    if not isinstance(metadata, dict):
+        raise ConflictError("saved attempt metadata is invalid")
+    failure = metadata.get("failure")
+    if failure is None:
+        return False
+    if not isinstance(failure, dict):
+        raise ConflictError("saved fallback failure is invalid")
+    return True
+
+
 def _profile_index(
     store: Store,
     run_id: str,
@@ -19,7 +37,10 @@ def _profile_index(
 ) -> int:
     attempts = store.attempts_for_run(run_id)
     if handoff is None:
-        return sum(attempt.get("role") == role for attempt in attempts)
+        return sum(
+            attempt.get("role") == role and _is_saved_fallback_failure(attempt)
+            for attempt in attempts
+        )
     reviewer_id = handoff.packet.get("attempt_id")
     reviewer = next(
         (attempt for attempt in attempts if attempt["id"] == reviewer_id), None,
@@ -32,12 +53,14 @@ def _profile_index(
         for attempt in attempts:
             if attempt["id"] == reviewer_id:
                 seen = True
-            elif seen and attempt.get("role") == "reviewer":
+            elif (seen and attempt.get("role") == "reviewer"
+                    and _is_saved_fallback_failure(attempt)):
                 used += 1
         return used
     return sum(
         attempt.get("role") == "lead"
         and attempt["created_at"] >= reviewer["created_at"]
+        and _is_saved_fallback_failure(attempt)
         for attempt in attempts
     )
 

@@ -232,7 +232,13 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(row[1], 13)
 
     @staticmethod
-    def routed_snapshot(wall_seconds=300):
+    def routed_snapshot(
+        wall_seconds=300,
+        *,
+        max_concurrency=1,
+        status="available",
+        unknown_capacity_policy="allow_bounded",
+    ):
         return {
             "task": {"budget": {"wall_seconds": wall_seconds}},
             "routing": {
@@ -244,7 +250,11 @@ class StoreTest(unittest.TestCase):
                     },
                 },
                 "capacity": {
-                    "shared-pool": {"max_concurrency": 1},
+                    "shared-pool": {
+                        "max_concurrency": max_concurrency,
+                        "status": status,
+                        "unknown_capacity_policy": unknown_capacity_policy,
+                    },
                 },
             },
         }
@@ -308,6 +318,54 @@ class StoreTest(unittest.TestCase):
             account_pool_id="shared-pool",
         )
         self.assertEqual(released.run_id, second.run_id)
+
+    def test_unknown_pool_allows_only_one_transactional_trial(self):
+        linked = self.root / "unknown-pool-linked"
+        subprocess.run(
+            ["git", "-C", str(self.repo), "worktree", "add", "--detach", "-q",
+             str(linked), "HEAD"],
+            check=True,
+        )
+        snapshot = self.routed_snapshot(max_concurrency=3, status="unknown")
+        claims = [
+            self.store.claim_start(
+                repository,
+                key,
+                {"task": {"budget": {"wall_seconds": 300}}},
+                "owner",
+            )
+            for repository, key in (
+                (self.repo, "unknown-pool-first"),
+                (linked, "unknown-pool-second"),
+            )
+        ]
+        versions = [
+            self.store.complete_preparation(
+                claim.run_id,
+                claim.fencing_token,
+                snapshot,
+                worktree_path=str(repository),
+            )
+            for claim, repository in zip(claims, (self.repo, linked))
+        ]
+        self.store.reserve_attempt(
+            claims[0].run_id,
+            versions[0],
+            "unknown-supervisor-one",
+            "package",
+            "reviewer",
+            account_pool_id="shared-pool",
+        )
+        with self.assertRaisesRegex(ConflictError, "account pool concurrency"):
+            self.store.reserve_attempt(
+                claims[1].run_id,
+                versions[1],
+                "unknown-supervisor-two",
+                "package",
+                "reviewer",
+                account_pool_id="shared-pool",
+            )
+        self.assertEqual(self.store.active_pool_counts(), {"shared-pool": 1})
 
     def test_wall_budget_counts_preflight_and_prior_attempts_cumulatively(self):
         claim = self.store.claim_start(

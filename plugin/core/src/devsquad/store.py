@@ -680,9 +680,7 @@ class Store:
         except (KeyError, TypeError, json.JSONDecodeError):
             max_invocations = None
         if type(max_invocations) is int:
-            launched = self.connection.execute(
-                "SELECT COUNT(*) FROM attempts WHERE run_id=?", (run_id,),
-            ).fetchone()[0]
+            launched = self.worker_invocations(run_id)
             if launched >= max_invocations:
                 raise BudgetExhausted("worker invocation budget is exhausted")
         wall_seconds = self._wall_seconds_from_run(run)
@@ -703,6 +701,13 @@ class Store:
                 "GROUP BY account_pool_id"
             )
         }
+
+    def worker_invocations(self, run_id: str) -> int:
+        """Count attempts whose durable runner actually crossed the launch fence."""
+        return self.connection.execute(
+            "SELECT COUNT(*) FROM attempts WHERE run_id=? AND pid IS NOT NULL",
+            (run_id,),
+        ).fetchone()[0]
 
     def reserve_attempt(
         self,
@@ -757,6 +762,10 @@ class Store:
                     capacity = snapshot["routing"]["capacity"][account_pool_id]
                     expected_pool = selected["profile"]["account_pool_id"]
                     max_concurrency = capacity["max_concurrency"]
+                    capacity_status = capacity.get("status", "available")
+                    unknown_policy = capacity.get(
+                        "unknown_capacity_policy", "allow_bounded",
+                    )
                 except ConflictError:
                     raise
                 except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
@@ -765,16 +774,28 @@ class Store:
                     ) from exc
                 if (expected_pool != account_pool_id
                         or type(max_concurrency) is not int
-                        or max_concurrency < 1):
+                        or max_concurrency < 1
+                        or capacity_status not in {
+                            "available", "exhausted", "unknown",
+                        }
+                        or unknown_policy not in {"allow_bounded", "block"}):
                     raise ConflictError(
                         "attempt account pool does not match frozen routing"
                     )
+                if capacity_status == "exhausted":
+                    raise ConflictError("account pool capacity is exhausted")
+                if (capacity_status == "unknown"
+                        and unknown_policy == "block"):
+                    raise ConflictError("unknown account pool capacity is blocked")
+                effective_concurrency = (
+                    1 if capacity_status == "unknown" else max_concurrency
+                )
                 in_flight = self.connection.execute(
                     "SELECT COUNT(*) FROM attempts WHERE account_pool_id=? "
                     "AND status IN ('reserved','running','cancelling','ownership_ambiguous')",
                     (account_pool_id,),
                 ).fetchone()[0]
-                if in_flight >= max_concurrency:
+                if in_flight >= effective_concurrency:
                     raise ConflictError("account pool concurrency is full")
             elif profile_id is not None or profile_index is not None:
                 raise ContractError("attempt profile requires an account pool")
@@ -1358,9 +1379,7 @@ class Store:
             ).fetchone()
             if active:
                 raise ConflictError("headless lead already has an active supervisor")
-            invocations = self.connection.execute(
-                "SELECT COUNT(*) FROM attempts WHERE run_id=?", (run_id,),
-            ).fetchone()[0]
+            invocations = self.worker_invocations(run_id)
             if invocations >= budget:
                 self.connection.execute("COMMIT")
                 return {
@@ -2598,7 +2617,8 @@ class Store:
             run = self.connection.execute(
                 "SELECT state,phase,version FROM runs WHERE id=?", (run_id,),
             ).fetchone()
-            if (not run or run["state"] != "queued" or run["phase"] is not None
+            if (not run or run["state"] not in {"queued", "awaiting_host"}
+                    or run["phase"] is not None
                     or run["version"] != expected_version):
                 raise ConflictError("budget exhaustion is no longer current")
             if self.connection.execute(

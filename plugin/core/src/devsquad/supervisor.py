@@ -165,50 +165,6 @@ class Supervisor:
             raise ContractError("supervisor bounds must be positive")
         self.store, self.output_limit, self.grace_seconds = store, output_limit, grace_seconds
 
-    def _failed_fallback_attempts(
-        self,
-        run_id: str,
-        snapshot: dict[str, Any],
-        current_attempt_id: str,
-    ) -> list[dict[str, Any]]:
-        failures = []
-        for attempt in self.store.attempts_for_run(run_id):
-            if attempt["id"] == current_attempt_id or not attempt.get("output_metadata"):
-                continue
-            try:
-                metadata = json.loads(attempt["output_metadata"])
-                if not isinstance(metadata, dict) or "failure" not in metadata:
-                    continue
-                error = metadata["failure"]
-                role = attempt["role"]
-                index = attempt["profile_index"]
-                routed = snapshot["routing"]["roles"][role]
-                candidates = [routed["selected"], *routed["fallbacks"]]
-                selected = candidates[index]
-            except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
-                raise ConflictError("saved fallback attempt is invalid") from exc
-            if (not isinstance(error, dict)
-                    or selected["profile_id"] != attempt["profile_id"]):
-                raise ConflictError("saved fallback attempt changed its profile")
-            failures.append({
-                "id": attempt["id"],
-                "role": role,
-                "status": "failed",
-                "profile_index": index,
-                "selected_profile": selected,
-                "observed_identity": None,
-                "worker_invocations": 1,
-                "native_model_requests": None,
-                "usage": {
-                    "input_tokens": None,
-                    "output_tokens": None,
-                    "total_tokens": None,
-                    "source": "unavailable",
-                },
-                "error": error,
-            })
-        return failures
-
     def launch(self, run_id: str, expected_version: int, spec: LaunchSpec, owner_id: str, package_digest: str) -> RunningAttempt:
         reservation = self.store.reserve_attempt(
             run_id,
@@ -529,22 +485,13 @@ class Supervisor:
                 )
                 payload["message"]=semantic_error
             if workflow_review:
-                prior_attempts = self._failed_fallback_attempts(
-                    run_id, snapshot, attempt["id"],
+                from .service import Service
+                prior_attempts, prior_dispositions = Service._saved_review_progress(
+                    self.store,
+                    run_id,
+                    snapshot,
+                    self.store.handoff_snapshot(run_id),
                 )
-                if role == "lead":
-                    handoff = self.store.handoff_snapshot(run_id)
-                    if handoff is not None and isinstance(handoff.packet, dict):
-                        prior = handoff.packet.get("attempt")
-                        if isinstance(prior, dict):
-                            prior_attempts.append({
-                                "id": handoff.packet.get("attempt_id"),
-                                "status": "succeeded",
-                                **prior,
-                                "review": handoff.packet.get("review"),
-                                "checks": handoff.packet.get("checks"),
-                                "evaluation": handoff.packet.get("evaluation"),
-                            })
                 if receipt["cancelled"]:
                     report_error = None
                 elif receipt["timed_out"]:
@@ -588,7 +535,7 @@ class Supervisor:
                         and type(profile_index) is int
                         and profile_index >= 0
                         and profile_index + 1 < len(candidates)
-                        and len(self.store.attempts_for_run(run_id))
+                        and self.store.worker_invocations(run_id)
                         < snapshot["task"]["budget"]["max_worker_invocations"]
                         and self.store.remaining_wall_seconds(run_id) not in {0}
                     )
@@ -636,6 +583,7 @@ class Supervisor:
                         ),
                     },
                     prior_attempts=prior_attempts,
+                    prior_dispositions=prior_dispositions,
                 )
                 for name in sorted(reports):
                     content = reports[name]
