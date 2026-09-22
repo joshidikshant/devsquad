@@ -6,6 +6,7 @@
   "server_name": "devsquad",
   "surface": "codex-app",
   "register_argv": ["{host_executable}", "mcp", "add", "{server_name}", "--", "{squad_executable}", "mcp", "serve", "--surface", "{surface}"],
+  "remove_argv": null,
   "inspect_argv": ["{host_executable}", "mcp", "get", "{server_name}", "--json"],
   "inspect_format": "json"
 }

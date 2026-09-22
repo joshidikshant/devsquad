@@ -13,6 +13,8 @@ from typing import Any
 from . import __version__
 from .adapters import AdapterManifest, classify_cli, harness_version, prepare_cli, prepare_native_codex_from_catalog
 from .contracts import ContractError, envelope, error_payload
+from .diagnostics import build_doctor_report
+from .integrations import LocalIntegrationManager, load_integrations
 from .service import Service
 from .store import ConflictError, SchemaVersionError
 
@@ -33,15 +35,41 @@ def manifests() -> list[tuple[Path, AdapterManifest]]:
     return [(path, AdapterManifest.load(path)) for path in sorted((CORE_ROOT / "adapters").glob("*/adapter.json"))]
 
 
-def command_doctor(_: argparse.Namespace) -> tuple[dict, int]:
-    rows = []
-    for path, manifest in manifests():
-        binary = manifest.resolve_binary()
-        version = harness_version(binary) if binary else None
-        status = "unavailable" if not binary else ("supported" if version in manifest.verified_versions else "unverified")
-        rows.append({"adapter": manifest.name, "transport": manifest.transport, "status": status, "binary": binary, "version": version, "manifest": str(path)})
-    ready = any(row["status"] != "unavailable" for row in rows)
-    return envelope(data={"core_version": __version__, "ready": ready, "adapters": rows}), 0 if ready else 1
+def command_doctor(args: argparse.Namespace) -> tuple[dict, int]:
+    report = build_doctor_report(
+        project=Path(args.project_dir),
+        squad_executable=(
+            Path(args.squad_executable) if args.squad_executable else None
+        ),
+    )
+    return envelope(data=report), 0 if report["ready"] else 1
+
+
+def command_setup(args: argparse.Namespace) -> tuple[dict, int]:
+    templates = load_integrations()
+    selected = set(args.host or (template.id for template in templates))
+    manager = LocalIntegrationManager(
+        project=Path(args.project_dir),
+        squad_executable=(
+            Path(args.squad_executable) if args.squad_executable else None
+        ),
+    )
+    rows = [
+        manager.setup(template, dry_run=args.dry_run)
+        for template in templates
+        if template.id in selected
+    ]
+    successful_actions = {
+        "added", "updated", "unchanged", "would_add", "would_update",
+    }
+    completed = all(row["action"] in successful_actions for row in rows)
+    ready = all(row["ready"] for row in rows)
+    return envelope(data={
+        "completed": completed,
+        "ready": ready,
+        "dry_run": args.dry_run,
+        "hosts": rows,
+    }), 0 if completed else 1
 
 
 def _read_json(path: str, label: str) -> Any:
@@ -165,7 +193,22 @@ def parser() -> argparse.ArgumentParser:
     p = ContractParser(prog="squad")
     p.add_argument("--version", action="version", version=f"squad {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
-    doctor = sub.add_parser("doctor"); doctor.add_argument("--json", action="store_true"); doctor.set_defaults(func=command_doctor)
+    doctor = sub.add_parser("doctor")
+    doctor.add_argument("--json", action="store_true")
+    doctor.add_argument("--project-dir", default=str(Path.cwd()))
+    doctor.add_argument("--squad-executable")
+    doctor.set_defaults(func=command_doctor)
+    setup = sub.add_parser("setup")
+    setup.add_argument(
+        "--host",
+        action="append",
+        choices=("codex", "claude-code", "antigravity", "grok"),
+    )
+    setup.add_argument("--dry-run", action="store_true")
+    setup.add_argument("--json", action="store_true")
+    setup.add_argument("--project-dir", default=str(Path.cwd()))
+    setup.add_argument("--squad-executable")
+    setup.set_defaults(func=command_setup)
     for name, fn in (("prepare", command_prepare), ("classify", command_classify)):
         cmd = sub.add_parser(name)
         cmd.add_argument("adapter", choices=("codex", "antigravity", "grok"))

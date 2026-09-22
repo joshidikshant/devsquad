@@ -6,6 +6,7 @@
   "server_name": "devsquad",
   "surface": "claude-code",
   "register_argv": ["{host_executable}", "mcp", "add", "--scope", "user", "{server_name}", "--", "{squad_executable}", "mcp", "serve", "--surface", "{surface}"],
+  "remove_argv": ["{host_executable}", "mcp", "remove", "--scope", "user", "{server_name}"],
   "inspect_argv": ["{host_executable}", "mcp", "get", "{server_name}"],
   "inspect_format": "text"
 }

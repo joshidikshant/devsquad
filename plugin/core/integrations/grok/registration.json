@@ -6,6 +6,7 @@
   "server_name": "devsquad",
   "surface": "grok-build",
   "register_argv": ["{host_executable}", "mcp", "add", "--scope", "user", "{server_name}", "--", "{squad_executable}", "mcp", "serve", "--surface", "{surface}"],
+  "remove_argv": null,
   "inspect_argv": ["{host_executable}", "mcp", "list", "--json"],
   "inspect_format": "json"
 }

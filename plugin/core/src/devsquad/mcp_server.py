@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping
 
 from . import __version__
 from .contracts import ContractError, PolicyDenied, envelope, error_payload
+from .diagnostics import build_doctor_report
 from .service import Service
 from .store import ConflictError
 
@@ -49,6 +50,7 @@ class MCPBridge:
         caller_surface: str | None = None,
         caller_session_ref: str | None = None,
         environment: Mapping[str, str] | None = None,
+        project: Path | None = None,
     ):
         for label, value in (
             ("caller_surface", caller_surface),
@@ -61,6 +63,7 @@ class MCPBridge:
         self.caller_surface = caller_surface
         self.caller_session_ref = caller_session_ref
         self.environment = os.environ if environment is None else environment
+        self.project = (project or Path.cwd()).resolve()
 
     @staticmethod
     def _response(operation: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -117,6 +120,11 @@ class MCPBridge:
                 supersedes_run_id,
             )
         )
+
+    def doctor(self) -> dict[str, Any]:
+        """Inspect local provider and application readiness without mutation."""
+
+        return self._response(lambda: build_doctor_report(project=self.project))
 
     def status(self, run_id: str) -> dict[str, Any]:
         """Inspect the current projection for a saved run."""
@@ -221,6 +229,7 @@ def build_server(
     caller_surface: str | None = None,
     caller_session_ref: str | None = None,
     environment: Mapping[str, str] | None = None,
+    project: Path | None = None,
 ) -> Any:
     """Build the local stdio server without starting it."""
 
@@ -231,6 +240,7 @@ def build_server(
         caller_surface=caller_surface,
         caller_session_ref=caller_session_ref,
         environment=environment,
+        project=project,
     )
     server = server_type(
         "DevSquad",
@@ -240,6 +250,12 @@ def build_server(
             "an idempotency key, then inspect status/events/result by run ID."
         ),
     )
+
+    @server.tool(name="squad_doctor")
+    def squad_doctor() -> dict[str, Any]:
+        """Inspect versions, capabilities and local host registration drift."""
+
+        return bridge.doctor()
 
     @server.tool(name="squad_start")
     def squad_start(

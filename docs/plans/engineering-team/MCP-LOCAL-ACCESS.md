@@ -50,7 +50,42 @@ the service checks its fencing token and run version.
 | Antigravity | `agy mcp add` | Antigravity user config | `agy mcp list` |
 | Grok Build | `grok mcp add --scope user` | user | `grok mcp list --json` |
 
-The next M4 slice implements duplicate-aware `squad setup` and doctor output
-over these templates. Until that checkpoint, the templates are tested package
-data and a registration specification, not a claim that any host is already
-configured or connected.
+Install the optional, exactly pinned MCP extra into the same stable environment
+that owns the `squad` executable, then preview or apply registration:
+
+```text
+python3 -m pip install './plugin/core[mcp]'
+squad setup --dry-run --json
+squad setup --json
+squad doctor --json
+```
+
+Use `--host codex`, `--host claude-code`, `--host antigravity` or
+`--host grok` to limit setup; repeat `--host` for more than one. Setup calls
+the installed host CLI with argument arrays, never a shell command, and then
+re-inspects what that host reports as loaded. A second successful setup is a
+no-op. Claude Code requires a targeted user-scope remove/add only when its
+existing direct `devsquad` entry has drifted because its CLI does not replace a
+named server in place.
+
+Setup fails closed instead of editing an ambiguous configuration when it sees:
+
+- the server in more than one direct scope;
+- a loaded registration that differs from the one visible in the direct
+  config, indicating an inherited override;
+- a project/local registration, malformed config or a config the host does
+  not load;
+- an unresolved launcher, unavailable host CLI, missing SDK or any MCP SDK
+  version other than the supported `2.2.0` pin.
+
+`squad doctor --json` is read-only. It reports adapter versions, the resolved
+launcher, installed SDK version, config paths, normalized host inspection and
+whether each installed app loads the expected absolute command. Environment
+maps are never returned. Arguments are returned only when they exactly match
+the fixed DevSquad server arguments; drifted arguments are replaced by a count
+and SHA-256 digest so credentials cannot be echoed. Doctor exits 1 when an
+installed app is not ready, while unavailable apps are not treated as required.
+
+These commands prove local CLI registration and SDK conformance. Actual
+in-app operation still requires the cross-surface receipts in M4/M7; config
+syntax or a matching `mcp list` result is not presented as that live proof.

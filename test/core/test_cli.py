@@ -179,6 +179,71 @@ class CliTest(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "INPUT_INVALID")
         self.assertIn("cannot read task file", payload["error"]["message"])
 
+    def test_setup_filters_hosts_and_treats_a_valid_dry_run_as_completed(self):
+        codex = mock.Mock(id="codex")
+        grok = mock.Mock(id="grok")
+        manager = mock.Mock()
+        manager.setup.return_value = {
+            "id": "codex",
+            "status": "missing",
+            "ready": False,
+            "action": "would_add",
+            "changed": False,
+        }
+        squad = ROOT / "plugin/core/bin/squad"
+        with (
+            mock.patch.object(cli, "load_integrations", return_value=(codex, grok)),
+            mock.patch.object(cli, "LocalIntegrationManager", return_value=manager) as constructor,
+        ):
+            code, payload, stderr = self.invoke([
+                "setup", "--host", "codex", "--dry-run",
+                "--project-dir", str(self.root),
+                "--squad-executable", str(squad), "--json",
+            ])
+        self.assertEqual((code, stderr), (0, ""))
+        self.assertTrue(payload["data"]["completed"])
+        self.assertFalse(payload["data"]["ready"])
+        self.assertTrue(payload["data"]["dry_run"])
+        constructor.assert_called_once_with(
+            project=self.root, squad_executable=squad,
+        )
+        manager.setup.assert_called_once_with(codex, dry_run=True)
+
+    def test_setup_and_doctor_return_one_when_readiness_is_blocked(self):
+        template = mock.Mock(id="codex")
+        manager = mock.Mock()
+        manager.setup.return_value = {
+            "id": "codex",
+            "status": "duplicate",
+            "ready": False,
+            "action": "blocked_duplicate",
+            "changed": False,
+        }
+        with (
+            mock.patch.object(cli, "load_integrations", return_value=(template,)),
+            mock.patch.object(cli, "LocalIntegrationManager", return_value=manager),
+        ):
+            code, payload, stderr = self.invoke([
+                "setup", "--project-dir", str(self.root), "--json",
+            ])
+        self.assertEqual((code, stderr), (1, ""))
+        self.assertFalse(payload["data"]["completed"])
+        self.assertEqual(payload["data"]["hosts"][0]["action"], "blocked_duplicate")
+
+        report = {
+            "core_version": "0.1.0", "ready": False,
+            "adapters": [], "local_apps": [],
+        }
+        with mock.patch.object(cli, "build_doctor_report", return_value=report) as doctor:
+            code, payload, stderr = self.invoke([
+                "doctor", "--project-dir", str(self.root), "--json",
+            ])
+        self.assertEqual((code, stderr), (1, ""))
+        self.assertEqual(payload["data"], report)
+        doctor.assert_called_once_with(
+            project=self.root, squad_executable=None,
+        )
+
     def test_contract_conflict_schema_and_runtime_errors_have_exact_exits(self):
         cases = [
             (ContractError("bad input"), 64, "INPUT_INVALID"),

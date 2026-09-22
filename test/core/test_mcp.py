@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -17,9 +18,13 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "plugin/core"
 sys.path.insert(0, str(CORE / "src"))
 
-from devsquad import cli, mcp_server
+from devsquad import cli, diagnostics, mcp_server
 from devsquad.contracts import ContractError
-from devsquad.integrations import IntegrationTemplate, load_integrations
+from devsquad.integrations import (
+    IntegrationTemplate,
+    LocalIntegrationManager,
+    load_integrations,
+)
 from devsquad.store import ConflictError
 
 
@@ -102,6 +107,12 @@ class MCPIntegrationTemplateTest(unittest.TestCase):
                 inspection = template.inspection_command(host, squad)
                 self.assertEqual(inspection[0], resolved_host)
                 self.assertIn("mcp", inspection)
+                removal = template.removal_command(host)
+                if integration_id == "claude-code":
+                    self.assertIsNotNone(removal)
+                    self.assertIn("remove", removal)
+                else:
+                    self.assertIsNone(removal)
 
     def test_template_schema_rejects_unknown_placeholders_and_fields(self):
         with tempfile.TemporaryDirectory(prefix="devsquad-template-") as directory:
@@ -114,6 +125,7 @@ class MCPIntegrationTemplateTest(unittest.TestCase):
                 "server_name": "devsquad",
                 "surface": "bad",
                 "register_argv": ["{unknown}"],
+                "remove_argv": None,
                 "inspect_argv": ["{host_executable}"],
                 "inspect_format": "text",
             }
@@ -124,6 +136,299 @@ class MCPIntegrationTemplateTest(unittest.TestCase):
             path.write_text(json.dumps(template))
             with self.assertRaisesRegex(ContractError, "fields differ"):
                 IntegrationTemplate.load(path)
+
+
+class FakeMCPHost:
+    def __init__(self, template, home):
+        self.template = template
+        self.home = home
+        self.loaded = None
+        self.registration_calls = 0
+
+    def _config_path(self):
+        return {
+            "codex": self.home / ".codex/config.toml",
+            "claude-code": self.home / ".claude.json",
+            "antigravity": self.home / ".gemini/config/mcp_config.json",
+            "grok": self.home / ".grok/config.toml",
+        }[self.template.id]
+
+    def seed_unrelated_config(self):
+        path = self._config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".json":
+            path.write_text(json.dumps({"unrelated": {"credential": "preserve-me"}}))
+        else:
+            path.write_text('unrelated = "preserve-me"\n')
+
+    def _save_registration(self, command, args):
+        path = self._config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".json":
+            value = json.loads(path.read_text()) if path.exists() else {}
+            value.setdefault("mcpServers", {})["devsquad"] = {
+                "command": command,
+                "args": args,
+            }
+            if self.template.id == "antigravity":
+                value["mcpServers"]["devsquad"]["disabled"] = False
+            path.write_text(json.dumps(value))
+        else:
+            existing = path.read_text() if path.exists() else ""
+            if "[mcp_servers.devsquad]" not in existing:
+                enabled = "enabled = true\n" if self.template.id == "grok" else ""
+                path.write_text(
+                    existing
+                    + "\n[mcp_servers.devsquad]\n"
+                    + f"command = {json.dumps(command)}\n"
+                    + f"args = {json.dumps(args)}\n"
+                    + enabled
+                )
+
+    def _inspection_result(self, argv):
+        if self.loaded is None:
+            if self.template.id == "grok":
+                return subprocess.CompletedProcess(argv, 0, "[]\n", "")
+            if self.template.id == "antigravity":
+                return subprocess.CompletedProcess(
+                    argv, 0, "NAME  TYPE  STATUS  COMMAND/URL\n", "",
+                )
+            return subprocess.CompletedProcess(argv, 1, "", "not found")
+        command, args = self.loaded
+        if self.template.id == "codex":
+            stdout = json.dumps({
+                "name": "devsquad",
+                "enabled": True,
+                "transport": {"command": command, "args": args, "env": None},
+            })
+        elif self.template.id == "grok":
+            stdout = json.dumps([{
+                "name": "devsquad", "enabled": True, "scope": "user",
+                "command": command, "args": args,
+            }])
+        elif self.template.id == "claude-code":
+            stdout = (
+                "devsquad:\n"
+                "  Scope: User config (available in all your projects)\n"
+                "  Status: ✓ Connected\n"
+                "  Type: stdio\n"
+                f"  Command: {command}\n"
+                f"  Args: {shlex.join(args)}\n"
+                "  Environment: PRIVATE_TOKEN=not-reported\n"
+            )
+        else:
+            stdout = (
+                "NAME      TYPE   STATUS   COMMAND/URL\n"
+                f"devsquad  stdio  enabled  {shlex.join([command, *args])}\n"
+            )
+        return subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    def __call__(self, argv, **_):
+        argv = tuple(argv)
+        if "remove" in argv:
+            self.loaded = None
+            path = self._config_path()
+            value = json.loads(path.read_text())
+            value.get("mcpServers", {}).pop("devsquad", None)
+            path.write_text(json.dumps(value))
+            return subprocess.CompletedProcess(argv, 0, "removed\n", "")
+        if "add" not in argv:
+            return self._inspection_result(argv)
+        self.registration_calls += 1
+        delimiter = argv.index("--")
+        command = argv[delimiter + 1]
+        args = list(argv[delimiter + 2:])
+        self.loaded = (command, args)
+        self._save_registration(command, args)
+        return subprocess.CompletedProcess(argv, 0, "registered\n", "")
+
+
+class LocalMCPRegistrationTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="devsquad-local-mcp-")
+        self.root = Path(self.temp.name)
+        self.home = self.root / "home"
+        self.project = self.root / "project"
+        self.home.mkdir()
+        self.project.mkdir()
+        self.squad = CORE / "bin/squad"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def manager(self, fake):
+        return LocalIntegrationManager(
+            project=self.project,
+            home=self.home,
+            squad_executable=self.squad,
+            which=lambda _: sys.executable,
+            runner=fake,
+            mcp_sdk_available=True,
+            mcp_sdk_version="2.2.0",
+        )
+
+    def test_setup_is_idempotent_for_every_host_and_preserves_unrelated_config(self):
+        for template in load_integrations():
+            with self.subTest(host=template.id):
+                fake = FakeMCPHost(template, self.home)
+                fake.seed_unrelated_config()
+                manager = self.manager(fake)
+
+                first = manager.setup(template)
+                second = manager.setup(template)
+
+                self.assertEqual(first["action"], "added")
+                self.assertTrue(first["ready"])
+                self.assertEqual(second["action"], "unchanged")
+                self.assertTrue(second["ready"])
+                self.assertEqual(fake.registration_calls, 1)
+                self.assertEqual(len(second["sources"]), 1)
+                self.assertEqual(second["loaded"]["args"], [
+                    "mcp", "serve", "--surface", template.surface,
+                ])
+                self.assertNotIn("PRIVATE_TOKEN", json.dumps(second))
+                self.assertIn("preserve-me", fake._config_path().read_text())
+
+                fake._config_path().unlink()
+
+    def test_duplicate_and_inherited_registrations_fail_closed_without_mutation(self):
+        template = next(item for item in load_integrations() if item.id == "codex")
+        expected = (
+            str(self.squad.resolve()),
+            ["mcp", "serve", "--surface", template.surface],
+        )
+        fake = FakeMCPHost(template, self.home)
+        fake.loaded = expected
+        fake._save_registration(*expected)
+        project_config = self.project / ".codex/config.toml"
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text(
+            "[mcp_servers.devsquad]\n"
+            f"command = {json.dumps(expected[0])}\n"
+            f"args = {json.dumps(expected[1])}\n"
+        )
+        duplicate = self.manager(fake).setup(template)
+        self.assertEqual(duplicate["status"], "duplicate")
+        self.assertEqual(duplicate["action"], "blocked_duplicate")
+        self.assertEqual(fake.registration_calls, 0)
+        fake._config_path().unlink()
+        project_config.unlink()
+        inherited = self.manager(fake).setup(template)
+        self.assertEqual(inherited["status"], "inherited")
+        self.assertEqual(inherited["action"], "blocked_inherited")
+        self.assertEqual(fake.registration_calls, 0)
+
+        fake._save_registration(*expected)
+        fake.loaded = ("/inherited/override", ["mcp", "serve"])
+        overlaid = self.manager(fake).setup(template)
+        self.assertEqual(overlaid["status"], "duplicate")
+        self.assertEqual(overlaid["action"], "blocked_duplicate")
+        self.assertEqual(fake.registration_calls, 0)
+
+    def test_doctor_data_redacts_drifted_arguments_and_malformed_config_content(self):
+        template = next(
+            item for item in load_integrations() if item.id == "claude-code"
+        )
+        fake = FakeMCPHost(template, self.home)
+        fake.loaded = (str(self.squad.resolve()), ["--api-key", "super-secret"])
+        fake._save_registration(*fake.loaded)
+        drifted = self.manager(fake).inspect(template)
+        encoded = json.dumps(drifted)
+        self.assertEqual(drifted["status"], "drifted")
+        self.assertIsNone(drifted["loaded"]["args"])
+        self.assertIsNone(drifted["sources"][0]["args"])
+        self.assertNotIn("super-secret", encoded)
+
+        updated = self.manager(fake).setup(template)
+        self.assertEqual(updated["action"], "updated")
+        self.assertTrue(updated["ready"])
+        self.assertEqual(updated["removal_exit_code"], 0)
+        self.assertEqual(fake.registration_calls, 1)
+
+        fake._config_path().write_text('{"private":"do-not-report"')
+        fake.loaded = None
+        malformed = self.manager(fake).inspect(template)
+        self.assertEqual(malformed["status"], "invalid_config")
+        self.assertNotIn("do-not-report", json.dumps(malformed))
+
+    def test_setup_requires_the_exact_supported_optional_sdk(self):
+        template = next(item for item in load_integrations() if item.id == "grok")
+        fake = FakeMCPHost(template, self.home)
+        missing = LocalIntegrationManager(
+            project=self.project,
+            home=self.home,
+            squad_executable=self.squad,
+            which=lambda _: sys.executable,
+            runner=fake,
+            mcp_sdk_available=False,
+        ).setup(template)
+        self.assertEqual(missing["action"], "blocked_missing_mcp_sdk")
+        unsupported = LocalIntegrationManager(
+            project=self.project,
+            home=self.home,
+            squad_executable=self.squad,
+            which=lambda _: sys.executable,
+            runner=fake,
+            mcp_sdk_available=True,
+            mcp_sdk_version="2.1.0",
+        ).setup(template)
+        self.assertEqual(unsupported["action"], "blocked_unsupported_mcp_sdk")
+        self.assertEqual(fake.registration_calls, 0)
+
+    def test_explicit_missing_launcher_does_not_silently_fall_back(self):
+        template = next(item for item in load_integrations() if item.id == "codex")
+        fake = FakeMCPHost(template, self.home)
+        manager = LocalIntegrationManager(
+            project=self.project,
+            home=self.home,
+            squad_executable=self.root / "missing-squad",
+            which=lambda _: sys.executable,
+            runner=fake,
+            mcp_sdk_available=True,
+            mcp_sdk_version="2.2.0",
+        )
+        result = manager.setup(template)
+        self.assertEqual(result["status"], "unstable_launcher")
+        self.assertEqual(result["action"], "blocked_unstable_launcher")
+        self.assertIsNone(result["expected"]["command"])
+        self.assertEqual(fake.registration_calls, 0)
+
+
+class MCPDoctorReportTest(unittest.TestCase):
+    def test_installed_app_drift_controls_readiness_but_unavailable_apps_do_not(self):
+        manager = mock.Mock(
+            mcp_sdk_available=True,
+            mcp_sdk_supported=True,
+            mcp_sdk_version="2.2.0",
+            squad_executable=CORE / "bin/squad",
+            launcher_error=None,
+        )
+        rows = [
+            {"id": "codex", "installed": True, "ready": True},
+            {"id": "claude-code", "installed": False, "ready": False},
+        ]
+        manager.inspect.side_effect = rows
+        templates = (mock.Mock(id="codex"), mock.Mock(id="claude-code"))
+        adapters = [{"adapter": "codex", "status": "supported"}]
+        with (
+            mock.patch.object(diagnostics, "_adapter_rows", return_value=adapters),
+            mock.patch.object(diagnostics, "load_integrations", return_value=templates),
+        ):
+            report = diagnostics.build_doctor_report(project=ROOT, manager=manager)
+        self.assertTrue(report["ready"])
+        self.assertEqual(report["local_app_access"]["installed_count"], 1)
+        self.assertEqual(report["local_app_access"]["configured_count"], 1)
+
+        manager.inspect.side_effect = [
+            {"id": "codex", "installed": True, "ready": False}, rows[1],
+        ]
+        with (
+            mock.patch.object(diagnostics, "_adapter_rows", return_value=adapters),
+            mock.patch.object(diagnostics, "load_integrations", return_value=templates),
+        ):
+            drifted = diagnostics.build_doctor_report(project=ROOT, manager=manager)
+        self.assertFalse(drifted["ready"])
+        self.assertFalse(drifted["local_app_access"]["ready"])
 
 
 class MCPBridgeTest(unittest.TestCase):
@@ -192,6 +497,12 @@ class MCPBridgeTest(unittest.TestCase):
                 self.assert_success(invoke(), response)
                 method.assert_called_once_with(*expected_args)
                 method.reset_mock()
+
+    def test_doctor_uses_the_shared_read_only_report(self):
+        report = {"core_version": "0.1.0", "ready": True, "local_apps": []}
+        with mock.patch.object(mcp_server, "build_doctor_report", return_value=report) as doctor:
+            self.assert_success(self.bridge.doctor(), report)
+        doctor.assert_called_once_with(project=Path.cwd().resolve())
 
     def test_contract_conflict_and_internal_failures_keep_machine_envelopes(self):
         cases = [
@@ -348,7 +659,7 @@ class OfficialSDKConformanceTest(unittest.TestCase):
                     listing = await client.list_tools()
                     tools = {tool.name: tool for tool in listing.tools}
                     self.assertEqual(set(tools), {
-                        "squad_start", "squad_status", "squad_events", "squad_result",
+                        "squad_doctor", "squad_start", "squad_status", "squad_events", "squad_result",
                         "squad_cancel", "squad_resume", "squad_handoff_claim",
                         "squad_handoff_complete",
                     })
