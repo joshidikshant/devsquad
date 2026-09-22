@@ -184,6 +184,15 @@
           "artifact": "../../../test/core/test_mcp.py",
           "recorded_at": "2026-09-22T21:14:30+05:30",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "9abad1e",
+          "command_or_action": "211 core tests with ResourceWarning promoted to error, 208 shell assertions, 21 pinned-SDK tests and isolated-HOME add/no-op/drift-repair checks through the installed Codex, Claude, Antigravity and Grok host CLIs",
+          "outcome": "M4 Plan 06-02 provides strict host templates, stable launcher resolution, idempotent setup, inherited/duplicate fail-closed detection, redacted installed-app doctor reporting and the squad_doctor MCP tool; real in-app cross-surface receipts remain open",
+          "artifact": "MCP-LOCAL-ACCESS.md",
+          "recorded_at": "2026-09-23T04:22:26+05:30",
+          "availability": "tracked_tests"
         }
       ],
       "blocker": null

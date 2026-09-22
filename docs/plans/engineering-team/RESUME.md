@@ -2,7 +2,7 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 22, 2026
+## Current position — September 23, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` remains the published runtime
@@ -49,8 +49,19 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   read-only inspection remains available, and all four legacy hooks honor the
   worker/delegation guard. The gate is 200 core tests with `ResourceWarning`
   promoted to failure, 208 Bash assertions, and 12 focused tests against the
-  installed official SDK. M4 remains in progress for setup/doctor and real
-  cross-surface receipts.
+  installed official SDK.
+- M4 Plan 06-02 is complete at `9abad1e`. Four packaged host templates now
+  drive duplicate-aware `squad setup`; `squad doctor` and the ninth MCP tool,
+  `squad_doctor`, report the app-loaded command, SDK and registration drift
+  without returning environment maps or arbitrary arguments. Registration is
+  fail-closed for inherited/duplicate/malformed config and is idempotent while
+  preserving unrelated settings. The gate is 211 core tests with
+  `ResourceWarning` promoted to failure, 208 Bash assertions and 21 focused
+  tests under the pinned SDK. Installed Codex 0.135.0, Claude 2.1.220,
+  Antigravity 1.2.3 and Grok 0.2.111 CLIs each passed add, second-run no-op and
+  drift-repair checks under an isolated temporary HOME. That is CLI/config
+  evidence, not a claim of in-app operation; real account configs remain
+  untouched. M4 remains in progress for Plan 06-03 cross-surface receipts.
 - Last-observed provider readiness outside accepted M3: Claude CLI is not logged in;
   Grok CLI authentication expired; Gemini CLI's individual-account path is
   unsupported and its supported successor is Antigravity; Antigravity is
@@ -77,9 +88,10 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 200 tests passed through M4 Plan 06-01 with warnings promoted to errors |
+| Python core discovery | 211 tests passed through M4 Plan 06-02 with warnings promoted to errors |
 | Bash 3.2 regression suite | 10 test files, 208 assertions passed |
-| Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 12 official-SDK focused tests passed |
+| Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 21 official-SDK focused tests passed |
+| M4 local host setup | Four installed host CLIs registered under an isolated HOME, repaired drift and made no second-run changes; duplicate/inherited configs fail closed |
 | Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 8 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
 | Integrated native adapter proof | Passed at `97a10f0`; gpt-5.5/low, read-only, correlated completion and confirmed process-group cleanup |
@@ -111,10 +123,10 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M4 Plan 06-02: add minimal host instructions and explicit local
-   stdio templates, implement idempotent registration/duplicate detection
-   while preserving unrelated settings, and make doctor report the executable
-   and arguments each installed app actually loads.
+2. Execute M4 Plan 06-03: install one stable isolated local MCP runtime, use
+   the idempotent setup path for the available host surfaces, and prove one
+   saved run across terminal and Codex with client-disconnect survival,
+   handoff fencing, duplicate detection and installed-version receipts.
 3. Keep Claude/Grok/Antigravity probes paused until their normal login or trust
    blockers are resolved. They do not block the independent Codex M3 gate.
 
