@@ -41,6 +41,16 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   unknown capacity allows one unresolved trial, and later failure/cancellation
   retains earlier attempts and dispositions. A requested follow-up agent rerun
   hit the shared Plus limit; the 188-test complete gate is green after the fixes.
+- M4 Plan 06-01 is complete at `643910d`. The optional official MCP Python
+  SDK is pinned and transitively locked at `mcp==2.2.0`; ordinary CLI and a
+  plain installed wheel remain dependency-free. `squad mcp serve` exposes the
+  eight saved-run operations with strict envelopes, bounded event pages and a
+  16 KiB total artifact-preview cap. Worker-origin mutations are denied while
+  read-only inspection remains available, and all four legacy hooks honor the
+  worker/delegation guard. The gate is 200 core tests with `ResourceWarning`
+  promoted to failure, 208 Bash assertions, and 12 focused tests against the
+  installed official SDK. M4 remains in progress for setup/doctor and real
+  cross-surface receipts.
 - Last-observed provider readiness outside accepted M3: Claude CLI is not logged in;
   Grok CLI authentication expired; Gemini CLI's individual-account path is
   unsupported and its supported successor is Antigravity; Antigravity is
@@ -67,8 +77,9 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 188 tests passed through M3 closeout with warnings promoted to errors |
-| Bash 3.2 regression suite | 10 test files, 202 assertions passed |
+| Python core discovery | 200 tests passed through M4 Plan 06-01 with warnings promoted to errors |
+| Bash 3.2 regression suite | 10 test files, 208 assertions passed |
+| Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 12 official-SDK focused tests passed |
 | Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 8 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
 | Integrated native adapter proof | Passed at `97a10f0`; gpt-5.5/low, read-only, correlated completion and confirmed process-group cleanup |
@@ -100,10 +111,10 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Execute M4 from [IMPLEMENTATION.md](IMPLEMENTATION.md): pin/test the optional
-   MCP SDK without coupling it to core CLI imports, map the saved-run service
-   operations to strict stdio tools, enforce worker recursion guards, and add
-   idempotent local integration/doctor evidence.
+2. Continue M4 Plan 06-02: add minimal host instructions and explicit local
+   stdio templates, implement idempotent registration/duplicate detection
+   while preserving unrelated settings, and make doctor report the executable
+   and arguments each installed app actually loads.
 3. Keep Claude/Grok/Antigravity probes paused until their normal login or trust
    blockers are resolved. They do not block the independent Codex M3 gate.
 

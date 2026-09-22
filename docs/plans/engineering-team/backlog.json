@@ -173,9 +173,19 @@
       "id": "M4",
       "title": "Shared local MCP access and host handoffs",
       "depends_on": ["M3"],
-      "status": "pending",
+      "status": "in_progress",
       "acceptance_section": "M4 — Use that same run from local apps",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "643910d",
+          "command_or_action": "200 core tests with ResourceWarning promoted to error, 208 shell assertions, Python 3.11 lock resolution and 12 focused official-SDK tests for the optional MCP boundary, saved-run tools and recursion guards",
+          "outcome": "M4 Plan 06-01 provides dependency-isolated stdio MCP access to all eight saved-run operations with strict envelopes, bounded previews, caller provenance and worker-origin mutation denial; setup/doctor and cross-surface live gates remain open",
+          "artifact": "../../../test/core/test_mcp.py",
+          "recorded_at": "2026-09-22T21:14:30+05:30",
+          "availability": "tracked_tests"
+        }
+      ],
       "blocker": null
     },
     {
