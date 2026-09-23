@@ -670,6 +670,21 @@ class OfficialSDKConformanceTest(unittest.TestCase):
                     self.assertEqual(
                         tools["squad_status"].input_schema["required"], ["run_id"],
                     )
+                    status_annotations = tools["squad_status"].annotations.model_dump(
+                        by_alias=True,
+                    )
+                    self.assertEqual(status_annotations, {
+                        "title": None,
+                        "readOnlyHint": True,
+                        "destructiveHint": False,
+                        "idempotentHint": True,
+                        "openWorldHint": False,
+                    })
+                    cancel_annotations = tools["squad_cancel"].annotations.model_dump(
+                        by_alias=True,
+                    )
+                    self.assertTrue(cancel_annotations["destructiveHint"])
+                    self.assertFalse(cancel_annotations["readOnlyHint"])
                     status = await client.call_tool("squad_status", {"run_id": "run-1"})
                     self.assertFalse(status.is_error)
                     self.assertEqual(status.structured_content["data"]["version"], 2)

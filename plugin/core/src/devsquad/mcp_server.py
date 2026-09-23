@@ -234,6 +234,32 @@ def build_server(
     """Build the local stdio server without starting it."""
 
     server_type = _server_type()
+    from mcp.types import ToolAnnotations
+
+    read_only = ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+    durable_write = ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+    state_change = ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    )
+    destructive_change = ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
     bridge = MCPBridge(
         runtime,
         service,
@@ -251,13 +277,13 @@ def build_server(
         ),
     )
 
-    @server.tool(name="squad_doctor")
+    @server.tool(name="squad_doctor", annotations=read_only)
     def squad_doctor() -> dict[str, Any]:
         """Inspect versions, capabilities and local host registration drift."""
 
         return bridge.doctor()
 
-    @server.tool(name="squad_start")
+    @server.tool(name="squad_start", annotations=durable_write)
     def squad_start(
         task: dict[str, Any],
         idempotency_key: str,
@@ -267,13 +293,13 @@ def build_server(
 
         return bridge.start(task, idempotency_key, supersedes_run_id)
 
-    @server.tool(name="squad_status")
+    @server.tool(name="squad_status", annotations=read_only)
     def squad_status(run_id: str) -> dict[str, Any]:
         """Inspect state, version, active work and the next action."""
 
         return bridge.status(run_id)
 
-    @server.tool(name="squad_events")
+    @server.tool(name="squad_events", annotations=read_only)
     def squad_events(
         run_id: str, after: int = 0, limit: int = 100,
     ) -> dict[str, Any]:
@@ -281,7 +307,7 @@ def build_server(
 
         return bridge.events(run_id, after, limit)
 
-    @server.tool(name="squad_result")
+    @server.tool(name="squad_result", annotations=read_only)
     def squad_result(
         run_id: str, preview_bytes: int = 4096,
     ) -> dict[str, Any]:
@@ -289,13 +315,13 @@ def build_server(
 
         return bridge.result(run_id, preview_bytes)
 
-    @server.tool(name="squad_cancel")
+    @server.tool(name="squad_cancel", annotations=destructive_change)
     def squad_cancel(run_id: str) -> dict[str, Any]:
         """Persist cancellation intent for a saved run."""
 
         return bridge.cancel(run_id)
 
-    @server.tool(name="squad_resume")
+    @server.tool(name="squad_resume", annotations=state_change)
     def squad_resume(
         run_id: str, recovery: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -303,7 +329,7 @@ def build_server(
 
         return bridge.resume(run_id, recovery)
 
-    @server.tool(name="squad_handoff_claim")
+    @server.tool(name="squad_handoff_claim", annotations=state_change)
     def squad_handoff_claim(
         run_id: str,
         expected_version: int,
@@ -314,7 +340,7 @@ def build_server(
 
         return bridge.handoff_claim(run_id, expected_version, owner, prior_claim)
 
-    @server.tool(name="squad_handoff_complete")
+    @server.tool(name="squad_handoff_complete", annotations=destructive_change)
     def squad_handoff_complete(
         run_id: str,
         claim: dict[str, Any],
