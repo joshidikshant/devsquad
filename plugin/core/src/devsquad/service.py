@@ -49,6 +49,7 @@ from .workspaces import (
     assert_clean_inputs,
     committed_regular_file,
     prepare_check_workspace,
+    prepare_delivery_workspace,
     prepare_review_workspace,
     repo_relative_config,
     resolve_commit,
@@ -404,6 +405,7 @@ class Service:
         run_id: str | None = None,
         internal_review_fixture: dict[str, Any] | None = None,
         internal_lead_fixture: dict[str, Any] | None = None,
+        internal_implementation_fixture: dict[str, Any] | None = None,
         capacity_in_flight: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
@@ -450,25 +452,48 @@ class Service:
             )
             if project_id is None or run_id is None:
                 raise ContractError("public preflight requires run-owned workspace identity")
-            snapshot["workspace"] = prepare_review_workspace(
-                repo,
-                self.runtime,
-                project_id,
-                run_id,
-                base_oid,
-                target_oid,
-                scope_paths,
-                required_clean_paths=config_paths.values(),
-            )
-            snapshot["check_workspace"] = prepare_check_workspace(
-                repo,
-                self.runtime,
-                project_id,
-                run_id,
-                target_oid,
-                scope_paths,
-                required_clean_paths=config_paths.values(),
-            )
+            if task["workflow"] == "branch-review":
+                snapshot["workspace"] = prepare_review_workspace(
+                    repo,
+                    self.runtime,
+                    project_id,
+                    run_id,
+                    base_oid,
+                    target_oid,
+                    scope_paths,
+                    required_clean_paths=config_paths.values(),
+                )
+                snapshot["check_workspace"] = prepare_check_workspace(
+                    repo,
+                    self.runtime,
+                    project_id,
+                    run_id,
+                    target_oid,
+                    scope_paths,
+                    required_clean_paths=config_paths.values(),
+                )
+            else:
+                snapshot["delivery_workspace"] = prepare_delivery_workspace(
+                    repo,
+                    self.runtime,
+                    project_id,
+                    run_id,
+                    target_oid,
+                    task["scope"]["read_paths"],
+                    task["scope"]["write_paths"],
+                    required_clean_paths=config_paths.values(),
+                )
+                if internal_implementation_fixture is None:
+                    raise CapabilityUnavailable(
+                        "live issue-delivery implementer execution is not available yet"
+                    )
+                if (not isinstance(internal_implementation_fixture, dict)
+                        or set(internal_implementation_fixture)
+                        != {"writes", "delay_seconds"}):
+                    raise ContractError("internal implementation fixture is invalid")
+                snapshot["internal_implementation_fixture"] = json.loads(
+                    canonical_json(internal_implementation_fixture)
+                )
             if internal_review_fixture is not None:
                 if (not isinstance(internal_review_fixture, dict)
                         or set(internal_review_fixture)
@@ -513,6 +538,9 @@ class Service:
             internal_delay = submitted.get("_internal_fake_delay")
             internal_review_fixture = submitted.get("_internal_review_fixture")
             internal_lead_fixture = submitted.get("_internal_lead_fixture")
+            internal_implementation_fixture = submitted.get(
+                "_internal_implementation_fixture"
+            )
             store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
             validated_supersedes_run_id = supersedes_run_id
             validate_task(task, require_existing_repo=True)
@@ -533,9 +561,11 @@ class Service:
                 run_id=run_id,
                 internal_review_fixture=internal_review_fixture,
                 internal_lead_fixture=internal_lead_fixture,
+                internal_implementation_fixture=internal_implementation_fixture,
                 capacity_in_flight=store.active_pool_counts(),
             )
-            if internal_delay is None and internal_review_fixture is None:
+            if (task["workflow"] == "branch-review" and internal_delay is None
+                    and internal_review_fixture is None):
                 reviewer_route = snapshot["routing"]["roles"]["reviewer"]
                 reviewer_candidates = [
                     reviewer_route["selected"], *reviewer_route["fallbacks"],
@@ -568,7 +598,9 @@ class Service:
                 package_path=str(package),
                 package_digest=digest,
                 supersedes_run_id=supersedes_run_id,
-                worktree_path=(snapshot.get("workspace") or {}).get("path"),
+                worktree_path=(
+                    snapshot.get("workspace") or snapshot.get("delivery_workspace") or {}
+                ).get("path"),
             )
             return (version, package, digest), None
         except (BudgetExhausted, CapabilityUnavailable, ProfileUnsupported) as exc:
@@ -615,12 +647,17 @@ class Service:
         _internal_fake_delay: float | None = None,
         _internal_review_fixture: dict[str, Any] | None = None,
         _internal_lead_fixture: dict[str, Any] | None = None,
+        _internal_implementation_fixture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         validate_task(task, require_existing_repo=True)
         if _internal_fake_delay is not None and _internal_review_fixture is not None:
             raise ContractError("internal lifecycle fixtures are mutually exclusive")
         if _internal_lead_fixture is not None and _internal_fake_delay is not None:
             raise ContractError("internal lifecycle fixtures are mutually exclusive")
+        if (_internal_implementation_fixture is not None
+                and (_internal_fake_delay is not None
+                     or task["workflow"] != "issue-delivery")):
+            raise ContractError("internal implementation fixture requires issue-delivery")
         submitted = {"task": task, "supersedes_run_id": supersedes_run_id}
         if _internal_fake_delay is not None:
             submitted["_internal_fake_delay"] = _internal_fake_delay
@@ -628,6 +665,10 @@ class Service:
             submitted["_internal_review_fixture"] = _internal_review_fixture
         if _internal_lead_fixture is not None:
             submitted["_internal_lead_fixture"] = _internal_lead_fixture
+        if _internal_implementation_fixture is not None:
+            submitted["_internal_implementation_fixture"] = (
+                _internal_implementation_fixture
+            )
         store = self._store()
         try:
             claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}")
@@ -673,6 +714,17 @@ class Service:
                 next_action = "continue_headless_lead" if headless else "claim_handoff"
             elif run["state"] == "awaiting_host":
                 next_action = "handoff_submission_saved"
+            elif run["state"] == "queued" and run["phase"] is None:
+                try:
+                    snapshot = self._review_snapshot(run)
+                    next_action = (
+                        "resume_candidate_review"
+                        if snapshot.get("task", {}).get("workflow") == "issue-delivery"
+                        and isinstance(snapshot.get("candidate"), dict)
+                        else None
+                    )
+                except ConflictError:
+                    next_action = None
             else:
                 next_action = None
             return {

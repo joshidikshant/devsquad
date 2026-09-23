@@ -20,7 +20,17 @@ import json
 from .contracts import ContractError, LaunchSpec
 from .reports import build_early_terminal_reports
 from .store import AttemptReservation, ConflictError, Store, canonical_json
-from .workflows import decode_branch_review_evidence, decode_headless_lead_evidence
+from .workflows import (
+    decode_branch_review_evidence,
+    decode_headless_lead_evidence,
+    validate_implementation_evidence,
+)
+from .workspaces import (
+    freeze_delivery_candidate,
+    prepare_check_workspace,
+    prepare_review_workspace,
+    repo_relative_config,
+)
 
 
 def _open_stdin_artifact(path: str) -> BinaryIO:
@@ -74,6 +84,11 @@ def inspect_process(pid: int, pgid: int, expected_start: str) -> str:
             return "dead"
         except PermissionError:
             return "ambiguous"
+        try:
+            if not _live_group_exists(pgid):
+                return "dead"
+        except RuntimeError:
+            pass
         return "ambiguous"
     try:
         observed_pgid = os.getpgid(pid)
@@ -372,6 +387,112 @@ class Supervisor:
             packet,
         )
 
+    def _commit_delivery_candidate(
+        self,
+        run_id: str,
+        attempt: dict[str, Any],
+        stream_artifacts: list[dict[str, Any]],
+        metadata: dict[str, Any],
+        snapshot: dict[str, Any],
+        stdout: bytes,
+    ) -> str:
+        evidence = validate_implementation_evidence(
+            json.loads(stdout.decode("utf-8")), snapshot,
+        )
+        task = snapshot["task"]
+        delivery = snapshot["delivery_workspace"]
+        source_repo = Path(task["project"]["repo_path"]).resolve(strict=True)
+        workspace = Path(delivery["path"]).resolve(strict=True)
+        candidate, patch = freeze_delivery_candidate(
+            source_repo,
+            workspace,
+            delivery["baseline_oid"],
+            task["scope"]["write_paths"],
+            run_id,
+        )
+        project_id = self.store.run(run_id)["project_id"]
+        scope_paths = tuple(dict.fromkeys(
+            task["scope"]["read_paths"] + task["scope"]["write_paths"]
+        ))
+        config_paths = tuple(
+            repo_relative_config(source_repo, task["routing"][label], label)
+            for label in ("profiles_file", "policy_file")
+        )
+        review_workspace = prepare_review_workspace(
+            source_repo,
+            self.store.database.parent,
+            project_id,
+            run_id,
+            delivery["baseline_oid"],
+            candidate["commit_oid"],
+            scope_paths,
+            required_clean_paths=config_paths,
+            candidate_sha256=candidate["candidate_sha256"],
+        )
+        check_workspace = prepare_check_workspace(
+            source_repo,
+            self.store.database.parent,
+            project_id,
+            run_id,
+            candidate["commit_oid"],
+            scope_paths,
+            required_clean_paths=config_paths,
+        )
+        iteration = len(snapshot.get("delivery_iterations", [])) + 1
+        candidate_record = {
+            **candidate,
+            "iteration": iteration,
+            "patch_artifact": f"candidate-{iteration}.patch",
+            "implementation_artifact": (
+                f"implementation-attempt-{attempt['id']}.json"
+            ),
+        }
+        new_snapshot = json.loads(canonical_json(snapshot))
+        new_snapshot["candidate"] = candidate_record
+        new_snapshot["workspace"] = review_workspace
+        new_snapshot["check_workspace"] = check_workspace
+        iterations = list(new_snapshot.get("delivery_iterations", []))
+        iterations.append({
+            "iteration": iteration,
+            "candidate": candidate_record,
+            "implementation": evidence,
+        })
+        new_snapshot["delivery_iterations"] = iterations
+
+        artifacts = list(stream_artifacts)
+        documents = {
+            f"candidate-{iteration}.json": candidate_record,
+            f"implementation-attempt-{attempt['id']}.json": evidence,
+        }
+        for name, document in documents.items():
+            content = (canonical_json(document) + "\n").encode()
+            path, digest, size = self.store.finalize_artifact(
+                run_id, name, content,
+            )
+            artifacts.append({
+                "name": name, "path": path, "sha256": digest,
+                "byte_size": size,
+            })
+        patch_name = f"candidate-{iteration}.patch"
+        path, digest, size = self.store.finalize_artifact(
+            run_id, patch_name, patch,
+        )
+        if digest != candidate["patch_sha256"] or size != candidate["patch_bytes"]:
+            raise ContractError("saved candidate patch differs from its identity")
+        artifacts.append({
+            "name": patch_name, "path": path, "sha256": digest,
+            "byte_size": size,
+        })
+        return self.store.commit_delivery_candidate(
+            run_id,
+            attempt["attempt_token"],
+            artifacts,
+            metadata,
+            new_snapshot,
+            review_workspace["path"],
+            candidate_record,
+        )
+
     def import_durable(self, run_id: str) -> str:
         attempt=self.store.attempt(run_id)
         if not attempt or attempt["status"] not in {"running","cancelling"}:
@@ -431,14 +552,29 @@ class Supervisor:
                 path,digest,size=self.store.finalize_artifact(run_id,logical,data)
                 artifacts.append({"name":logical,"path":path,"sha256":digest,"byte_size":size})
             snapshot=json.loads(self.store.run(run_id)["mutable_snapshot"])
-            workflow_review = (
-                "internal_review_fixture" in snapshot
-                or "review_adapter" in snapshot
-                or "review_adapters" in snapshot
-            )
+            workflow = snapshot.get("task", {}).get("workflow")
+            managed_workflow = "internal_fake_delay" not in snapshot
+            workflow_review = managed_workflow and workflow == "branch-review"
+            workflow_delivery = managed_workflow and workflow == "issue-delivery"
             role = attempt.get("role", "worker")
             semantic_error=None
-            if (role == "lead" and workflow_review and not receipt["cancelled"]
+            if (role == "implementer" and workflow_delivery
+                    and not receipt["cancelled"]
+                    and not receipt["timed_out"] and receipt["returncode"] == 0):
+                try:
+                    return self._commit_delivery_candidate(
+                        run_id,
+                        attempt,
+                        artifacts,
+                        metadata,
+                        snapshot,
+                        captures["stdout"],
+                    )
+                except (ContractError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    semantic_error = str(exc)
+                    receipt["error"] = "IMPLEMENTATION_OUTPUT_INVALID"
+                    receipt["message"] = semantic_error
+            elif (role == "lead" and workflow_review and not receipt["cancelled"]
                     and not receipt["timed_out"] and receipt["returncode"]==0):
                 try:
                     handoff = self.store.handoff_snapshot(run_id)

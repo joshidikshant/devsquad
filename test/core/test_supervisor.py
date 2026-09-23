@@ -62,6 +62,20 @@ class SupervisorTest(unittest.TestCase):
         with mock.patch("devsquad.supervisor.subprocess.run", return_value=failed), self.assertRaises(RuntimeError):
             _live_group_exists(123)
 
+    def test_zombie_only_group_is_dead_but_live_unknown_group_is_ambiguous(self):
+        with (
+            mock.patch("devsquad.supervisor.process_start_identity", return_value=None),
+            mock.patch("devsquad.supervisor.os.killpg"),
+            mock.patch("devsquad.supervisor._live_group_exists", return_value=False),
+        ):
+            self.assertEqual(inspect_process(123, 123, "expected"), "dead")
+        with (
+            mock.patch("devsquad.supervisor.process_start_identity", return_value=None),
+            mock.patch("devsquad.supervisor.os.killpg"),
+            mock.patch("devsquad.supervisor._live_group_exists", return_value=True),
+        ):
+            self.assertEqual(inspect_process(123, 123, "expected"), "ambiguous")
+
     def test_normal_and_fast_completion_persist_bounded_output(self):
         run_id, handle = self.launch("output", "import sys; print('o'*100); print('e'*100,file=sys.stderr)")
         self.assertEqual(self.supervisor.wait(handle, 3), 0)

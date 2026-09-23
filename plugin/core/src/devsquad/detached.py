@@ -85,16 +85,23 @@ def main(argv=None):
         stdin_path = None
         adapter = None
         handoff = store.handoff_snapshot(args.run_id)
+        workflow = snapshot["task"]["workflow"]
         headless_lead = (
             snapshot["task"]["lead"]["mode"] == "headless"
             and handoff is not None
             and handoff.status == "open"
         )
-        role = "lead" if headless_lead else "reviewer"
+        delivery_implementer = (
+            workflow == "issue-delivery" and "candidate" not in snapshot
+        )
+        role = (
+            "lead" if headless_lead
+            else "implementer" if delivery_implementer
+            else "reviewer"
+        )
         workflow_role = (
-            "internal_review_fixture" in snapshot
-            or "review_adapter" in snapshot
-            or "review_adapters" in snapshot
+            "internal_fake_delay" not in snapshot
+            and workflow in {"branch-review", "issue-delivery"}
         )
         profile_index = None
         profile_id = None
@@ -109,8 +116,16 @@ def main(argv=None):
             attempt_selection = candidates[profile_index]
             profile_id = attempt_selection["profile_id"]
             selected = attempt_selection["profile"]
-            adapter_key = "lead_adapter" if headless_lead else "review_adapter"
-            adapters_key = "lead_adapters" if headless_lead else "review_adapters"
+            adapter_key = {
+                "implementer": "implementation_adapter",
+                "reviewer": "review_adapter",
+                "lead": "lead_adapter",
+            }[role]
+            adapters_key = {
+                "implementer": "implementation_adapters",
+                "reviewer": "review_adapters",
+                "lead": "lead_adapters",
+            }[role]
             adapters = snapshot.get(adapters_key)
             adapter = (
                 adapters.get(profile_id)
@@ -129,11 +144,21 @@ def main(argv=None):
                 selected["account_pool_id"],
                 "verified" if adapter else "unknown",
             )
-            module = (
-                ("devsquad.codex_lead_worker" if adapter else "devsquad.lead_worker")
-                if headless_lead
-                else ("devsquad.codex_review_worker" if adapter else "devsquad.review_worker")
-            )
+            if role == "implementer":
+                module = (
+                    "devsquad.claude_delivery_worker"
+                    if adapter else "devsquad.delivery_worker"
+                )
+            elif role == "lead":
+                module = (
+                    "devsquad.codex_lead_worker"
+                    if adapter else "devsquad.lead_worker"
+                )
+            else:
+                module = (
+                    "devsquad.codex_review_worker"
+                    if adapter else "devsquad.review_worker"
+                )
             command = [sys.executable, "-P", "-m", module]
             worker_snapshot = json.loads(canonical_json(snapshot))
             worker_snapshot["routing"]["roles"][role]["selected"] = attempt_selection
@@ -151,8 +176,10 @@ def main(argv=None):
                 args.run_id,
                 (
                     f"lead-workflow-input-{handoff.sequence}-{profile_index}.json"
-                    if headless_lead
-                    else f"workflow-input-{profile_index}.json"
+                    if headless_lead else
+                    f"implementation-input-{profile_index}.json"
+                    if role == "implementer" else
+                    f"workflow-input-{profile_index}.json"
                 ),
                 canonical_json(worker_snapshot).encode(),
             )
@@ -207,7 +234,8 @@ def main(argv=None):
             Service(Path(args.database).parent).resume(args.run_id)
         except ConflictError:
             pass
-    elif current["state"] == "queued" and current["phase"] is None:
+    elif (current["state"] == "queued" and current["phase"] is None
+            and not (workflow == "issue-delivery" and role == "implementer")):
         try:
             Service(Path(args.database).parent).resume(args.run_id)
         except ConflictError:

@@ -1208,6 +1208,107 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def commit_delivery_candidate(
+        self,
+        run_id: str,
+        attempt_token: str,
+        artifacts: list[dict[str, Any]],
+        metadata: Any,
+        mutable_snapshot: dict[str, Any],
+        review_worktree_path: str,
+        candidate: dict[str, Any],
+    ) -> str:
+        """Atomically import one implementation and queue its frozen candidate."""
+        prepared, stdout_name, stderr_name = self._prepare_durable_artifacts(
+            run_id, artifacts, require_result_receipt=False,
+        )
+        encoded_metadata = canonical_json(metadata)
+        encoded_snapshot = canonical_json(mutable_snapshot)
+        if (not isinstance(candidate, dict)
+                or mutable_snapshot.get("candidate") != candidate):
+            raise ContractError("delivery candidate differs from its saved snapshot")
+        expected_lengths = {
+            "candidate_sha256": 64,
+            "commit_oid": 40,
+            "patch_sha256": 64,
+        }
+        for field, expected_length in expected_lengths.items():
+            value = candidate.get(field)
+            if (not isinstance(value, str) or len(value) != expected_length
+                    or any(character not in "0123456789abcdef" for character in value)):
+                raise ContractError(f"delivery candidate {field} is invalid")
+        try:
+            resolved_worktree = str(Path(review_worktree_path).resolve(strict=True))
+            worktree_common = str(git_common_dir(Path(resolved_worktree)))
+        except OSError as exc:
+            raise ContractError("delivery review worktree is unavailable") from exc
+
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,r.mutable_snapshot,p.git_common_dir "
+                "FROM runs r JOIN projects p ON p.id=r.project_id WHERE r.id=?",
+                (run_id,),
+            ).fetchone()
+            attempt = self.connection.execute(
+                "SELECT id,status,role,stdout_artifact_id,stderr_artifact_id,"
+                "output_metadata FROM attempts WHERE run_id=? AND attempt_token=?",
+                (run_id, attempt_token),
+            ).fetchone()
+            if not run or not attempt:
+                raise ConflictError("delivery candidate import is fenced")
+            if (attempt["status"] == "finished" and run["state"] == "queued"
+                    and run["phase"] is None
+                    and run["mutable_snapshot"] == encoded_snapshot):
+                self.connection.execute("COMMIT")
+                return "candidate_ready"
+            if (attempt["status"] != "running" or attempt["role"] != "implementer"
+                    or run["state"] != "running" or run["phase"] is not None):
+                raise ConflictError("delivery candidate import is fenced")
+            if worktree_common != run["git_common_dir"]:
+                raise ContractError("delivery review worktree belongs to another project")
+            version, artifact_ids = self._reference_prepared_artifacts(
+                run_id, run["version"], prepared,
+            )
+            version = self._record_prepared_output(
+                run_id,
+                version,
+                attempt,
+                artifact_ids,
+                stdout_name,
+                stderr_name,
+                encoded_metadata,
+            )
+            now, version = _utc_now(), version + 1
+            self.connection.execute(
+                "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
+                (now, attempt["id"]),
+            )
+            self.connection.execute(
+                "UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,),
+            )
+            self.connection.execute(
+                "UPDATE runs SET mutable_snapshot=?,worktree_path=?,state='queued',"
+                "phase=NULL,version=?,updated_at=? WHERE id=?",
+                (encoded_snapshot, resolved_worktree, version, now, run_id),
+            )
+            payload = canonical_json({
+                "attempt_id": attempt["id"],
+                "candidate_sha256": candidate["candidate_sha256"],
+                "commit_oid": candidate["commit_oid"],
+                "patch_sha256": candidate["patch_sha256"],
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'delivery.candidate_ready',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return "candidate_ready"
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def commit_durable_handoff(
         self,
         run_id: str,

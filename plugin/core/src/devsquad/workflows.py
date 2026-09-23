@@ -484,6 +484,144 @@ def _frozen_attempt_selection(
     raise ContractError(f"{role} attempt is outside the frozen fallback set")
 
 
+def build_implementation_prompt(
+    task: dict[str, Any],
+    delivery_workspace: dict[str, Any],
+) -> str:
+    """Build one bounded implementation assignment from frozen host input."""
+    validate_task(task)
+    if task["workflow"] != "issue-delivery":
+        raise ContractError("implementation prompt requires an issue-delivery task")
+    if not isinstance(delivery_workspace, dict):
+        raise ContractError("delivery workspace snapshot must be an object")
+    baseline_oid = _commit_oid(
+        delivery_workspace.get("baseline_oid"), "delivery baseline_oid",
+    )
+    if delivery_workspace.get("write_scope") != task["scope"]["write_paths"]:
+        raise ContractError("delivery write scope differs from the frozen task")
+    assignment = {
+        "goal": task["goal"],
+        "acceptance": task["acceptance"],
+        "read_scope": task["scope"]["read_paths"],
+        "write_scope": task["scope"]["write_paths"],
+        "baseline_oid": baseline_oid,
+    }
+    return "\n".join([
+        "You are the sole implementation writer for one bounded Git task.",
+        "Edit only the declared write scope in the supplied isolated worktree.",
+        "Do not commit, merge, push, publish, delegate, or change remotes.",
+        "Do not run checks; the coordinator runs declared checks separately.",
+        "When the edits are complete, return a concise implementation summary.",
+        "Frozen assignment:",
+        canonical_json(assignment),
+    ])
+
+
+def validate_implementation_evidence(
+    value: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate a completed writer attempt before candidate freezing."""
+    document = _exact(value, {
+        "schema_version", "workflow", "baseline_oid", "summary", "attempt",
+    }, "implementation evidence")
+    if document["schema_version"] != 1 or type(document["schema_version"]) is not int:
+        raise ContractError("implementation evidence schema_version is invalid")
+    if document["workflow"] != "issue-delivery":
+        raise ContractError("implementation evidence workflow is invalid")
+    if not isinstance(snapshot, dict):
+        raise ContractError("frozen delivery snapshot is invalid")
+    task = snapshot.get("task")
+    workspace = snapshot.get("delivery_workspace")
+    if not isinstance(task, dict) or not isinstance(workspace, dict):
+        raise ContractError("frozen delivery snapshot is incomplete")
+    if task.get("workflow") != "issue-delivery":
+        raise ContractError("implementation evidence requires issue-delivery")
+    if _commit_oid(
+        document["baseline_oid"], "implementation baseline_oid",
+    ) != workspace.get("baseline_oid"):
+        raise ContractError("implementation evidence targets a different baseline")
+    _text(document["summary"], "implementation summary")
+    attempt = _exact(document["attempt"], {
+        "role", "selected_profile", "prompt_sha256", "observed_identity",
+        "native_ids", "worker_invocations", "native_model_requests", "usage",
+    }, "implementation attempt evidence")
+    if attempt["role"] != "implementer":
+        raise ContractError("implementation attempt role is invalid")
+    selected = _frozen_attempt_selection(
+        snapshot, "implementer", attempt["selected_profile"],
+    )
+    prompt_sha256 = hashlib.sha256(
+        build_implementation_prompt(task, workspace).encode()
+    ).hexdigest()
+    if _sha256(
+        attempt["prompt_sha256"], "implementation prompt sha256",
+    ) != prompt_sha256:
+        raise ContractError("implementation prompt hash does not match the task")
+    adapter = snapshot.get("implementation_adapters", {}).get(
+        selected["profile_id"]
+    )
+    if adapter is None:
+        if attempt["observed_identity"] is not None or attempt["native_ids"] != {}:
+            raise ContractError("fixture implementation cannot claim native identity")
+    elif not isinstance(attempt["observed_identity"], dict):
+        raise ContractError("native implementation identity is missing")
+    if attempt["worker_invocations"] != 1 or type(attempt["worker_invocations"]) is not int:
+        raise ContractError("implementation worker invocation accounting is invalid")
+    native_requests = attempt["native_model_requests"]
+    if native_requests is not None and (
+            type(native_requests) is not int or native_requests < 0):
+        raise ContractError("implementation native request count is invalid")
+    usage = _exact(attempt["usage"], {
+        "input_tokens", "output_tokens", "total_tokens", "source",
+    }, "implementation usage")
+    for field in ("input_tokens", "output_tokens", "total_tokens"):
+        if usage[field] is not None and (
+                type(usage[field]) is not int or usage[field] < 0):
+            raise ContractError("implementation token usage is invalid")
+    if usage["source"] not in {"native_reported", "unavailable"}:
+        raise ContractError("implementation usage source is invalid")
+    if usage["source"] == "unavailable" and any(
+            usage[field] is not None
+            for field in ("input_tokens", "output_tokens", "total_tokens")
+    ):
+        raise ContractError("unavailable implementation usage cannot invent tokens")
+    return json.loads(canonical_json(document))
+
+
+def make_implementation_evidence(
+    snapshot: dict[str, Any],
+    summary: str,
+) -> dict[str, Any]:
+    selected = snapshot["routing"]["roles"]["implementer"]["selected"]
+    document = {
+        "schema_version": 1,
+        "workflow": "issue-delivery",
+        "baseline_oid": snapshot["delivery_workspace"]["baseline_oid"],
+        "summary": summary,
+        "attempt": {
+            "role": "implementer",
+            "selected_profile": selected,
+            "prompt_sha256": hashlib.sha256(
+                build_implementation_prompt(
+                    snapshot["task"], snapshot["delivery_workspace"],
+                ).encode()
+            ).hexdigest(),
+            "observed_identity": None,
+            "native_ids": {},
+            "worker_invocations": 1,
+            "native_model_requests": None,
+            "usage": {
+                "input_tokens": None,
+                "output_tokens": None,
+                "total_tokens": None,
+                "source": "unavailable",
+            },
+        },
+    }
+    return validate_implementation_evidence(document, snapshot)
+
+
 def _frozen_role_adapter(
     snapshot: dict[str, Any],
     role: str,

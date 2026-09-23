@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import os
 from pathlib import Path, PurePosixPath
 import subprocess
@@ -271,6 +272,7 @@ def prepare_review_workspace(
     scope_paths: Iterable[str],
     *,
     required_clean_paths: Iterable[str] = (),
+    candidate_sha256: str | None = None,
 ) -> dict[str, object]:
     """Create or validate one detached, run-owned worktree at the target commit."""
     repo = source_repo.resolve(strict=True)
@@ -292,10 +294,17 @@ def prepare_review_workspace(
         "target_oid": target_oid,
         "changed_paths": sorted(changed),
     }
+    computed_candidate = hashlib.sha256(canonical_json(identity).encode()).hexdigest()
+    if candidate_sha256 is not None:
+        if (not isinstance(candidate_sha256, str)
+                or len(candidate_sha256) != 64
+                or any(character not in "0123456789abcdef" for character in candidate_sha256)):
+            raise ContractError("candidate SHA-256 override is invalid")
+        computed_candidate = candidate_sha256
     return {
         **identity,
         "path": str(workspace.resolve()),
-        "candidate_sha256": hashlib.sha256(canonical_json(identity).encode()).hexdigest(),
+        "candidate_sha256": computed_candidate,
         "scope": list(scopes),
     }
 
@@ -450,7 +459,7 @@ def _candidate_snapshot(
     }, patch
 
 
-def freeze_delivery_candidate(
+def _freeze_delivery_candidate_unlocked(
     source_repo: Path,
     workspace: Path,
     baseline_oid: str,
@@ -529,3 +538,24 @@ def freeze_delivery_candidate(
     if dirty_paths(delivery):
         raise ContractError("delivery workspace remained dirty after candidate commit")
     return snapshot, patch
+
+
+def freeze_delivery_candidate(
+    source_repo: Path,
+    workspace: Path,
+    baseline_oid: str,
+    write_paths: Iterable[str],
+    run_id: str,
+) -> tuple[dict[str, object], bytes]:
+    """Serialize candidate freezing so competing recovery importers replay it."""
+    delivery = workspace.resolve(strict=True)
+    lock_path = delivery.parent / ".candidate-finalize.lock"
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        return _freeze_delivery_candidate_unlocked(
+            source_repo, delivery, baseline_oid, write_paths, run_id,
+        )
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
