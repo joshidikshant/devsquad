@@ -230,6 +230,15 @@
           "artifact": "M5-STATUS.md",
           "recorded_at": "2026-09-23T18:00:27+05:30",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "0e88d73",
+          "command_or_action": "224 core tests with ResourceWarning promoted to error, 220 Bash assertions and focused delivery/service/supervisor suites",
+          "outcome": "The durable implementer is fenced to one writer, validates frozen attempt evidence, serializes recovery-time candidate freezing and atomically publishes local candidate/patch artifacts plus separate review/check worktrees; invalid scope cannot publish a candidate and the source checkout/remote remain unchanged",
+          "artifact": "M5-STATUS.md",
+          "recorded_at": "2026-09-23T18:37:00+05:30",
+          "availability": "tracked_tests"
         }
       ],
       "blocker": null

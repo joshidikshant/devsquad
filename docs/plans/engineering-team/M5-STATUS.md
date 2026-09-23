@@ -8,8 +8,8 @@ two-harness gate passes.
 | Requirement | Planned evidence | Status |
 |---|---|---|
 | Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | verified offline at `d96e9e4` |
-| Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | workspace isolation verified offline at `6a7e849`; workflow writer pending |
-| Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `6a7e849` |
+| Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | verified offline at `0e88d73` |
+| Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `0e88d73` |
 | Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | router verified; workflow pending |
 | Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | pending |
 | Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | pending |
@@ -52,3 +52,22 @@ assertions. The first full discovery observed the pre-existing coordinator-
 crash race test return `live` once; that isolated test and the full discovery
 rerun passed unchanged. Connecting this workspace to the durable implementer
 attempt and its existing store-level writer fence remains the next slice.
+
+## Plan 07-01 checkpoint 3
+
+The offline implementation worker now runs inside the durable M2 process and
+writer fence. Its frozen prompt/profile evidence must validate before the
+coordinator serializes candidate finalization, rechecks scope, commits locally,
+creates independent review/check worktrees and atomically imports the
+implementation, candidate and patch artifacts into the same saved ledger.
+A concurrent resume observes the live owner and creates no second attempt.
+An out-of-scope implementation terminalizes failed without publishing a
+candidate. The original checkout and remote refs remain unchanged.
+
+The complete gate is 224 core tests (2 optional-SDK skips) and 220 Bash
+assertions. During this slice a full run reproduced an existing macOS race in
+which a zombie-only process group was classified `ambiguous`; `0e88d73` now
+uses the non-zombie process-group inventory before declaring ambiguity and has
+a direct regression. The isolated service/supervisor/delivery suites and the
+complete discovery pass after that fix. Plan 07-02 now owns independent review,
+checks, disposition and revision behavior.

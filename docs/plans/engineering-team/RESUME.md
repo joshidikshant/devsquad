@@ -94,6 +94,14 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   tests and 220 Bash assertions. One first core run observed the pre-existing
   coordinator-crash test return `live`; its isolated run and the complete rerun
   passed unchanged.
+- M5 Plan 07-01 is complete at `0e88d73`. The offline implementer now executes
+  inside the durable process/writer fence, validates frozen attempt evidence,
+  serializes candidate finalization across recovery importers and atomically
+  saves implementation, local commit and patch evidence before creating
+  separate review/check worktrees. Concurrent resume creates no second writer;
+  out-of-scope edits fail without a candidate. The complete gate is 224 core
+  tests and 220 Bash assertions. A reproduced macOS zombie-only process-group
+  ambiguity was fixed with a non-zombie inventory check and direct regression.
 
 ## Completed and preserved
 
@@ -105,7 +113,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 220 tests passed through M5 Plan 07-01 delivery candidate slice with warnings promoted to errors |
+| Python core discovery | 224 tests passed through completed M5 Plan 07-01 with warnings promoted to errors |
 | Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
@@ -142,9 +150,9 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M5 Plan 07-01 by connecting the isolated delivery worktree to a
-   durable fenced implementer attempt, then publish its local candidate/patch
-   artifacts to the saved run without merge, push or publication.
+2. Execute M5 Plan 07-02: generalize candidate-bound review/check evidence for
+   `issue-delivery`, publish the lead handoff, and make a bounded `revise`
+   disposition return to the fenced implementer with all iterations retained.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.
