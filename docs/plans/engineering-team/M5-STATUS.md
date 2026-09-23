@@ -8,8 +8,8 @@ two-harness gate passes.
 | Requirement | Planned evidence | Status |
 |---|---|---|
 | Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | verified offline at `d96e9e4` |
-| Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | pending |
-| Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | pending |
+| Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | workspace isolation verified offline at `6a7e849`; workflow writer pending |
+| Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `6a7e849` |
 | Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | router verified; workflow pending |
 | Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | pending |
 | Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | pending |
@@ -35,3 +35,20 @@ adds Edit/Write but not Bash or Agent. Offline evidence is 3 focused tests, 215
 full core tests (2 optional-SDK skips), a fresh wheel containing the manifest,
 and 220 Bash assertions. This does not claim a live Claude model invocation;
 the installed CLI still requires normal provider login.
+
+## Plan 07-01 checkpoint 2
+
+The delivery workspace starts from the frozen target in a detached, run-owned
+Git worktree. Candidate freezing rejects out-of-scope edits and escaping
+symlinks, stages only after validation, disables repository hooks/signing,
+creates one coordinator-owned local commit, and returns stable commit/tree/
+patch/candidate hashes plus added-file evidence. A replay returns the same
+candidate; any later workspace edit invalidates it. Five focused tests prove
+file names with spaces, no-change rejection, scope and symlink failures,
+source checkout/index/HEAD preservation and unchanged local-remote refs.
+
+The complete gate is 220 core tests (2 optional-SDK skips) and 220 Bash
+assertions. The first full discovery observed the pre-existing coordinator-
+crash race test return `live` once; that isolated test and the full discovery
+rerun passed unchanged. Connecting this workspace to the durable implementer
+attempt and its existing store-level writer fence remains the next slice.
