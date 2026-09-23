@@ -78,6 +78,13 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 - Full assignment remains **M1–M7 plus C1**, as specified in
   [SOL-HANDOFF.md](SOL-HANDOFF.md). M5 is next because it depends on accepted
   M3, while the external M4 Claude live gate remains recorded and paused.
+- M5 Plan 07-01 has started at `d96e9e4`. The core and Bash compatibility
+  boundaries now include a Claude 2.1.220 headless adapter with structured
+  output, version-scoped model/effort preparation, explicit Read/Glob/Grep or
+  Edit/Write tool sets, strict empty MCP configuration, safe mode and no
+  blanket permission bypass. Its offline gate is 215 core tests, a fresh-wheel
+  content check and 220 Bash assertions. This is adapter conformance, not a
+  live Claude model receipt; normal Claude login remains required.
 
 ## Completed and preserved
 
@@ -89,8 +96,8 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 212 tests passed through M4 Plan 06-03 with warnings promoted to errors |
-| Bash 3.2 regression suite | 10 test files, 208 assertions passed |
+| Python core discovery | 215 tests passed through M5 Plan 07-01 adapter slice with warnings promoted to errors |
+| Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
 | M4 cross-surface proof | Real Codex read the terminal-started run through MCP; official SDK clients proved identical ledger, fenced claims, completion and disconnect survival; actual Claude handoff remains blocked on login |
@@ -126,9 +133,9 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Execute M5 from a requirement-to-evidence matrix: first add the Claude
-   headless adapter contract, then isolated one-writer delivery, scope/fencing,
-   different-model review, exact-candidate checks and bounded disposition.
+2. Continue M5 Plan 07-01 from the committed adapter boundary: add the isolated
+   one-writer delivery worktree, scope validation and replay-safe local
+   candidate commit/patch artifacts without merge, push or publication.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.

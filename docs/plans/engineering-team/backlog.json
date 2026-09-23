@@ -212,7 +212,17 @@
       "depends_on": ["M3"],
       "status": "in_progress",
       "acceptance_section": "M5 — Deliver a bounded engineering change",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "d96e9e4",
+          "command_or_action": "215 core tests with ResourceWarning promoted to error, 220 Bash assertions, 3 focused Claude adapter tests and a fresh wheel content check",
+          "outcome": "The bounded Claude 2.1.220 headless adapter now uses explicit read/write tool profiles, structured non-interactive output, strict empty MCP config, no blanket permission bypass and shared legacy error classification; delivery workspaces and workflow execution remain open",
+          "artifact": "M5-STATUS.md",
+          "recorded_at": "2026-09-23T12:19:00+05:30",
+          "availability": "tracked_tests"
+        }
+      ],
       "blocker": null
     },
     {
