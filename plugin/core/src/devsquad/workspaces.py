@@ -12,12 +12,20 @@ from .contracts import ContractError
 from .store import canonical_json, git_common_dir
 
 
-def _git(repo: Path, *args: str) -> bytes:
+MAX_CANDIDATE_PATCH_BYTES = 16 * 1024 * 1024
+
+
+def _git(
+    repo: Path,
+    *args: str,
+    environment: dict[str, str] | None = None,
+) -> bytes:
     try:
         result = subprocess.run(
             ["git", "-C", str(repo), *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=(None if environment is None else {**os.environ, **environment}),
             check=False,
         )
     except OSError as exc:
@@ -315,3 +323,209 @@ def prepare_check_workspace(
         "target_oid": target_oid,
         "scope": list(scopes),
     }
+
+
+def prepare_delivery_workspace(
+    source_repo: Path,
+    runtime: Path,
+    project_id: str,
+    run_id: str,
+    target_oid: str,
+    read_paths: Iterable[str],
+    write_paths: Iterable[str],
+    *,
+    required_clean_paths: Iterable[str] = (),
+) -> dict[str, object]:
+    """Create or validate one detached, run-owned implementation worktree."""
+    repo = source_repo.resolve(strict=True)
+    reads = tuple(_normalized_relative(path, "read scope path") for path in read_paths)
+    writes = tuple(
+        _normalized_relative(path, "write scope path") for path in write_paths
+    )
+    if not writes:
+        raise ContractError("delivery workspace requires a non-empty write scope")
+    scopes = tuple(dict.fromkeys((*reads, *writes)))
+    assert_clean_inputs(repo, scopes, required_clean_paths)
+    workspace, _ = _prepare_detached_workspace(
+        repo, runtime, project_id, run_id, target_oid, scopes,
+        "delivery-worktree",
+    )
+    return {
+        "schema_version": 1,
+        "path": str(workspace),
+        "baseline_oid": target_oid,
+        "read_scope": list(reads),
+        "write_scope": list(writes),
+    }
+
+
+def _assert_delivery_path_scope(
+    workspace: Path,
+    changed_paths: Iterable[str],
+    write_paths: Iterable[str],
+) -> tuple[str, ...]:
+    writes = tuple(
+        _normalized_relative(path, "write scope path") for path in write_paths
+    )
+    changed = tuple(sorted(dict.fromkeys(changed_paths)))
+    outside = [
+        path for path in changed
+        if not any(_intersects(path, scope) for scope in writes)
+    ]
+    if outside:
+        raise ContractError(
+            "delivery candidate changes paths outside write scope: "
+            + ", ".join(outside)
+        )
+    root = workspace.resolve(strict=True)
+    for relative in changed:
+        normalized = _normalized_relative(relative, "candidate path")
+        candidate = root / normalized
+        probe = candidate if candidate.exists() or candidate.is_symlink() else candidate.parent
+        try:
+            resolved = probe.resolve(strict=False)
+        except OSError as exc:
+            raise ContractError(
+                f"delivery candidate path cannot be resolved: {normalized}"
+            ) from exc
+        if resolved != root and root not in resolved.parents:
+            raise ContractError(
+                f"delivery candidate path escapes its workspace: {normalized}"
+            )
+    return changed
+
+
+def _candidate_snapshot(
+    workspace: Path,
+    baseline_oid: str,
+    commit_oid: str,
+    write_paths: Iterable[str],
+) -> tuple[dict[str, object], bytes]:
+    changed = _decode_paths(
+        _git(
+            workspace,
+            "diff", "--no-renames", "--name-only", "-z",
+            baseline_oid, commit_oid, "--",
+        ),
+        "delivery candidate diff",
+    )
+    changed_paths = _assert_delivery_path_scope(workspace, changed, write_paths)
+    if not changed_paths:
+        raise ContractError("delivery candidate contains no changes")
+    captured_untracked = _decode_paths(
+        _git(
+            workspace,
+            "diff", "--no-renames", "--diff-filter=A", "--name-only", "-z",
+            baseline_oid, commit_oid, "--",
+        ),
+        "delivery added-path inventory",
+    )
+    patch = _git(
+        workspace,
+        "diff", "--binary", "--no-ext-diff", baseline_oid, commit_oid, "--",
+    )
+    if len(patch) > MAX_CANDIDATE_PATCH_BYTES:
+        raise ContractError("delivery candidate patch exceeds its byte limit")
+    tree_oid = _git(
+        workspace, "rev-parse", "--verify", f"{commit_oid}^{{tree}}",
+    ).decode().strip()
+    if (len(tree_oid) != 40
+            or any(character not in "0123456789abcdef" for character in tree_oid)):
+        raise ContractError("delivery candidate tree did not resolve to a full OID")
+    identity = {
+        "schema_version": 1,
+        "baseline_oid": baseline_oid,
+        "commit_oid": commit_oid,
+        "tree_oid": tree_oid,
+        "patch_sha256": hashlib.sha256(patch).hexdigest(),
+        "changed_paths": list(changed_paths),
+    }
+    return {
+        **identity,
+        "candidate_sha256": hashlib.sha256(
+            canonical_json(identity).encode()
+        ).hexdigest(),
+        "patch_bytes": len(patch),
+        "captured_untracked_paths": sorted(captured_untracked),
+    }, patch
+
+
+def freeze_delivery_candidate(
+    source_repo: Path,
+    workspace: Path,
+    baseline_oid: str,
+    write_paths: Iterable[str],
+    run_id: str,
+) -> tuple[dict[str, object], bytes]:
+    """Commit one scoped candidate locally and return its stable patch identity."""
+    repo = source_repo.resolve(strict=True)
+    delivery = workspace.resolve(strict=True)
+    run = _validate_segment(run_id, "run id")
+    if delivery.name != "delivery-worktree":
+        raise ContractError("delivery workspace is not a run-owned delivery worktree")
+    head_oid = resolve_commit(delivery, "HEAD")
+    _validate_workspace(
+        repo,
+        delivery,
+        head_oid,
+        write_paths,
+        require_clean=False,
+    )
+    dirties = dirty_paths(delivery)
+    if head_oid != baseline_oid:
+        if dirties:
+            raise ContractError("frozen delivery candidate has later workspace changes")
+        parents = _git(
+            delivery, "rev-list", "--parents", "-n", "1", head_oid,
+        ).decode().strip().split()
+        if parents != [head_oid, baseline_oid]:
+            raise ContractError("delivery candidate is not a single local baseline commit")
+        marker = _git(
+            delivery, "show", "-s", "--format=%s%x00%ae", head_oid,
+        ).decode("utf-8", "strict").rstrip("\n").split("\0")
+        if marker != [f"DevSquad candidate {run}", "candidate@devsquad.local"]:
+            raise ContractError("delivery candidate commit is not coordinator-owned")
+        return _candidate_snapshot(
+            delivery, baseline_oid, head_oid, write_paths,
+        )
+
+    changed_paths = _assert_delivery_path_scope(delivery, dirties, write_paths)
+    if not changed_paths:
+        raise ContractError("delivery candidate contains no changes")
+    _git(delivery, "add", "-A", "--", ".")
+    staged = _decode_paths(
+        _git(
+            delivery, "diff", "--cached", "--no-renames", "--name-only", "-z",
+            "--",
+        ),
+        "staged delivery candidate",
+    )
+    _assert_delivery_path_scope(delivery, staged, write_paths)
+    staged_patch = _git(
+        delivery, "diff", "--cached", "--binary", "--no-ext-diff", "--",
+    )
+    if len(staged_patch) > MAX_CANDIDATE_PATCH_BYTES:
+        raise ContractError("delivery candidate patch exceeds its byte limit")
+    commit_environment = {
+        "GIT_AUTHOR_NAME": "DevSquad Candidate",
+        "GIT_AUTHOR_EMAIL": "candidate@devsquad.local",
+        "GIT_COMMITTER_NAME": "DevSquad Candidate",
+        "GIT_COMMITTER_EMAIL": "candidate@devsquad.local",
+    }
+    _git(
+        delivery,
+        "-c", "core.hooksPath=/dev/null",
+        "-c", "commit.gpgSign=false",
+        "commit", "--quiet", "--no-verify", "--no-gpg-sign",
+        "-m", f"DevSquad candidate {run}",
+        environment=commit_environment,
+    )
+    commit_oid = resolve_commit(delivery, "HEAD")
+    snapshot, patch = _candidate_snapshot(
+        delivery, baseline_oid, commit_oid, write_paths,
+    )
+    if patch != staged_patch:
+        raise ContractError("committed delivery patch differs from the staged candidate")
+    if dirty_paths(delivery):
+        raise ContractError("delivery workspace remained dirty after candidate commit")
+    return snapshot, patch
