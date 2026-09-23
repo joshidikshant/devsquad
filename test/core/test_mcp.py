@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import unittest
 from unittest import mock
@@ -25,7 +26,9 @@ from devsquad.integrations import (
     LocalIntegrationManager,
     load_integrations,
 )
+from devsquad.service import Service
 from devsquad.store import ConflictError
+from devsquad_test_fixtures import branch_review_routing_documents
 
 
 class MCPDependencyBoundaryTest(unittest.TestCase):
@@ -684,6 +687,78 @@ class OfficialSDKConformanceTest(unittest.TestCase):
                     self.assertTrue(malformed.is_error)
 
             asyncio.run(probe())
+
+    def test_closing_a_real_stdio_client_does_not_cancel_the_detached_worker(self):
+        from mcp import Client, StdioServerParameters
+
+        with tempfile.TemporaryDirectory(prefix="devsquad-sdk-disconnect-") as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            runtime = root / "runtime"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "config", "user.email", "test@example.invalid"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repo), "config", "user.name", "Test"],
+                check=True,
+            )
+            (repo / "src").mkdir()
+            (repo / "tests").mkdir()
+            (repo / "src/app.py").write_text("VALUE = 'fixture'\n")
+            (repo / "tests/test_app.py").write_text("# fixture\n")
+            profiles, policy = branch_review_routing_documents()
+            (repo / "profiles.json").write_text(profiles)
+            (repo / "policy.json").write_text(policy)
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "commit", "-qm", "fixture"],
+                check=True,
+            )
+            task = json.loads(
+                (ROOT / "docs/plans/engineering-team/examples/branch-review.json").read_text()
+            )
+            task["project"] = {
+                "repo_path": str(repo), "base_ref": "HEAD", "target_ref": "HEAD",
+            }
+            task["routing"] = {
+                "profiles_file": "profiles.json", "policy_file": "policy.json",
+            }
+            service = Service(runtime)
+            started = service.start(
+                task, "stdio-client-disconnect", _internal_fake_delay=2,
+            )
+
+            async def observe_then_disconnect():
+                parameters = StdioServerParameters(
+                    command=sys.executable,
+                    args=[
+                        str(CORE / "bin/squad"), "mcp", "serve",
+                        "--runtime-dir", str(runtime), "--surface", "codex-app",
+                    ],
+                    cwd=ROOT,
+                )
+                async with Client(parameters) as client:
+                    status = await client.call_tool(
+                        "squad_status", {"run_id": started["run_id"]},
+                    )
+                    self.assertFalse(status.is_error)
+                    self.assertEqual(
+                        status.structured_content["data"]["run_id"], started["run_id"],
+                    )
+                    self.assertIn(
+                        status.structured_content["data"]["state"], {"queued", "running"},
+                    )
+
+            asyncio.run(observe_then_disconnect())
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                status = service.status(started["run_id"])
+                if status["state"] == "succeeded":
+                    break
+                time.sleep(0.05)
+            self.assertEqual(service.status(started["run_id"])["state"], "succeeded")
 
 
 class InstalledWheelMCPBoundaryTest(unittest.TestCase):
