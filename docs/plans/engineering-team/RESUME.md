@@ -50,18 +50,19 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   worker/delegation guard. The gate is 200 core tests with `ResourceWarning`
   promoted to failure, 208 Bash assertions, and 12 focused tests against the
   installed official SDK.
-- M4 Plan 06-02 is complete at `9abad1e`. Four packaged host templates now
-  drive duplicate-aware `squad setup`; `squad doctor` and the ninth MCP tool,
-  `squad_doctor`, report the app-loaded command, SDK and registration drift
-  without returning environment maps or arbitrary arguments. Registration is
-  fail-closed for inherited/duplicate/malformed config and is idempotent while
-  preserving unrelated settings. The gate is 211 core tests with
-  `ResourceWarning` promoted to failure, 208 Bash assertions and 21 focused
-  tests under the pinned SDK. Installed Codex 0.135.0, Claude 2.1.220,
-  Antigravity 1.2.3 and Grok 0.2.111 CLIs each passed add, second-run no-op and
-  drift-repair checks under an isolated temporary HOME. That is CLI/config
-  evidence, not a claim of in-app operation; real account configs remain
-  untouched. M4 remains in progress for Plan 06-03 cross-surface receipts.
+- M4 Plan 06-03 has completed all independent work at `aa0fef5`. The stable
+  isolated runtime at `~/.devsquad/releases/0.1.0+aa0fef5` is registered in
+  all four real local host configs; `squad doctor` reports four installed and
+  four matching registrations, and a second setup pass made no changes. One
+  terminal-started saved run was inspected through the real Codex MCP host,
+  then claimed/completed through official stdio SDK clients with identical
+  ledger identity, a rejected competing claim and terminal receipt hashes.
+  Closing the MCP client while a detached worker ran did not terminate it.
+  The gate is 212 core tests, 208 Bash assertions and 22 pinned-SDK tests.
+  M4 remains **blocked**, not complete, because its exact gate still requires
+  a normally authenticated Claude Code host to perform the real handoff; the
+  labeled SDK client is deliberately not presented as that proof. See the
+  [portable redacted evidence](evidence/M4-local-mcp-2026-09-23.json).
 - Last-observed provider readiness outside accepted M3: Claude CLI is not logged in;
   Grok CLI authentication expired; Gemini CLI's individual-account path is
   unsupported and its supported successor is Antigravity; Antigravity is
@@ -75,8 +76,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   planning agents all hit the same Plus limit; continue locally until shared
   agent capacity is restored, then use only bounded leaf reviews.
 - Full assignment remains **M1–M7 plus C1**, as specified in
-  [SOL-HANDOFF.md](SOL-HANDOFF.md). M4 is next; M5 may proceed after the frozen
-  M3 service boundary and can be developed alongside M4 in isolated slices.
+  [SOL-HANDOFF.md](SOL-HANDOFF.md). M5 is next because it depends on accepted
+  M3, while the external M4 Claude live gate remains recorded and paused.
 
 ## Completed and preserved
 
@@ -88,10 +89,11 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 211 tests passed through M4 Plan 06-02 with warnings promoted to errors |
+| Python core discovery | 212 tests passed through M4 Plan 06-03 with warnings promoted to errors |
 | Bash 3.2 regression suite | 10 test files, 208 assertions passed |
-| Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 21 official-SDK focused tests passed |
-| M4 local host setup | Four installed host CLIs registered under an isolated HOME, repaired drift and made no second-run changes; duplicate/inherited configs fail closed |
+| Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
+| M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
+| M4 cross-surface proof | Real Codex read the terminal-started run through MCP; official SDK clients proved identical ledger, fenced claims, completion and disconnect survival; actual Claude handoff remains blocked on login |
 | Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 8 |
 | Earlier live probes | Codex metadata and a separate read-only CLI smoke succeeded |
 | Integrated native adapter proof | Passed at `97a10f0`; gpt-5.5/low, read-only, correlated completion and confirmed process-group cleanup |
@@ -115,7 +117,8 @@ the earlier apparent nonresponses.
 
 The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md),
 [M2-STATUS.md](M2-STATUS.md) and [M3-STATUS.md](M3-STATUS.md).
-[backlog.json](backlog.json) marks all three complete and M4 next.
+[backlog.json](backlog.json) marks M1–M3 complete, M4 blocked on its external
+Claude live gate, and M5 next.
 Unauthenticated, unsupported or permission-blocked provider paths are not
 advertised as verified.
 
@@ -123,12 +126,12 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Execute M4 Plan 06-03: install one stable isolated local MCP runtime, use
-   the idempotent setup path for the available host surfaces, and prove one
-   saved run across terminal and Codex with client-disconnect survival,
-   handoff fencing, duplicate detection and installed-version receipts.
-3. Keep Claude/Grok/Antigravity probes paused until their normal login or trust
-   blockers are resolved. They do not block the independent Codex M3 gate.
+2. Execute M5 from a requirement-to-evidence matrix: first add the Claude
+   headless adapter contract, then isolated one-writer delivery, scope/fencing,
+   different-model review, exact-candidate checks and bounded disposition.
+3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
+   or trust blockers are resolved. Their live gates remain open, but M5 may
+   proceed independently from accepted M3.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 

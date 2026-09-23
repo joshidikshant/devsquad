@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "milestone": "M4",
+  "status": "blocked",
+  "implementation_revision": "aa0fef5e6e734f51bb1ba6fbcfa9e659daea6e01",
+  "recorded_at": "2026-09-23T06:59:59+05:30",
+  "offline_gate": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -W error::ResourceWarning -m unittest discover -s test/core -q",
+    "result": "212 tests passed; the two optional-SDK tests were skipped in the dependency-free base environment",
+    "optional_sdk_command": "PYTHONDONTWRITEBYTECODE=1 ~/.devsquad/releases/0.1.0+5b82f53/venv/bin/python -W error::ResourceWarning test/core/test_mcp.py -q",
+    "optional_sdk_result": "22 tests passed, including official in-memory schema calls and a real stdio-client disconnect while a detached worker survived to success",
+    "bash_command": "bash test/run.sh",
+    "bash_result": "10 test files and 208 assertions passed",
+    "clock_note": "One earlier Bash pass reported portable timeout elapsed 369s while the complete suite wall time was 25s; the isolated test and two subsequent complete Bash gates passed without a code change"
+  },
+  "installed_runtime": {
+    "launcher": "~/.local/bin/squad",
+    "immutable_release": "~/.devsquad/releases/0.1.0+aa0fef5/venv/bin/squad",
+    "devsquad_core": "0.1.0",
+    "mcp_sdk": "2.2.0",
+    "pip_check": "passed",
+    "doctor": "ready; 4 installed local apps and 4 matching registrations"
+  },
+  "installed_hosts": {
+    "codex": {
+      "version": "codex-cli 0.153.4",
+      "executable": "/Applications/ChatGPT.app/Contents/Resources/codex",
+      "registration": "matching",
+      "live_operation": "squad_status succeeded"
+    },
+    "claude_code": {
+      "version": "2.1.220",
+      "registration": "matching",
+      "live_operation": "blocked: normal provider login required"
+    },
+    "antigravity": {
+      "version": "1.2.3",
+      "registration": "matching",
+      "live_operation": "blocked: headless scoped trust/permission unresolved"
+    },
+    "grok": {
+      "version": "0.2.111",
+      "registration": "matching",
+      "live_operation": "blocked: provider authentication expired"
+    }
+  },
+  "registration_evidence": {
+    "first_setup": "all four hosts updated to the immutable aa0fef5 release and re-inspected matching",
+    "second_setup": "all four hosts returned unchanged; configuration hashes were unchanged",
+    "codex_version_drift": "PATH Codex 0.135.0 could not parse the desktop app's ultra reasoning setting; the explicit template now prefers bundled Codex 0.153.4 without changing the global setting"
+  },
+  "cross_surface_run": {
+    "run_id": "c88c025e-9dc8-4b5a-ac3b-1d1d0c4c9c20",
+    "terminal_start_state": "awaiting_host",
+    "terminal_start_version": 14,
+    "terminal_state": "succeeded",
+    "terminal_version": 22,
+    "packet_sha256": "0b3d04320f3cb1404c3364a0b6fafa6d7d2fd2cd51d58ef601bb860b27fd0453",
+    "candidate_sha256": "4c911e531fda1d2110294f6485755bc2ddff4d9c414799c48c4a1d6414e828f1",
+    "event_count": 22,
+    "same_run_id": true,
+    "preclaim_ledgers_identical": true,
+    "competing_claim_error": "CONFLICT",
+    "sdk_client_surfaces": [
+      "codex-app",
+      "claude-code",
+      "antigravity"
+    ],
+    "private_probe_receipt_sha256": "1d0e5aab27ca18934c9b0b8cf02e5141d0269304121a0f79b6c70ff9eff2f05a",
+    "terminal_report_sha256": {
+      "artifact-manifest.json": "754e08a762beed0fc6ee37f9c8e69b580fdeddc3a0d3d96ad1cd0e7364fcb7f6",
+      "events.jsonl": "748b46de74791af1b01735be8c0636ce54d365806684d83b6dcafc38ed5faec9",
+      "receipt.json": "4e214880b8f5a6248060bbaf2b62dc46d4d05cafda21404d0ad6fd4bcad956ff",
+      "receipt.md": "db6a6576653f5f2c2ce0a3f680c4d83ca2b884445f04bffb56810e59c29560da",
+      "result-receipt.json": "4e214880b8f5a6248060bbaf2b62dc46d4d05cafda21404d0ad6fd4bcad956ff"
+    }
+  },
+  "codex_live_receipt": {
+    "successful_jsonl_sha256": "81bd8e9e14451afd93ebfc467c4a5dfc9919b1551699cdb1d3cc66bd6454e893",
+    "thread_id": "01a0cbdf-b599-71b1-81b9-4eb1df5cd92c",
+    "model": "gpt-5.5",
+    "effort": "low",
+    "permission": "read-only sandbox plus one invocation-scoped approval for squad_status only",
+    "tool": "squad_status",
+    "tool_result": {
+      "run_id": "c88c025e-9dc8-4b5a-ac3b-1d1d0c4c9c20",
+      "state": "awaiting_host",
+      "version": 14,
+      "next_action": "claim_handoff"
+    },
+    "native_usage": {
+      "input_tokens": 56371,
+      "cached_input_tokens": 9344,
+      "output_tokens": 296,
+      "reasoning_output_tokens": 161
+    },
+    "failed_approval_probe": {
+      "jsonl_sha256": "e91644f7d61292c58366682fd3a1f427ed3363eeccfc4bd051daf5de87149c86",
+      "outcome": "Codex loaded DevSquad and selected squad_status, but non-interactive approval policy blocked the unannotated tool before execution",
+      "native_usage": {
+        "input_tokens": 56693,
+        "cached_input_tokens": 38016,
+        "output_tokens": 165,
+        "reasoning_output_tokens": 20
+      },
+      "closure": "aa0fef5 publishes read-only/idempotent/open-world/destructive annotations for all nine tools; the successful live retry additionally used a one-invocation squad_status approval override"
+    }
+  },
+  "blocking_gate": "M4 cannot be marked complete until a normally authenticated Claude Code app/CLI performs the required real handoff operation against the saved runtime; SDK-labeled client evidence is retained but is not substituted for that live host proof",
+  "next_independent_work": "Proceed to M5, which depends on accepted M3 rather than completion of the externally blocked M4 live gate"
+}
