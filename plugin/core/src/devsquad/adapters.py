@@ -40,6 +40,7 @@ class AdapterManifest:
     model_provider: str | None
     efforts_by_model: dict[str, tuple[str, ...]]
     permission_profiles: dict[str, tuple[str, ...]]
+    permission_tools: dict[str, tuple[str, ...]]
     output_format: str
     verified_versions: tuple[str, ...]
 
@@ -57,6 +58,7 @@ class AdapterManifest:
             model_provider=raw.get("model_provider"),
             efforts_by_model={k: tuple(v) for k, v in capabilities.get("efforts_by_model", {}).items()},
             permission_profiles={k: tuple(v) for k, v in raw.get("permission_profiles", {}).items()},
+            permission_tools={k: tuple(v) for k, v in raw.get("permission_tools", {}).items()},
             output_format=raw.get("output_format", "text"),
             verified_versions=tuple(raw.get("verified_harness_versions", [])),
         )
@@ -65,7 +67,17 @@ class AdapterManifest:
         return next((p for name in self.binary_candidates if (p := shutil.which(name))), None)
 
     def with_model_efforts(self, mapping: dict[str, tuple[str, ...]]) -> "AdapterManifest":
-        return AdapterManifest(self.name, self.transport, self.binary_candidates, self.model_provider, mapping, self.permission_profiles, self.output_format, self.verified_versions)
+        return AdapterManifest(
+            self.name,
+            self.transport,
+            self.binary_candidates,
+            self.model_provider,
+            mapping,
+            self.permission_profiles,
+            self.permission_tools,
+            self.output_format,
+            self.verified_versions,
+        )
 
 
 def _permission_args(manifest: AdapterManifest, permission: str) -> tuple[str, ...]:
@@ -77,7 +89,8 @@ def _permission_args(manifest: AdapterManifest, permission: str) -> tuple[str, .
 
 def prepare_cli(
     manifest: AdapterManifest, *, prompt: str, cwd: str, model: str | None,
-    effort: str | None, permission: str, timeout_seconds: int, stdin_path: str | None = None,
+    effort: str | None, permission: str, timeout_seconds: int,
+    stdin_path: str | None = None, harness_version_value: str | None = None,
 ) -> LaunchSpec:
     binary = manifest.resolve_binary()
     if not binary:
@@ -86,6 +99,14 @@ def prepare_cli(
         supported = manifest.efforts_by_model.get(model or "")
         if supported is None or effort not in supported:
             raise ProfileUnsupported(f"unsupported or unverified effort {effort!r} for {manifest.name} model {model!r}")
+    verification = "unverified"
+    if harness_version_value is not None and manifest.verified_versions:
+        if harness_version_value not in manifest.verified_versions:
+            raise ProfileUnsupported(
+                f"unverified {manifest.name} harness version: {harness_version_value}"
+            )
+        verification = "verified"
+    permission_args = _permission_args(manifest, permission)
     args: list[str]
     if manifest.name == "codex":
         sandbox = "read-only" if permission == "read_only" else "workspace-write"
@@ -107,13 +128,34 @@ def prepare_cli(
             args += ["--model", model]
         if effort:
             args += ["--reasoning-effort", effort]
+    elif manifest.name == "claude":
+        args = [
+            binary,
+            "--print",
+            "--output-format", "json",
+            "--safe-mode",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+            "--strict-mcp-config",
+            "--mcp-config", '{"mcpServers":{}}',
+            "--no-chrome",
+        ]
+        if model:
+            args += ["--model", model]
+        if effort:
+            args += ["--effort", effort]
+        args.extend(permission_args)
+        args += [prompt]
+        permission_args = ()
     else:
         raise ContractError(f"no argv builder for adapter: {manifest.name}")
-    args.extend(_permission_args(manifest, permission))
+    args.extend(permission_args)
     requested = ExecutionIdentity(
-        harness=manifest.name, harness_version=None, model_provider=manifest.model_provider,
+        harness=manifest.name, harness_version=harness_version_value,
+        model_provider=manifest.model_provider,
         model_family=None, model=model, effort=effort, permissions=permission,
-        verification="unverified",
+        tools=manifest.permission_tools.get(permission, ()),
+        verification=verification,
     )
     return LaunchSpec(SCHEMA_VERSION, manifest.name, "cli_exec", tuple(args), str(Path(cwd).resolve()), stdin_path, timeout_seconds, requested, {"DEVSQUAD_WORKER": "1"})
 
@@ -185,7 +227,7 @@ def classify_cli(spec: LaunchSpec, *, returncode: int, stdout: str, stderr: str,
         status, code = "failed", "CLI_ERROR"
     elif not stdout.strip():
         status, code = "malformed", "CLI_ERROR"
-    elif spec.adapter in {"codex", "antigravity", "grok"}:
+    elif spec.adapter in {"codex", "antigravity", "grok", "claude"}:
         try:
             _, deliverable, terminal, provider_error = _provider_records(spec.adapter, stdout)
             if provider_error:

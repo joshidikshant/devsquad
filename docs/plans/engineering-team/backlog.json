@@ -210,7 +210,7 @@
       "id": "M5",
       "title": "Bounded implementation with independent review",
       "depends_on": ["M3"],
-      "status": "pending",
+      "status": "in_progress",
       "acceptance_section": "M5 — Deliver a bounded engineering change",
       "evidence": [],
       "blocker": null

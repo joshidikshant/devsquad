@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "claude",
+  "transport": "cli_exec",
+  "binary_candidates": ["claude"],
+  "model_provider": "anthropic",
+  "verified_harness_versions": ["2.1.220 (Claude Code)"],
+  "capabilities": {
+    "efforts_by_model": {},
+    "native_model_list": false,
+    "resume": true
+  },
+  "permission_profiles": {
+    "read_only": ["--permission-mode", "plan", "--tools", "Read,Glob,Grep"],
+    "workspace_write": ["--permission-mode", "acceptEdits", "--tools", "Read,Glob,Grep,Edit,Write"]
+  },
+  "permission_tools": {
+    "read_only": ["Read", "Glob", "Grep"],
+    "workspace_write": ["Read", "Glob", "Grep", "Edit", "Write"]
+  },
+  "output_format": "json"
+}

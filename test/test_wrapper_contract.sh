@@ -18,7 +18,7 @@ ok()   { PASS=$((PASS + 1)); }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL: $1"; }
 
 FAKE=$(mktemp -d)
-for bin in agy codex grok; do
+for bin in agy claude codex grok; do
   cat > "$FAKE/$bin" <<'FAKESH'
 #!/bin/bash
 case "${FAKE_MODE:-success}" in
@@ -46,7 +46,7 @@ run_case() {
   ERR_TXT=$(cat "$errf" 2>/dev/null)
 }
 
-for spec in "gemini-wrapper.sh:invoke_gemini:gemini" "codex-wrapper.sh:invoke_codex:codex" "grok-wrapper.sh:invoke_grok:grok"; do
+for spec in "gemini-wrapper.sh:invoke_gemini:gemini" "claude-wrapper.sh:invoke_claude:claude" "codex-wrapper.sh:invoke_codex:codex" "grok-wrapper.sh:invoke_grok:grok"; do
   wrapper="${spec%%:*}"; rest="${spec#*:}"; fn="${rest%%:*}"; agent="${rest#*:}"
 
   # 1. success: stdout + exit 0 + usage record + contract log

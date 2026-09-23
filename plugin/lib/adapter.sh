@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # lib/adapter.sh -- Shared CLI adapter core for DevSquad wrappers (D4).
-# Sourced by gemini-/codex-/grok-wrapper.sh. Do not execute directly.
+# Sourced by gemini-/codex-/grok-/claude-wrapper.sh. Do not execute directly.
 #
 # Contract (enforced by test/test_wrapper_contract.sh):
 #   success: response on stdout, exit 0
