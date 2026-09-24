@@ -215,6 +215,14 @@ class DeliveryWorkspaceTest(unittest.TestCase):
             "delay_seconds": delay,
         }
 
+    @staticmethod
+    def clean_review_fixture() -> dict[str, object]:
+        return {
+            "verdict": "clean",
+            "summary": "The exact frozen candidate satisfies the task.",
+            "findings": [],
+        }
+
     def wait_for_candidate(self, service: Service, run_id: str) -> dict[str, object]:
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -225,6 +233,17 @@ class DeliveryWorkspaceTest(unittest.TestCase):
                 self.fail(f"delivery run terminalized early: {status}")
             time.sleep(0.05)
         self.fail(f"delivery candidate did not become ready: {service.status(run_id)}")
+
+    def wait_for_handoff(self, service: Service, run_id: str) -> dict[str, object]:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            status = service.status(run_id)
+            if status["state"] == "awaiting_host":
+                return status
+            if status["state"] in {"failed", "cancelled"}:
+                self.fail(f"delivery review terminalized early: {status}")
+            time.sleep(0.05)
+        self.fail(f"delivery handoff did not become ready: {service.status(run_id)}")
 
     def assert_source_unchanged(self) -> None:
         self.assertEqual(resolve_commit(self.repo, "HEAD"), self.baseline)
@@ -377,6 +396,45 @@ class DeliveryWorkspaceTest(unittest.TestCase):
             event["type"] for event in store.events_for_run(started["run_id"])
         ]
         self.assertEqual(event_types.count("delivery.candidate_ready"), 1)
+        self.assert_source_unchanged()
+
+    def test_exact_candidate_is_reviewed_checked_and_published_for_lead(self):
+        service = Service(self.runtime)
+        started = service.start(
+            self.delivery_task(),
+            "reviewed-delivery",
+            _internal_implementation_fixture=self.implementation_fixture(),
+            _internal_review_fixture=self.clean_review_fixture(),
+        )
+        self.wait_for_candidate(service, started["run_id"])
+        resumed = service.resume(started["run_id"])
+        self.assertTrue(resumed["launched"])
+        status = self.wait_for_handoff(service, started["run_id"])
+        claimed = service.handoff_claim(
+            started["run_id"], status["version"], "fixture-host",
+        )
+        packet = claimed["handoff"]["packet"]
+
+        store = Store(service.database, service.artifacts)
+        self.addCleanup(store.close)
+        snapshot = json.loads(store.run(started["run_id"])["mutable_snapshot"])
+        attempts = store.attempts_for_run(started["run_id"])
+        self.assertEqual([item["role"] for item in attempts], ["implementer", "reviewer"])
+        self.assertEqual(packet["workflow"], "issue-delivery")
+        self.assertEqual(
+            packet["candidate_sha256"], snapshot["candidate"]["candidate_sha256"],
+        )
+        self.assertTrue(packet["evaluation"]["accept_allowed"])
+        self.assertEqual(packet["checks"][0]["status"], "passed")
+        self.assertEqual(
+            {item["name"] for item in packet["artifacts"]},
+            {
+                f"review-{attempts[1]['id']}.json",
+                f"checks-{attempts[1]['id']}.json",
+                f"evaluation-{attempts[1]['id']}.json",
+                f"review-attempt-{attempts[1]['id']}.json",
+            },
+        )
         self.assert_source_unchanged()
 
     def test_live_implementer_cannot_be_resumed_into_a_second_writer(self):

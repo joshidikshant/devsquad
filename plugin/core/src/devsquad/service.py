@@ -499,17 +499,22 @@ class Service:
                         or set(internal_review_fixture)
                         != {"verdict", "summary", "findings"}):
                     raise ContractError("internal review fixture fields are invalid")
-                fixture_document = {
-                    "schema_version": 1,
-                    "candidate_sha256": snapshot["workspace"]["candidate_sha256"],
-                    "base_oid": base_oid,
-                    "target_oid": target_oid,
-                    "review_mode": review_mode(task),
-                    **internal_review_fixture,
-                }
-                snapshot["internal_review_fixture"] = validate_review_document(
-                    fixture_document, task, snapshot["workspace"],
-                )
+                if task["workflow"] == "branch-review":
+                    fixture_document = {
+                        "schema_version": 1,
+                        "candidate_sha256": snapshot["workspace"]["candidate_sha256"],
+                        "base_oid": base_oid,
+                        "target_oid": target_oid,
+                        "review_mode": review_mode(task),
+                        **internal_review_fixture,
+                    }
+                    snapshot["internal_review_fixture"] = validate_review_document(
+                        fixture_document, task, snapshot["workspace"],
+                    )
+                else:
+                    snapshot["pending_review_fixture"] = json.loads(
+                        canonical_json(internal_review_fixture)
+                    )
             if internal_lead_fixture is not None:
                 if (task["lead"]["mode"] != "headless"
                         or not isinstance(internal_lead_fixture, dict)
@@ -564,7 +569,10 @@ class Service:
                 internal_implementation_fixture=internal_implementation_fixture,
                 capacity_in_flight=store.active_pool_counts(),
             )
-            if (task["workflow"] == "branch-review" and internal_delay is None
+            if ((task["workflow"] == "branch-review"
+                    or (task["workflow"] == "issue-delivery"
+                        and internal_implementation_fixture is None))
+                    and internal_delay is None
                     and internal_review_fixture is None):
                 reviewer_route = snapshot["routing"]["roles"]["reviewer"]
                 reviewer_candidates = [

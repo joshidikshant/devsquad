@@ -211,8 +211,8 @@ def validate_review_document(
 ) -> dict[str, Any]:
     """Validate model output and bind it to the exact frozen candidate."""
     validate_task(task)
-    if task["workflow"] != "branch-review":
-        raise ContractError("review document requires a branch-review task")
+    if task["workflow"] not in {"branch-review", "issue-delivery"}:
+        raise ContractError("review document requires a reviewable workflow")
     document = _exact(value, {
         "schema_version", "candidate_sha256", "base_oid", "target_oid",
         "review_mode", "verdict", "summary", "findings",
@@ -427,8 +427,8 @@ def apply_lead_disposition(
 def build_review_prompt(task: dict[str, Any], workspace: dict[str, Any]) -> str:
     """Build a deterministic, read-only prompt from host-authorized fields only."""
     validate_task(task)
-    if task["workflow"] != "branch-review":
-        raise ContractError("review prompt requires a branch-review task")
+    if task["workflow"] not in {"branch-review", "issue-delivery"}:
+        raise ContractError("review prompt requires a reviewable workflow")
     candidate_sha256, base_oid, target_oid = _workspace_identity(workspace)
     mode = review_mode(task)
     focus = task.get("review", {}).get("focus")
@@ -868,13 +868,14 @@ def validate_branch_review_evidence(
     }, "branch review evidence")
     if document["schema_version"] != 1 or type(document["schema_version"]) is not int:
         raise ContractError("branch review evidence schema_version is invalid")
-    if document["workflow"] != "branch-review":
-        raise ContractError("branch review evidence workflow is invalid")
     if not isinstance(snapshot, dict):
         raise ContractError("frozen workflow snapshot must be an object")
     task, workspace = snapshot.get("task"), snapshot.get("workspace")
     if not isinstance(task, dict) or not isinstance(workspace, dict):
         raise ContractError("frozen workflow snapshot is incomplete")
+    if (task.get("workflow") not in {"branch-review", "issue-delivery"}
+            or document["workflow"] != task["workflow"]):
+        raise ContractError("review evidence workflow is invalid")
     candidate_sha256, base_oid, target_oid = _workspace_identity(workspace)
     for field, expected, validator in (
         ("candidate_sha256", candidate_sha256, _sha256),
@@ -975,7 +976,7 @@ def make_branch_review_evidence(
     candidate_sha256, base_oid, target_oid = _workspace_identity(workspace)
     document = {
         "schema_version": 1,
-        "workflow": "branch-review",
+        "workflow": task["workflow"],
         "candidate_sha256": candidate_sha256,
         "base_oid": base_oid,
         "target_oid": target_oid,

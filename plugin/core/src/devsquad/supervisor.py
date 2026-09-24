@@ -23,7 +23,9 @@ from .store import AttemptReservation, ConflictError, Store, canonical_json
 from .workflows import (
     decode_branch_review_evidence,
     decode_headless_lead_evidence,
+    review_mode,
     validate_implementation_evidence,
+    validate_review_document,
 )
 from .workspaces import (
     freeze_delivery_candidate,
@@ -364,7 +366,7 @@ class Supervisor:
             evidence_references.append({"name": name, "sha256": digest})
         packet = {
             "schema_version": 1,
-            "workflow": "branch-review",
+            "workflow": evidence["workflow"],
             "candidate_sha256": evidence["candidate_sha256"],
             "base_oid": evidence["base_oid"],
             "target_oid": evidence["target_oid"],
@@ -451,6 +453,19 @@ class Supervisor:
         new_snapshot["candidate"] = candidate_record
         new_snapshot["workspace"] = review_workspace
         new_snapshot["check_workspace"] = check_workspace
+        pending_review = new_snapshot.pop("pending_review_fixture", None)
+        if pending_review is not None:
+            fixture_document = {
+                "schema_version": 1,
+                "candidate_sha256": review_workspace["candidate_sha256"],
+                "base_oid": review_workspace["base_oid"],
+                "target_oid": review_workspace["target_oid"],
+                "review_mode": review_mode(task),
+                **pending_review,
+            }
+            new_snapshot["internal_review_fixture"] = validate_review_document(
+                fixture_document, task, review_workspace,
+            )
         iterations = list(new_snapshot.get("delivery_iterations", []))
         iterations.append({
             "iteration": iteration,
@@ -601,7 +616,8 @@ class Supervisor:
                     semantic_error=str(exc)
                     receipt["error"]="HEADLESS_LEAD_OUTPUT_INVALID"
                     receipt["message"]=semantic_error
-            elif (workflow_review and not receipt["cancelled"]
+            elif (role == "reviewer" and (workflow_review or workflow_delivery)
+                    and not receipt["cancelled"]
                     and not receipt["timed_out"] and receipt["returncode"]==0):
                 try:
                     return self._commit_review_handoff(

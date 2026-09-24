@@ -302,6 +302,28 @@ class BranchReviewWorkflowTest(unittest.TestCase):
             with self.assertRaisesRegex(ContractError, message):
                 validate_branch_review_evidence(invalid, self.snapshot)
 
+    def test_issue_delivery_review_uses_the_same_candidate_bound_contract(self):
+        task = copy.deepcopy(self.task)
+        task["workflow"] = "issue-delivery"
+        task["scope"]["write_paths"] = ["src/example.py"]
+        snapshot = copy.deepcopy(self.snapshot)
+        snapshot["task"] = task
+
+        prompt = build_review_prompt(task, self.workspace)
+        evidence = make_branch_review_evidence(
+            snapshot, self.review, [self.check],
+        )
+
+        self.assertIn("read-only reviewer", prompt)
+        self.assertEqual(evidence["workflow"], "issue-delivery")
+        self.assertEqual(
+            validate_branch_review_evidence(evidence, snapshot), evidence,
+        )
+        stale = copy.deepcopy(evidence)
+        stale["workflow"] = "branch-review"
+        with self.assertRaisesRegex(ContractError, "workflow is invalid"):
+            validate_branch_review_evidence(stale, snapshot)
+
 
 if __name__ == "__main__":
     unittest.main()
