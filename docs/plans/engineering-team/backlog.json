@@ -265,7 +265,17 @@
           "title": "Optional typed decision contract and frozen evaluation baseline",
           "status": "in_progress",
           "specification": "DECISION-CLASSIFIERS.md",
-          "evidence": [],
+          "evidence": [
+            {
+              "kind": "experiment_preparation",
+              "revision": "70e59cb",
+              "command_or_action": "One-request dry run plus 5 focused probe tests, 231-test complete core discovery with ResourceWarning promoted to error, and 220 Bash assertions",
+              "outcome": "The pinned Jev 1.13 synthetic pilot has 8 cases and 24 typed choices, a $0.01 ceiling, no retry, strict model/probability/usage validation and private-output enforcement; no provider request ran because TypeSafe login/API key is unavailable",
+              "artifact": "experiments/jev-pilot-v1.json",
+              "recorded_at": "2026-09-26T17:26:40Z",
+              "availability": "tracked_fixture_and_tests"
+            }
+          ],
           "checkpoint": "One-request synthetic Jev fixture, strict response validator and five offline probe tests are ready; core run/cache integration remains pending"
         },
         {
@@ -287,7 +297,17 @@
           "fallback_rule": "Use pinned Laya locally if Jev access requires a larger purchase, price/usage exceeds the frozen cap, or measured quality/latency fails the predeclared gate"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "early_experiment_checkpoint",
+          "revision": "70e59cb",
+          "command_or_action": "Prepared and offline-validated the explicitly authorized capped Jev pilot before M6 runtime integration",
+          "outcome": "Synthetic probe mechanics are ready and ordinary runtime behavior is unchanged; the billable live smoke is blocked on TypeSafe login/API-key setup and cannot count as classifier quality evidence",
+          "artifact": "experiments/jev-pilot-v1.json",
+          "recorded_at": "2026-09-26T17:26:40Z",
+          "availability": "tracked_fixture_and_tests"
+        }
+      ],
       "blocker": null
     },
     {

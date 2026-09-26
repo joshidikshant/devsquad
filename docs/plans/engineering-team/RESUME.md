@@ -117,7 +117,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   review attention and outcome labels. No weights/inference/API spending or
   runtime routing changes occurred. The user has authorized one Jev request
   using only the synthetic fixture, no retries and at most $0.01. The tracked
-  fixture/probe and five focused offline tests are ready; the complete offline
+  fixture/probe checkpoint is committed at `70e59cb` and five focused offline
+  tests are ready; the complete offline
   gate is 231 core tests discovered (suite OK, 2 optional SDK skips) and 220
   Bash assertions. The live call is
   blocked because the TypeSafe console is at login and no `TYPESAFE_API_KEY`
