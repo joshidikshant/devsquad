@@ -11,6 +11,7 @@
 | Discover installed harnesses, models, supported efforts and tools | DevSquad's discovery/probes |
 | Connect accounts, identify shared allowance pools, set spending/access limits | User setup, assisted by discovery |
 | Frame the task, scope, acceptance criteria and required capabilities | Current host lead, or supplied terminal task |
+| Suggest task labels, relevant skills/context or eligible-profile rankings | Optional evaluated decision helper; advisory data, never authority |
 | Select model, effort and permitted toolbox for each role | Deterministic router applying versioned policy and current availability |
 | Decide which permitted tool to call during work | Selected worker, inside the assigned permissions |
 | Pin a particular configuration for this task | User override, resolved by the host into a validated profile |
@@ -62,6 +63,16 @@ Validate role names against the selected workflow. A pin must meet the same capa
 Reports explain selections, excluded alternatives, explicit overrides, escalations and observed settings. An unmeasured or manually pinned trial must not be counted as proof of a general routing improvement.
 
 The [model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md) adds stable aliases, automatic discovery and bounded qualification. After calibration, an enabled `guarded_auto` policy can promote tested bindings without per-release manual edits. The reviewed policy remains the authority; discovery or council votes alone cannot promote a candidate.
+
+The September 26 [Jev/Laya decision-helper amendment](DECISION-CLASSIFIERS.md)
+adds a default-off, local-first evaluation within M6. Frozen suggestions may
+inform only a reviewed policy after use-case-specific held-out validation.
+The router remains deterministic: validate requirements, pins and eligible
+profiles before considering suggestions; invalid/uncertain/missing output uses
+the existing policy. Helpers cannot lower task quality requirements, relax
+capacity, grant tools or trigger extra workers. Skill/context recommendations
+retain mandatory instructions and evidence. This is not a second planner or a
+change to C1's independent evaluation and explicit-invocation gates.
 
 ## What LLM Council actually contributes
 

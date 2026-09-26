@@ -117,6 +117,16 @@ Routing starts with a small versioned preference list per role/task class. Filte
 
 Selection is automatic by default. A user may pin a validated profile for any role; unpinned roles remain automatic. The selected profile defines the permitted toolbox, and the worker selects actual tool calls within it. Overrides have explicit fallback behavior. Stable role aliases resolve to qualified concrete profiles and are frozen per run. Discovery/evaluation can propose replacements; a reviewed update policy may authorize guarded automatic binding promotions, while policy changes remain reviewed. See the [selection amendment](../plans/engineering-team/SELECTION-AND-COUNCIL.md) and [model lifecycle](../plans/engineering-team/MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md).
 
+**September 26 amendment:** Evaluate optional typed decision helpers under
+[DECISION-CLASSIFIERS.md](../plans/engineering-team/DECISION-CLASSIFIERS.md).
+Default-off shadow experiments may test semantic task/profile, skill and
+context suggestions. A separately reviewed policy may consume frozen hints
+after held-out validation; exact eligibility, pins, permissions, billing,
+capacity and lead authority stay unchanged. This narrowly extends the original
+deferral of learned routing; it authorizes neither autonomous training/policy
+changes nor a required hosted service. The current no-model route remains the
+baseline and fallback, and M1–M5 acceptance gates are unchanged.
+
 Account pools span applications and repositories where the underlying allowance is shared. Provider observations have sources and expiry times; unknown allowance is unknown. DevSquad's concurrency reservations do not reserve quota with a provider. Spend estimates, token counts, characters and subscription allowance are distinct measurements.
 
 ## Learning and documentation are part of completion

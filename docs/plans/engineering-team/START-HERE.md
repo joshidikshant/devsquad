@@ -1,9 +1,10 @@
 # DevSquad: coding-agent entry point
 
 **Build status: implementation in progress.** After an interruption, read
-[RESUME.md](RESUME.md) first and compare it with current Git state. M1 has code
-and passing offline evidence; its remaining gates are recorded in
-[M1-STATUS.md](M1-STATUS.md). Do not restart the architecture exercise.
+[RESUME.md](RESUME.md) first and compare it with current Git state. M1–M3 are
+accepted; M4's actual Claude handoff is externally blocked and M5 is in
+progress. See [backlog.json](backlog.json) for evidence. Do not restart the
+architecture exercise.
 
 **Full-build assignment:** Use [SOL-HANDOFF.md](SOL-HANDOFF.md) for the user's request to have Sol execute everything, test thoroughly and make normal use simple. It includes M1–M7 plus the opt-in Council feature, and adds guided task entry over the same contracts.
 
@@ -32,6 +33,11 @@ flowchart LR
 Selection is automatic by default, with validated per-role profile overrides. Read the [selection and LLM Council amendment](SELECTION-AND-COUNCIL.md) for the clarified contract. Its optional C1 extension follows M6 and does not block the seven core milestones.
 
 Also read the [native adapters and model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md): use verified Codex app-server capabilities, stable profile aliases, automatic catalog updates and qualified binding promotions. These refine M1/M3/M6/M7; they add no prerequisite milestone and do not require rewriting workflows for each model release.
+
+The September 26 [Jev/Laya evaluation and decision-helper amendment](DECISION-CLASSIFIERS.md)
+adds optional M6 experiments for routing hints, skill selection and context
+ranking, with further bounded uses prioritized. It changes no runtime defaults
+and does not delay M5 or authorize paid API usage.
 
 ## Copyable execution brief
 
@@ -70,7 +76,7 @@ Keep planned and implemented features visibly separate. Do not mark M4/M7 comple
 
 First usable product: **a saved branch review**. Next: **one bounded code change reviewed by another model**. Two functioning harnesses are sufficient to prove the engineering workflow; M7 verifies access from every requested local surface. Do not force every provider into every run.
 
-Defer a dashboard, universal DAG builder, remote execution service, automatic model training/router, plugin marketplace, autonomous merges and scheduled documentation jobs. Existing plugin behavior remains available while the new runner is opt-in; switching hook suggestions to the new route source happens only after its gate passes.
+Defer a dashboard, universal DAG builder, remote execution service, automatic model training or unreviewed learned policy changes, plugin marketplace, autonomous merges and scheduled documentation jobs. Optional evaluated decision hints are bounded by the classifier amendment, not a replacement for deterministic policy. Existing plugin behavior remains available while the new runner is opt-in; switching hook suggestions to the new route source happens only after its gate passes.
 
 This packet began as architecture only. Current implementation and live-probe
 evidence are tracked in RESUME.md, the milestone status and backlog; they do

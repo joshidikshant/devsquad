@@ -11,7 +11,7 @@ two-harness gate passes.
 | Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | verified offline at `0e88d73` |
 | Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `0e88d73` |
 | Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | router verified; workflow pending |
-| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | pending |
+| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | first-candidate review/check/handoff verified offline at `30b98df`; revision/stale-evidence workflow gate pending |
 | Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | pending |
 | Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | pending |
 | Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | pending |
@@ -71,3 +71,22 @@ uses the non-zombie process-group inventory before declaring ambiguity and has
 a direct regression. The isolated service/supervisor/delivery suites and the
 complete discovery pass after that fix. Plan 07-02 now owns independent review,
 checks, disposition and revision behavior.
+
+## Plan 07-02 checkpoint 1
+
+At `30b98df`, review prompts/evidence accept `issue-delivery` only when the
+workflow matches the frozen task. A pending offline review fixture is bound
+to the actual candidate after implementation; the durable reviewer then runs
+read-only, imports its candidate-bound evidence, executes trusted checks in
+the separate worktree, and publishes the correct delivery lead handoff.
+
+The end-to-end offline regression proves implementation → explicit candidate
+resume → review/checks → lead claim, with matching candidate hashes and no
+source-checkout mutation. This is not native identity verification or a live
+two-harness result. Lead completion, revise-to-implementer iterations, full
+terminal history and the remaining M5 fault/live gates are still pending.
+
+The complete core discovery is **226 tests, suite OK with 2 optional-SDK
+skips**, with `ResourceWarning` promoted to error; **220 Bash assertions**
+passed. The next implementation slice is Plan 07-02 Task 3, retaining Task 2's
+unproven live/stale-revision requirements rather than marking M5 complete.

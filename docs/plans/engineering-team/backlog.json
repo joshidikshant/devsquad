@@ -8,6 +8,7 @@
   "implementation": "IMPLEMENTATION.md",
   "selection_and_council": "SELECTION-AND-COUNCIL.md",
   "model_lifecycle_and_native_adapters": "MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md",
+  "decision_classifiers": "DECISION-CLASSIFIERS.md",
   "execution_brief": "SOL-HANDOFF.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
@@ -239,6 +240,15 @@
           "artifact": "M5-STATUS.md",
           "recorded_at": "2026-09-23T18:37:00+05:30",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "30b98df",
+          "command_or_action": "226 core tests discovered with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions and exact-candidate delivery/review regressions",
+          "outcome": "Offline delivery now advances from a fenced local candidate through read-only review and separate trusted checks to a candidate-bound issue-delivery lead handoff; disposition, bounded revisions, complete receipts and live different-model/two-harness proof remain open",
+          "artifact": "M5-STATUS.md",
+          "recorded_at": "2026-09-26T15:01:21Z",
+          "availability": "tracked_tests"
         }
       ],
       "blocker": null
@@ -249,6 +259,32 @@
       "depends_on": ["M4", "M5"],
       "status": "pending",
       "acceptance_section": "M6 — Make capacity and improvement evidence useful",
+      "decision_helper_work_packages": [
+        {
+          "id": "M6-D1",
+          "title": "Optional typed decision contract and frozen evaluation baseline",
+          "status": "pending",
+          "specification": "DECISION-CLASSIFIERS.md",
+          "evidence": []
+        },
+        {
+          "id": "M6-D2",
+          "title": "Pinned local Laya shadow trial for task/profile and skill hints",
+          "depends_on": ["M6-D1"],
+          "status": "pending",
+          "specification": "DECISION-CLASSIFIERS.md",
+          "evidence": []
+        },
+        {
+          "id": "M6-D3",
+          "title": "Measured keep-off or reviewed advisory adoption decision",
+          "depends_on": ["M6-D2"],
+          "status": "pending",
+          "specification": "DECISION-CLASSIFIERS.md",
+          "evidence": [],
+          "hosted_comparison": "Optional Jev evaluation requires separate explicit API spending and data-sharing authorization; local evaluation does not depend on it"
+        }
+      ],
       "evidence": [],
       "blocker": null
     },
