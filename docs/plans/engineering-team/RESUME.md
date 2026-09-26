@@ -111,13 +111,18 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   revise-to-implementation, all terminal reports or the live two-harness gate.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
-  amendment adds M6-D1–D3: default-off contracts/baseline, local Laya shadow
-  trial, and measured keep-off or reviewed adoption. It prioritizes routing
+  amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
+  Jev pilot, and local Laya fallback plus measured adoption. It prioritizes routing
   hints, skill/tool shortlists and context ranking, followed by failure triage,
   review attention and outcome labels. No weights/inference/API spending or
-  runtime routing changes occurred. Jev comparison needs separate API/data
-  authorization; classifier suggestions never become permission/acceptance
-  authority. M5 remains the immediate implementation priority.
+  runtime routing changes occurred. The user has authorized one Jev request
+  using only the synthetic fixture, no retries and at most $0.01. The tracked
+  fixture/probe and five focused offline tests are ready; the complete offline
+  gate is 231 core tests discovered (suite OK, 2 optional SDK skips) and 220
+  Bash assertions. The live call is
+  blocked because the TypeSafe console is at login and no `TYPESAFE_API_KEY`
+  exists. Classifier suggestions never become permission/acceptance authority.
+  After the bounded probe, M5 remains the implementation priority.
 
 ## Completed and preserved
 
@@ -129,7 +134,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 226 discovered at `30b98df`; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Python core discovery | 231 discovered through the prepared Jev pilot; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
 | Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
@@ -178,6 +183,9 @@ advertised as verified.
 4. When M5's evidence shape is stable, execute the small M6 decision-helper
    work packages alongside other independently ready M6 work. Keep experiments
    off by default and preserve all existing M4/M5/live acceptance gates.
+   Exception already authorized: once TypeSafe login/API-key setup is complete,
+   run the prepared one-request synthetic Jev pilot immediately, save the
+   private receipt outside Git, and update only redacted aggregate evidence.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 

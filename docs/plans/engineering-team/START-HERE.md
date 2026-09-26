@@ -37,7 +37,9 @@ Also read the [native adapters and model lifecycle amendment](MODEL-LIFECYCLE-AN
 The September 26 [Jev/Laya evaluation and decision-helper amendment](DECISION-CLASSIFIERS.md)
 adds optional M6 experiments for routing hints, skill selection and context
 ranking, with further bounded uses prioritized. It changes no runtime defaults
-and does not delay M5 or authorize paid API usage.
+and does not delay M5. The only current hosted authorization is the explicitly
+capped one-request, $0.01 synthetic Jev pilot; no purchase, retry or private
+task upload is authorized.
 
 ## Copyable execution brief
 

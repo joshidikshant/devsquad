@@ -6,11 +6,14 @@ amendment; runtime integration and performance evaluation are pending**.
 ## Recommendation
 
 Evaluate a small typed classifier as an optional **decision helper**, not a
-replacement lead, coding worker or authority boundary. Start with **Laya in a
-local, default-off shadow experiment**; keep **Jev as an optional hosted
-comparator** requiring explicit API spending and data-sharing authorization.
-Existing paid coding subscriptions do not establish access to the Jev API.
-Do not add a mandatory model dependency or delay M5's delivery/revision loop.
+replacement lead, coding worker or authority boundary. Per the user's September
+26 direction, start with a **single capped Jev synthetic pilot** because it
+avoids Laya's local model setup. The pilot is limited to one billable request,
+no retries, a $0.01 ceiling and no repository/private task content. Move to a
+local, default-off Laya trial if Jev becomes materially costlier, cannot be
+accessed, or fails the quality/latency gate. Existing paid coding subscriptions
+do not establish access to the Jev API. Do not add a mandatory model dependency
+or delay M5's delivery/revision loop after the bounded probe.
 
 The current [router](../../../plugin/core/src/devsquad/router.py) is deterministic
 and makes no model call. A classifier adds routing latency. Its potential value
@@ -18,9 +21,12 @@ is better task/profile matching, fewer unnecessary tool loads, less irrelevant
 context and less downstream rework. No DevSquad speedup, allowance saving or
 number of saved subscription windows has been measured.
 
-This evaluation inspected public documentation, benchmark reports and pinned
-Laya source. It did **not** install weights, run inference, send project data to
-TypeSafe, or benchmark either model on this Mac or DevSquad tasks.
+The initial evaluation inspected public documentation, benchmark reports and
+pinned Laya source. It did **not** install weights or run Laya inference. The
+tracked [Jev pilot specification](experiments/jev-pilot-v1.json) and validated
+[probe](../../../test/core/probes/jev_decision_eval.py) are now ready, but no
+TypeSafe request has run because this environment has no `TYPESAFE_API_KEY` and
+the console is at its login screen. The live result remains pending.
 
 ## What was verified
 
@@ -156,6 +162,30 @@ supports typed responses and reports usage; record actual returned usage,
 errors and concrete model identity rather than inferring usage from a request.
 [Official API](https://docs.typesafe.ai/api).
 
+### Immediate capped Jev pilot
+
+The v1 pilot batches eight synthetic task cases and 24 task-family,
+execution-tier and specialist-skill choices into **one** Jev 1.13 request. The
+dry run is 19,219 request bytes. At the frozen published price, even the model's
+documented 64k aggregate context limit would cost about $0.002688, below the
+$0.01 ceiling. This calculation is only a preflight cap; the receipt must use
+the API's returned `input_tokens`. The probe has no retry path, never accepts a
+key on the command line and emits only case IDs, choices, probability vectors,
+latency and usage—not task text.
+
+```bash
+python3 test/core/probes/jev_decision_eval.py
+# Export TYPESAFE_API_KEY without placing its value in shell history, then run:
+python3 test/core/probes/jev_decision_eval.py --execute \
+  --output "$HOME/.devsquad/private-probes/jev-pilot-v1.json"
+```
+
+Do not copy the key or private receipt into Git. If the provider's current price
+makes one maximum-context request exceed $0.01, if returned usage breaches the
+cap, or if access requires purchasing a larger commitment, stop without retry
+and start the pinned Laya local trial. A smoke result only answers whether Jev
+can follow this schema on synthetic cases; it cannot enable runtime routing.
+
 ## Spec-based iterations and acceptance
 
 These are small work packages within M6's existing experiments/learning work,
@@ -166,8 +196,8 @@ M5 disposition, bounded revisions and receipts remain the immediate next work.
 | Package | Deliverable | Required proof before advancing |
 |---|---|---|
 | **M6-D1 — Contract and baseline** | Strict optional decision schema, fake adapter, run/cache accounting, redacted labeled corpus and frozen experiment spec | Default-off equivalence; malformed/unknown/NaN output, candidate/pin/quality/permission attacks, input drift, cancellation and crash/resume tests. Zero unauthorized selections or duplicated paid calls on replay |
-| **M6-D2 — Local shadow trial** | Pinned optional Laya adapter; start with task/profile hints and skill shortlist; context ranking next only if justified | Paired held-out comparison with static/heuristic and existing-lead baselines; cold/warm timing and memory on the actual Mac; explicit language/long-input abstention; no impact on ordinary runs |
-| **M6-D3 — Adoption decision** | Evidence-backed keep-off or narrowly scoped advisory policy, rollback receipt, optional separately authorized Jev comparison | Use-case-specific quality/cost gate passes before opt-in; failed/inconclusive experiments remain off. Re-run held-out and policy-boundary tests on any model/rubric/calibration change |
+| **M6-D2 — Capped Jev pilot** | One-request synthetic smoke, then a larger shadow comparison only if separately budgeted and justified | Exact model/usage/latency/cost receipt; strict response validation; no retry, task disclosure or runtime effect. Missing access, cost breach or poor results select the Laya fallback rather than weakening the gate |
+| **M6-D3 — Local fallback and adoption decision** | Pinned optional Laya trial when triggered, followed by evidence-backed keep-off or narrowly scoped advisory policy and rollback receipt | Same cases and end-to-end accounting for any Jev/Laya comparison; use-case quality/cost gate before opt-in. Failed/inconclusive experiments remain off; model/rubric/calibration changes rerun held-out and boundary tests |
 
 Freeze the dataset split, metrics, thresholds, sample-size rationale and resource
 ceilings **before** evaluating the held-out set. Split by issue/repository family

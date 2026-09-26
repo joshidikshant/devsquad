@@ -263,26 +263,28 @@
         {
           "id": "M6-D1",
           "title": "Optional typed decision contract and frozen evaluation baseline",
-          "status": "pending",
+          "status": "in_progress",
           "specification": "DECISION-CLASSIFIERS.md",
-          "evidence": []
+          "evidence": [],
+          "checkpoint": "One-request synthetic Jev fixture, strict response validator and five offline probe tests are ready; core run/cache integration remains pending"
         },
         {
           "id": "M6-D2",
-          "title": "Pinned local Laya shadow trial for task/profile and skill hints",
+          "title": "Capped Jev synthetic pilot for task/profile and skill hints",
           "depends_on": ["M6-D1"],
-          "status": "pending",
+          "status": "blocked",
           "specification": "DECISION-CLASSIFIERS.md",
-          "evidence": []
+          "evidence": [],
+          "blocker": "The TypeSafe console is at login and no TYPESAFE_API_KEY is available; one billable request, no retries, synthetic input and a $0.01 ceiling are prepared"
         },
         {
           "id": "M6-D3",
-          "title": "Measured keep-off or reviewed advisory adoption decision",
+          "title": "Triggered local Laya fallback and measured adoption decision",
           "depends_on": ["M6-D2"],
           "status": "pending",
           "specification": "DECISION-CLASSIFIERS.md",
           "evidence": [],
-          "hosted_comparison": "Optional Jev evaluation requires separate explicit API spending and data-sharing authorization; local evaluation does not depend on it"
+          "fallback_rule": "Use pinned Laya locally if Jev access requires a larger purchase, price/usage exceeds the frozen cap, or measured quality/latency fails the predeclared gate"
         }
       ],
       "evidence": [],

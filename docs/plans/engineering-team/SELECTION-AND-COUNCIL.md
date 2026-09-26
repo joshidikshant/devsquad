@@ -65,7 +65,9 @@ Reports explain selections, excluded alternatives, explicit overrides, escalatio
 The [model lifecycle amendment](MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md) adds stable aliases, automatic discovery and bounded qualification. After calibration, an enabled `guarded_auto` policy can promote tested bindings without per-release manual edits. The reviewed policy remains the authority; discovery or council votes alone cannot promote a candidate.
 
 The September 26 [Jev/Laya decision-helper amendment](DECISION-CLASSIFIERS.md)
-adds a default-off, local-first evaluation within M6. Frozen suggestions may
+adds a default-off evaluation within M6: one tightly capped Jev synthetic
+smoke first, with Laya as the local fallback if access, cost or measured quality
+justifies its heavier setup. Frozen suggestions may
 inform only a reviewed policy after use-case-specific held-out validation.
 The router remains deterministic: validate requirements, pins and eligible
 profiles before considering suggestions; invalid/uncertain/missing output uses
