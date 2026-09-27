@@ -597,6 +597,11 @@ def validate_implementation_evidence(
 def make_implementation_evidence(
     snapshot: dict[str, Any],
     summary: str,
+    *,
+    observed_identity: dict[str, Any] | None = None,
+    native_ids: dict[str, str] | None = None,
+    native_model_requests: int | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     selected = snapshot["routing"]["roles"]["implementer"]["selected"]
     document = {
@@ -613,11 +618,11 @@ def make_implementation_evidence(
                     snapshot.get("revision_request"),
                 ).encode()
             ).hexdigest(),
-            "observed_identity": None,
-            "native_ids": {},
+            "observed_identity": observed_identity,
+            "native_ids": native_ids if native_ids is not None else {},
             "worker_invocations": 1,
-            "native_model_requests": None,
-            "usage": {
+            "native_model_requests": native_model_requests,
+            "usage": usage if usage is not None else {
                 "input_tokens": None,
                 "output_tokens": None,
                 "total_tokens": None,

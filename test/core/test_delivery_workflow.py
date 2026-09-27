@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 CORE = Path(__file__).resolve().parents[2] / "plugin" / "core"
 sys.path.insert(0, str(CORE / "src"))
 
 from devsquad.contracts import ContractError
+from devsquad.claude_delivery_worker import (
+    freeze_claude_implementer,
+    run as run_claude_implementer,
+)
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store, request_hash
 from devsquad.workspaces import (
@@ -93,6 +99,12 @@ class DeliveryWorkspaceTest(unittest.TestCase):
                     permission="workspace_write",
                 ),
                 profile(
+                    "fixture-implementer-fallback",
+                    family="fixture-family-a2",
+                    model="fixture-write-model-fallback",
+                    permission="workspace_write",
+                ),
+                profile(
                     "fixture-reviewer",
                     family="fixture-family-b",
                     model="fixture-review-model",
@@ -113,7 +125,8 @@ class DeliveryWorkspaceTest(unittest.TestCase):
             "version": 1,
             "roles": {
                 "implementer": [
-                    {"kind": "profile", "id": "fixture-implementer"}
+                    {"kind": "profile", "id": "fixture-implementer"},
+                    {"kind": "profile", "id": "fixture-implementer-fallback"},
                 ],
                 "reviewer": [
                     {"kind": "profile", "id": "fixture-reviewer"}
@@ -125,6 +138,11 @@ class DeliveryWorkspaceTest(unittest.TestCase):
             "prefer_different_harness_for_review": True,
             "account_pools": {
                 "fixture-implementer-subscription": {
+                    "allowed_billing_modes": ["subscription"],
+                    "max_concurrency": 1,
+                    "unknown_capacity_policy": "allow_bounded",
+                },
+                "fixture-implementer-fallback-subscription": {
                     "allowed_billing_modes": ["subscription"],
                     "max_concurrency": 1,
                     "unknown_capacity_policy": "allow_bounded",
@@ -353,6 +371,67 @@ class DeliveryWorkspaceTest(unittest.TestCase):
         )
         self.assertEqual(replayed, candidate)
         self.assertEqual(replay_patch, patch)
+        self.assert_source_unchanged()
+
+    def test_frozen_claude_worker_edits_only_the_delivery_workspace(self):
+        prepared = self.prepare()
+        binary = self.root / "claude"
+        binary.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"--version\" ]; then\n"
+            "  printf '%s\\n' '2.1.220 (Claude Code)'\n"
+            "  exit 0\n"
+            "fi\n"
+            "printf '%s\\n' \"VALUE = 'fixed'\" > src/app.py\n"
+            "printf '%s\\n' '{\"type\":\"result\",\"is_error\":false,"
+            "\"result\":\"Applied the bounded fix.\","
+            "\"session_id\":\"session-fixture\","
+            "\"usage\":{\"input_tokens\":12,\"output_tokens\":7}}'\n"
+        )
+        binary.chmod(0o700)
+        profile = {
+            "id": "claude-implementer",
+            "harness": "claude",
+            "model_family": "claude-sonnet",
+            "model_id": "claude-sonnet-fixture",
+            "effort": {"value": "high", "transport": "native"},
+            "required_tools": ["read", "write"],
+            "permission_policy": "workspace_write",
+            "account_pool_id": "claude-subscription",
+            "billing_mode": "subscription",
+            "quality_status": "proven",
+            "evidence_refs": ["fixture"],
+        }
+        selected = {
+            "reference": {"kind": "profile", "id": profile["id"]},
+            "binding": None,
+            "profile_id": profile["id"],
+            "profile_sha256": hashlib.sha256(
+                json.dumps(profile, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "profile": profile,
+        }
+        with patch.dict(os.environ, {"PATH": str(self.root)}):
+            adapter = freeze_claude_implementer(selected)
+            snapshot = {
+                "task": self.delivery_task(),
+                "delivery_workspace": prepared,
+                "routing": {
+                    "roles": {
+                        "implementer": {"selected": selected, "fallbacks": []},
+                    },
+                },
+                "implementation_adapter": adapter,
+                "implementation_adapters": {profile["id"]: adapter},
+            }
+            evidence = run_claude_implementer(snapshot)
+        self.assertEqual(
+            (Path(prepared["path"]) / "src/app.py").read_text(),
+            "VALUE = 'fixed'\n",
+        )
+        self.assertEqual(evidence["attempt"]["observed_identity"]["harness"], "claude")
+        self.assertEqual(evidence["attempt"]["native_ids"]["session_id"], "session-fixture")
+        self.assertEqual(evidence["attempt"]["usage"]["total_tokens"], 19)
         self.assert_source_unchanged()
 
     def test_later_mutation_cannot_replay_a_frozen_candidate(self):
@@ -772,6 +851,100 @@ class DeliveryWorkspaceTest(unittest.TestCase):
         )
         self.assertEqual(len(receipt["lead"]["attempts"]), 1)
         self.assertEqual(receipt["accounting"]["worker_invocations"], 3)
+
+    def test_rate_limited_implementer_uses_frozen_same_permission_fallback(self):
+        task = self.delivery_task()
+        task["budget"]["max_fallbacks_per_step"] = 1
+        fixture = {
+            **self.implementation_fixture(),
+            "fail_profile_ids": ["fixture-implementer"],
+        }
+        service = Service(self.runtime)
+        started = service.start(
+            task,
+            "implementation-fallback",
+            _internal_implementation_fixture=fixture,
+            _internal_review_fixture=self.clean_review_fixture(),
+        )
+        self.wait_for_candidate(service, started["run_id"])
+        service.resume(started["run_id"])
+        waiting = self.wait_for_handoff(service, started["run_id"])
+        claimed = service.handoff_claim(
+            started["run_id"], waiting["version"], "fallback-host",
+        )
+        packet = claimed["handoff"]["packet"]
+        service.handoff_complete(
+            started["run_id"], claimed["claim"],
+            self.decision(packet, "accept-fallback", "accept", "Fallback accepted."),
+        )
+        receipt_artifact = next(
+            item for item in service.result(started["run_id"])["artifacts"]
+            if item["name"] == "receipt.json"
+        )
+        receipt = json.loads(Path(receipt_artifact["path"]).read_text())
+        implementers = [
+            item for item in receipt["attempts"] if item["role"] == "implementer"
+        ]
+        self.assertEqual(len(implementers), 2)
+        self.assertEqual(implementers[0]["status"], "failed")
+        self.assertEqual(implementers[0]["error"]["error"], "RATE_LIMITED")
+        self.assertEqual(
+            [item["selected_profile"]["profile_id"] for item in implementers],
+            ["fixture-implementer", "fixture-implementer-fallback"],
+        )
+        self.assertEqual(
+            {item["selected_profile"]["profile"]["permission_policy"]
+             for item in implementers},
+            {"workspace_write"},
+        )
+
+    def test_cancelled_repair_retains_prior_candidate_attempts_and_disposition(self):
+        fixtures = self.repair_fixtures()
+        fixtures["iterations"][1]["delay_seconds"] = 5
+        service = Service(self.runtime)
+        started = service.start(
+            self.delivery_task(),
+            "cancelled-repair",
+            _internal_implementation_fixture=fixtures,
+            _internal_review_fixture=self.clean_review_fixture(),
+        )
+        self.wait_for_candidate(service, started["run_id"])
+        service.resume(started["run_id"])
+        waiting = self.wait_for_handoff(service, started["run_id"])
+        claimed = service.handoff_claim(
+            started["run_id"], waiting["version"], "cancel-repair-host",
+        )
+        packet = claimed["handoff"]["packet"]
+        service.handoff_complete(
+            started["run_id"], claimed["claim"],
+            self.decision(packet, "cancel-repair", "revise", "Repair then cancel."),
+        )
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            status = service.status(started["run_id"])
+            if status["state"] == "running":
+                break
+            time.sleep(0.02)
+        else:
+            self.fail("repair implementer never entered running state")
+        service.cancel(started["run_id"])
+        terminal = self.wait_for_terminal(service, started["run_id"])
+        self.assertEqual(terminal["state"], "cancelled")
+        receipt_artifact = next(
+            item for item in service.result(started["run_id"])["artifacts"]
+            if item["name"] == "receipt.json"
+        )
+        receipt = json.loads(Path(receipt_artifact["path"]).read_text())
+        self.assertEqual(receipt["workflow"], "issue-delivery")
+        self.assertEqual(
+            [item["disposition"] for item in receipt["dispositions"]], ["revise"],
+        )
+        self.assertEqual(
+            [item["role"] for item in receipt["attempts"]],
+            ["implementer", "reviewer", "implementer"],
+        )
+        self.assertEqual(receipt["attempts"][-1]["status"], "cancelled")
+        self.assertEqual(receipt["candidate"]["sha256"], packet["candidate_sha256"])
 
     def test_live_implementer_cannot_be_resumed_into_a_second_writer(self):
         service = Service(self.runtime)

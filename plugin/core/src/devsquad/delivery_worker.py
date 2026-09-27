@@ -38,8 +38,21 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
                 or index >= len(fixtures)):
             raise ContractError("offline implementation fixture iteration is missing")
         fixture = fixtures[index]
-    if not isinstance(fixture, dict) or set(fixture) != {"writes", "delay_seconds"}:
+    if (not isinstance(fixture, dict)
+            or set(fixture) not in (
+                {"writes", "delay_seconds"},
+                {"writes", "delay_seconds", "fail_profile_ids"},
+            )):
         raise ContractError("offline implementation fixture is incomplete")
+    fail_profile_ids = fixture.get("fail_profile_ids", [])
+    if (not isinstance(fail_profile_ids, list)
+            or not all(isinstance(item, str) and item for item in fail_profile_ids)):
+        raise ContractError("implementation fixture fail_profile_ids is invalid")
+    selected_profile_id = snapshot["routing"]["roles"]["implementer"][
+        "selected"
+    ]["profile_id"]
+    if selected_profile_id in fail_profile_ids:
+        raise ContractError("RATE_LIMITED: offline implementation fixture failure")
     writes, delay = fixture["writes"], fixture["delay_seconds"]
     if (not isinstance(writes, list) or not writes
             or len(writes) > MAX_FIXTURE_WRITES):

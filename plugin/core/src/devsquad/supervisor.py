@@ -680,11 +680,19 @@ class Supervisor:
                         "message": semantic_error,
                     }
                 else:
+                    stderr_text = captures["stderr"].decode("utf-8", "replace")
+                    upper_stderr = stderr_text.upper()
+                    provider_error = next((
+                        code for code in ("AUTH_ERROR", "RATE_LIMITED")
+                        if f"{code}:" in upper_stderr
+                    ), None)
+                    failure_code = provider_error or (
+                        "HEADLESS_LEAD_FAILED"
+                        if role == "lead" else "REVIEW_WORKER_FAILED"
+                        if role == "reviewer" else "IMPLEMENTATION_WORKER_FAILED"
+                    )
                     report_error = {
-                        "error": (
-                            "HEADLESS_LEAD_FAILED"
-                            if role == "lead" else "REVIEW_WORKER_FAILED"
-                        ),
+                        "error": failure_code,
                         "message": (
                             "headless lead exited before producing a valid disposition"
                             if role == "lead"

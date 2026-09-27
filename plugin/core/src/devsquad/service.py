@@ -15,6 +15,7 @@ from typing import Any
 
 from .codex_lead_worker import freeze_codex_lead
 from .codex_review_worker import freeze_codex_reviewer
+from .claude_delivery_worker import freeze_claude_implementer
 from .contracts import (
     BudgetExhausted,
     CapabilityUnavailable,
@@ -500,14 +501,26 @@ class Service:
                     task["scope"]["write_paths"],
                     required_clean_paths=config_paths.values(),
                 )
-                if internal_implementation_fixture is None:
-                    raise CapabilityUnavailable(
-                        "live issue-delivery implementer execution is not available yet"
+                fixture_fields = (
+                    {"writes", "delay_seconds"},
+                    {"writes", "delay_seconds", "fail_profile_ids"},
+                )
+                def valid_implementation_fixture(value: Any) -> bool:
+                    return (
+                        isinstance(value, dict)
+                        and set(value) in fixture_fields
+                        and (
+                            "fail_profile_ids" not in value
+                            or isinstance(value["fail_profile_ids"], list)
+                            and all(
+                                isinstance(item, str) and item
+                                for item in value["fail_profile_ids"]
+                            )
+                        )
                     )
-                valid_fixture = (
-                    isinstance(internal_implementation_fixture, dict)
-                    and set(internal_implementation_fixture)
-                    == {"writes", "delay_seconds"}
+
+                valid_fixture = valid_implementation_fixture(
+                    internal_implementation_fixture
                 )
                 if (isinstance(internal_implementation_fixture, dict)
                         and set(internal_implementation_fixture) == {"iterations"}):
@@ -517,16 +530,17 @@ class Service:
                         and 1 <= len(fixtures)
                         <= task["budget"]["max_revisions"] + 1
                         and all(
-                            isinstance(item, dict)
-                            and set(item) == {"writes", "delay_seconds"}
+                            valid_implementation_fixture(item)
                             for item in fixtures
                         )
                     )
-                if not valid_fixture:
+                if (internal_implementation_fixture is not None
+                        and not valid_fixture):
                     raise ContractError("internal implementation fixture is invalid")
-                snapshot["internal_implementation_fixture"] = json.loads(
-                    canonical_json(internal_implementation_fixture)
-                )
+                if internal_implementation_fixture is not None:
+                    snapshot["internal_implementation_fixture"] = json.loads(
+                        canonical_json(internal_implementation_fixture)
+                    )
             if internal_review_fixture is not None:
                 if (not isinstance(internal_review_fixture, dict)
                         or set(internal_review_fixture)
@@ -606,6 +620,23 @@ class Service:
                 internal_implementation_fixture=internal_implementation_fixture,
                 capacity_in_flight=store.active_pool_counts(),
             )
+            if (task["workflow"] == "issue-delivery"
+                    and internal_delay is None
+                    and internal_implementation_fixture is None):
+                implementer_route = snapshot["routing"]["roles"]["implementer"]
+                implementer_candidates = [
+                    implementer_route["selected"],
+                    *implementer_route["fallbacks"],
+                ]
+                snapshot["implementation_adapters"] = {
+                    candidate["profile_id"]: freeze_claude_implementer(candidate)
+                    for candidate in implementer_candidates
+                }
+                snapshot["implementation_adapter"] = (
+                    snapshot["implementation_adapters"][
+                        implementer_route["selected"]["profile_id"]
+                    ]
+                )
             if ((task["workflow"] == "branch-review"
                     or (task["workflow"] == "issue-delivery"
                         and internal_implementation_fixture is None))

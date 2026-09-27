@@ -245,7 +245,13 @@ def main(argv=None):
         except ConflictError:
             pass
     elif (current["state"] == "queued" and current["phase"] is None
-            and not (workflow == "issue-delivery" and role == "implementer")):
+            and not (
+                workflow == "issue-delivery"
+                and role == "implementer"
+                and isinstance(
+                    json.loads(current["mutable_snapshot"]).get("candidate"), dict,
+                )
+            )):
         try:
             Service(Path(args.database).parent).resume(args.run_id)
         except ConflictError:
