@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -945,6 +946,64 @@ class DeliveryWorkspaceTest(unittest.TestCase):
         )
         self.assertEqual(receipt["attempts"][-1]["status"], "cancelled")
         self.assertEqual(receipt["candidate"]["sha256"], packet["candidate_sha256"])
+
+    def test_killed_repair_supervisor_never_launches_a_duplicate_writer(self):
+        fixtures = self.repair_fixtures()
+        fixtures["iterations"][1]["delay_seconds"] = 3
+        service = Service(self.runtime)
+        started = service.start(
+            self.delivery_task(),
+            "killed-repair-supervisor",
+            _internal_implementation_fixture=fixtures,
+            _internal_review_fixture=self.clean_review_fixture(),
+        )
+        self.wait_for_candidate(service, started["run_id"])
+        service.resume(started["run_id"])
+        waiting = self.wait_for_handoff(service, started["run_id"])
+        claimed = service.handoff_claim(
+            started["run_id"], waiting["version"], "kill-repair-host",
+        )
+        packet = claimed["handoff"]["packet"]
+        service.handoff_complete(
+            started["run_id"], claimed["claim"],
+            self.decision(packet, "kill-repair", "revise", "Repair candidate."),
+        )
+        deadline = time.monotonic() + 10
+        attempt = None
+        while time.monotonic() < deadline:
+            store = Store(service.database, service.artifacts)
+            try:
+                current = store.attempt(started["run_id"])
+                if (current and current["status"] == "running"
+                        and current["role"] == "implementer"
+                        and Path(current["child_record"]).is_file()):
+                    attempt = current
+                    break
+            finally:
+                store.close()
+            time.sleep(0.02)
+        if attempt is None:
+            self.fail("repair writer did not publish its child identity")
+        os.kill(attempt["pid"], signal.SIGKILL)
+        time.sleep(0.1)
+        recovered = Service(self.runtime).resume(
+            started["run_id"],
+            {"attempt_id": attempt["id"], "disposition": "retain_ownership"},
+        )
+        self.assertFalse(recovered["launched"])
+        self.assertEqual(recovered["disposition"], "retain_ownership")
+        store = Store(service.database, service.artifacts)
+        try:
+            attempts = store.attempts_for_run(started["run_id"])
+            self.assertEqual(
+                [item["role"] for item in attempts],
+                ["implementer", "reviewer", "implementer"],
+            )
+        finally:
+            store.close()
+        cancelled = service.cancel(started["run_id"])
+        self.assertEqual(cancelled["state"], "cancelled")
+        self.assert_source_unchanged()
 
     def test_live_implementer_cannot_be_resumed_into_a_second_writer(self):
         service = Service(self.runtime)
