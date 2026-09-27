@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 9
+SUPPORTED_SCHEMA_VERSION = 10
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -901,7 +901,7 @@ class Store:
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             run = self.connection.execute(
-                "SELECT state FROM runs WHERE id=?", (run_id,),
+                "SELECT state,mutable_snapshot FROM runs WHERE id=?", (run_id,),
             ).fetchone()
             if run is None:
                 raise ContractError("run does not exist")
@@ -980,6 +980,156 @@ class Store:
                 "WHERE reconciled_at IS NULL GROUP BY pool_id"
             )
         }
+
+    def record_outcome(
+        self,
+        run_id: str,
+        outcome: dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Append one replay-safe final outcome or late correction."""
+        from .learning import validate_outcome
+
+        current = _authoritative_now(now)
+        normalized = validate_outcome(outcome, now=current)
+        payload = canonical_json(normalized)
+        digest = hashlib.sha256(payload.encode()).hexdigest()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.connection.execute(
+                "SELECT run_id,payload_json,recorded_at FROM outcomes WHERE outcome_id=?",
+                (normalized["outcome_id"],),
+            ).fetchone()
+            if existing is not None:
+                if existing["run_id"] != run_id or existing["payload_json"] != payload:
+                    raise ConflictError(
+                        "outcome id was already used with different evidence",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "run_id": run_id,
+                    "outcome": normalized,
+                    "recorded_at": existing["recorded_at"],
+                    "replayed": True,
+                }
+            run = self.connection.execute(
+                "SELECT state,mutable_snapshot FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if run is None:
+                raise ContractError("run does not exist")
+            if run["state"] not in TERMINAL_STATES:
+                raise ConflictError("outcomes require a terminal run")
+            try:
+                snapshot = json.loads(run["mutable_snapshot"] or "null")
+                roles = snapshot["routing"]["roles"].values()
+                expected_selection_mode = (
+                    "experimental"
+                    if snapshot.get("experiment_assignment") is not None
+                    else "pinned"
+                    if any(role.get("source") == "override" for role in roles)
+                    else "automatic"
+                )
+            except (KeyError, TypeError, json.JSONDecodeError):
+                expected_selection_mode = None
+            if (expected_selection_mode is not None
+                    and normalized["selection_mode"] != expected_selection_mode):
+                raise ConflictError("outcome selection mode does not match frozen routing")
+            if normalized["kind"] == "final":
+                if normalized["verdict"] != run["state"]:
+                    raise ConflictError("final outcome verdict does not match run state")
+            else:
+                corrected = self.connection.execute(
+                    "SELECT run_id,kind,selection_mode,observed_at FROM outcomes "
+                    "WHERE outcome_id=?",
+                    (normalized["corrects_outcome_id"],),
+                ).fetchone()
+                if (corrected is None or corrected["run_id"] != run_id
+                        or corrected["kind"] != "final"):
+                    raise ConflictError("late outcome must correct this run's final outcome")
+                if corrected["selection_mode"] != normalized["selection_mode"]:
+                    raise ConflictError("late outcome selection mode changed")
+                if datetime.fromisoformat(normalized["observed_at"]) < datetime.fromisoformat(
+                    corrected["observed_at"],
+                ):
+                    raise ConflictError("late outcome predates the final outcome")
+
+            attempts = {
+                row["id"]: row
+                for row in self.connection.execute(
+                    "SELECT id,role,status,output_metadata FROM attempts WHERE run_id=?",
+                    (run_id,),
+                )
+            }
+            for contribution in normalized["contributions"]:
+                attempt = attempts.get(contribution["attempt_id"])
+                if attempt is None or attempt["role"] != contribution["role"]:
+                    raise ConflictError("outcome contribution does not match run attempt")
+                if attempt["status"] != "finished":
+                    raise ConflictError("outcome contribution attempt is not finished")
+                if attempt["output_metadata"]:
+                    try:
+                        metadata = json.loads(attempt["output_metadata"])
+                    except (TypeError, json.JSONDecodeError) as exc:
+                        raise ConflictError("attempt output metadata is invalid") from exc
+                    if (isinstance(metadata, dict) and metadata.get("failure") is not None
+                            and (contribution["result"] != "failed"
+                                 or contribution["independent_success"])):
+                        raise ConflictError(
+                            "failed attempt cannot receive successful contribution credit",
+                        )
+            for repair in normalized["lead_repairs"]:
+                attempt_id = repair["lead_attempt_id"]
+                if attempt_id is None:
+                    continue
+                attempt = attempts.get(attempt_id)
+                if attempt is None or attempt["role"] != "lead" or attempt["status"] != "finished":
+                    raise ConflictError("lead repair does not match a finished lead attempt")
+
+            recorded_at = current.isoformat()
+            self.connection.execute(
+                "INSERT INTO outcomes(outcome_id,run_id,kind,verdict,selection_mode,"
+                "observed_at,corrects_outcome_id,payload_json,payload_sha256,recorded_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (
+                    normalized["outcome_id"], run_id, normalized["kind"],
+                    normalized["verdict"], normalized["selection_mode"],
+                    normalized["observed_at"], normalized["corrects_outcome_id"],
+                    payload, digest, recorded_at,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "run_id": run_id,
+                "outcome": normalized,
+                "recorded_at": recorded_at,
+                "replayed": False,
+            }
+        except sqlite3.IntegrityError as exc:
+            self.connection.execute("ROLLBACK")
+            raise ConflictError("run already has a final outcome") from exc
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def outcomes_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        if not self.connection.execute(
+            "SELECT 1 FROM runs WHERE id=?", (run_id,),
+        ).fetchone():
+            raise ContractError("run does not exist")
+        return [
+            {
+                "run_id": row["run_id"],
+                "outcome": json.loads(row["payload_json"]),
+                "payload_sha256": row["payload_sha256"],
+                "recorded_at": row["recorded_at"],
+            }
+            for row in self.connection.execute(
+                "SELECT run_id,payload_json,payload_sha256,recorded_at "
+                "FROM outcomes WHERE run_id=? ORDER BY observed_at,id",
+                (run_id,),
+            )
+        ]
 
     def worker_invocations(self, run_id: str) -> int:
         """Count attempts whose durable runner actually crossed the launch fence."""
