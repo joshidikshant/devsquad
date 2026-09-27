@@ -109,6 +109,18 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   hash. The complete gate is 226 core tests discovered (suite OK, 2 optional
   SDK skips) and 220 Bash assertions. This does not complete lead disposition,
   revise-to-implementation, all terminal reports or the live two-harness gate.
+- M5 Plan 07-02 bounded revisions are verified offline at `4c76887`, following
+  delivery accept/reject receipts at `a1199c6`. A saved `revise` transaction
+  now returns the writer fence to the delivery worktree, binds prior evidence
+  into the next prompt, creates a distinct child candidate and new review/check
+  worktrees, rejects stale live evidence and preserves both candidates plus all
+  successful worker attempts and dispositions. Required checks remain
+  non-overridable; revision/invocation exhaustion stops before a new writer; a
+  simulated prelaunch crash resumes exactly one repair writer; and headless
+  delivery acceptance uses its own fenced lead attempt. The gate is 237 core
+  tests (2 optional-SDK skips) and 220 Bash assertions. Delivery fallback,
+  failure/cancellation history, live Claude execution and the live two-harness
+  proof remain open.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -172,12 +184,13 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M5 Plan 07-02 Task 3 from `30b98df`: complete delivery lead
-   disposition and make bounded `revise` return to the fenced implementer;
-   retain every candidate/attempt/check/disposition in terminal reports.
-   Exercise seeded repair, stale-candidate rejection, mandatory-check blocking,
-   fallback/deadline bounds and crash recovery. First-candidate offline
-   review/check/handoff already works; do not rebuild that slice.
+2. Continue M5 Plan 07-02 Task 3 from `4c76887`: complete delivery-specific
+   implementer/reviewer fallback faults, deadline/cancellation terminal history
+   and remaining live-revised-writer recovery. Then wire the already-conformed
+   Claude adapter into live implementation and run the live two-harness gate
+   only after normal provider login. Accept/reject, seeded repair, stale
+   evidence, required-check enforcement, finite revision/invocation budgets,
+   headless lead and prelaunch crash recovery are green; do not rebuild them.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.

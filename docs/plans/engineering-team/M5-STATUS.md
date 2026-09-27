@@ -11,11 +11,11 @@ two-harness gate passes.
 | Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | verified offline at `0e88d73` |
 | Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `0e88d73` |
 | Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | router verified; workflow pending |
-| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | first-candidate review/check/handoff verified offline at `30b98df`; revision/stale-evidence workflow gate pending |
-| Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | pending |
-| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | pending |
-| Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | pending |
-| Crash recovery | Killing a live implementation supervisor cannot create a duplicate writer on resume | pending |
+| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | verified offline through two distinct candidates at `4c76887` |
+| Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | correction and revision/invocation budgets verified offline at `4c76887`; delivery fallback faults pending |
+| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | mandatory-check gate and accept/reject receipts verified offline at `a1199c6`; invalid-output fault matrix pending |
+| Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | successful repair and headless history verified offline at `4c76887`; failed fallback/cancellation history pending |
+| Crash recovery | Killing a live implementation supervisor cannot create a duplicate writer on resume | initial live-writer and revised prelaunch recovery verified offline at `4c76887`; live revised-writer fault gate pending |
 | Live acceptance | One bounded issue completes across at least two authenticated subscription harnesses with different verified models | pending |
 
 ## Boundary
@@ -90,3 +90,28 @@ The complete core discovery is **226 tests, suite OK with 2 optional-SDK
 skips**, with `ResourceWarning` promoted to error; **220 Bash assertions**
 passed. The next implementation slice is Plan 07-02 Task 3, retaining Task 2's
 unproven live/stale-revision requirements rather than marking M5 complete.
+
+## Plan 07-02 checkpoint 2
+
+At `a1199c6`, host accept/reject applies the trusted gate to `issue-delivery`,
+blocks acceptance after a required-check failure, and emits the complete
+five-report terminal set with implementation plus review evidence.
+
+At `4c76887`, `revise` atomically consumes the saved handoff, switches the
+writer fence back to the delivery worktree, binds prior review/check evidence
+into a frozen revision request and launches a new implementer. The next local
+commit is parented by the prior candidate while its identity and patch still
+describe the complete baseline-to-candidate change. Each iteration gets
+separate review/check worktrees, so stale live evidence cannot validate
+against a replacement candidate; terminal history validates each archived
+candidate against its own saved workspace.
+
+The seeded repair passes implementation → failed mandatory check → host revise
+→ new implementation → new review/check → accept with distinct candidate
+hashes and roles `[implementer, reviewer, implementer, reviewer]`. Revision and
+invocation exhaustion fail before another writer launches, a saved prelaunch
+revision resumes to exactly one repair writer, and a headless delivery lead
+terminalizes through its own fenced attempt. The complete gate is **237 core
+tests (2 optional-SDK skips)** with `ResourceWarning` promoted to error and
+**220 Bash assertions**. Delivery fallback/failure/cancellation history, live
+Claude implementation and the live two-harness proof remain open.

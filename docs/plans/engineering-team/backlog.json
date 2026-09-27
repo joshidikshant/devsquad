@@ -249,6 +249,15 @@
           "artifact": "M5-STATUS.md",
           "recorded_at": "2026-09-26T15:01:21Z",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "implementation_checkpoint",
+          "revision": "4c76887",
+          "command_or_action": "237 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions and seeded two-candidate repair/headless/crash regressions",
+          "outcome": "Issue-delivery lead accept/reject and bounded revise now terminalize with complete candidate-bound reports; revise returns atomically to one fenced implementer, creates distinct candidate review/check workspaces, rejects stale live evidence and enforces revision/invocation budgets. Delivery fallback/failure/cancellation history and live two-harness proof remain open",
+          "artifact": "M5-STATUS.md",
+          "recorded_at": "2026-09-26T23:58:00-07:00",
+          "availability": "tracked_tests"
         }
       ],
       "blocker": null
