@@ -2547,6 +2547,163 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def requeue_delivery_revision(
+        self,
+        run_id: str,
+        handoff_id: str,
+        submission_id: str,
+        submission_hash: str,
+    ) -> dict[str, Any]:
+        """Consume a delivery revise decision and atomically return to its writer."""
+        if not all(
+            isinstance(value, str) and value
+            for value in (handoff_id, submission_id, submission_hash)
+        ):
+            raise ContractError("delivery revision identifiers are invalid")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT r.state,r.phase,r.version,r.mutable_snapshot,h.status,h.sequence,"
+                "h.packet_json,s.disposition,s.decision_json "
+                "FROM runs r JOIN handoffs h ON h.run_id=r.id "
+                "JOIN handoff_submissions s ON s.handoff_id=h.id "
+                "WHERE r.id=? AND h.id=? AND s.submission_id=? "
+                "AND s.submission_hash=? AND s.outcome='recorded'",
+                (run_id, handoff_id, submission_id, submission_hash),
+            ).fetchone()
+            if not row:
+                raise ConflictError("recorded delivery revision is missing")
+            if row["disposition"] != "revise":
+                raise ConflictError("delivery submission is not a revision request")
+            latest_sequence = self.connection.execute(
+                "SELECT MAX(sequence) FROM handoffs WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            if row["status"] == "consumed":
+                action = (
+                    "requeued"
+                    if row["sequence"] == latest_sequence
+                    and row["state"] == "queued"
+                    and row["phase"] is None
+                    else "already_advanced"
+                )
+                self.connection.execute("COMMIT")
+                return {
+                    "action": action,
+                    "version": row["version"],
+                    "replayed": True,
+                }
+            if (row["state"] != "awaiting_host"
+                    or row["phase"] != "handoff_submitted"
+                    or row["status"] != "submitted"
+                    or row["sequence"] != latest_sequence):
+                raise ConflictError("delivery revision handoff is no longer current")
+            try:
+                snapshot = json.loads(row["mutable_snapshot"])
+                packet = json.loads(row["packet_json"])
+                decision = json.loads(row["decision_json"])
+                task = snapshot["task"]
+                budget = task["budget"]
+                candidate = snapshot["candidate"]
+                delivery = snapshot["delivery_workspace"]
+            except (KeyError, TypeError, json.JSONDecodeError) as exc:
+                raise ConflictError("frozen delivery revision is invalid") from exc
+            if (not isinstance(snapshot, dict)
+                    or canonical_json(snapshot) != row["mutable_snapshot"]
+                    or task.get("workflow") != "issue-delivery"
+                    or packet.get("workflow") != "issue-delivery"
+                    or packet.get("candidate_sha256")
+                    != candidate.get("candidate_sha256")
+                    or decision.get("submission_id") != submission_id
+                    or decision.get("submission_hash") != submission_hash):
+                raise ConflictError("frozen delivery revision changed its evidence")
+            max_revisions = budget.get("max_revisions")
+            max_invocations = budget.get("max_worker_invocations")
+            lead_mode = task.get("lead", {}).get("mode")
+            if (type(max_revisions) is not int or max_revisions < 0
+                    or type(max_invocations) is not int or max_invocations < 1
+                    or lead_mode not in {"host", "headless"}):
+                raise ConflictError("frozen delivery budget is invalid")
+            revisions = self.connection.execute(
+                "SELECT COUNT(*) FROM handoff_submissions s "
+                "JOIN handoffs h ON h.id=s.handoff_id "
+                "WHERE h.run_id=? AND s.outcome='recorded' "
+                "AND s.disposition='revise' AND h.sequence<=?",
+                (run_id, row["sequence"]),
+            ).fetchone()[0]
+            invocations = self.connection.execute(
+                "SELECT COUNT(*) FROM attempts WHERE run_id=?", (run_id,),
+            ).fetchone()[0]
+            required_invocations = 3 if lead_mode == "headless" else 2
+            wall_exhausted = self.remaining_wall_seconds(run_id) == 0
+            if (revisions > max_revisions
+                    or invocations + required_invocations > max_invocations
+                    or wall_exhausted):
+                self.connection.execute("COMMIT")
+                return {
+                    "action": "budget_exhausted",
+                    "version": row["version"],
+                    "replayed": False,
+                    "revisions_requested": revisions,
+                    "worker_invocations": invocations,
+                    "wall_exhausted": wall_exhausted,
+                }
+            new_snapshot = json.loads(canonical_json(snapshot))
+            review_fixture = new_snapshot.pop("internal_review_fixture", None)
+            if review_fixture is not None:
+                new_snapshot["pending_review_fixture"] = {
+                    field: review_fixture[field]
+                    for field in ("verdict", "summary", "findings")
+                }
+            revision_request = {
+                "handoff_id": handoff_id,
+                "sequence": row["sequence"],
+                "submission_id": submission_id,
+                "submission_hash": submission_hash,
+                "previous_candidate_sha256": candidate["candidate_sha256"],
+                "reason": decision["reason"],
+                "review": packet["review"],
+                "checks": packet["checks"],
+                "evidence_refs": decision["evidence_refs"],
+            }
+            new_snapshot["revision_request"] = revision_request
+            for field in ("candidate", "workspace", "check_workspace"):
+                new_snapshot.pop(field, None)
+            encoded_snapshot = canonical_json(new_snapshot)
+            delivery_path = str(Path(delivery["path"]).resolve(strict=True))
+            now, version = _utc_now(), row["version"] + 1
+            self.connection.execute(
+                "UPDATE handoffs SET status='consumed',closed_at=? WHERE id=?",
+                (now, handoff_id),
+            )
+            self.connection.execute(
+                "UPDATE runs SET mutable_snapshot=?,worktree_path=?,state='queued',"
+                "phase=NULL,version=?,updated_at=? WHERE id=?",
+                (encoded_snapshot, delivery_path, version, now, run_id),
+            )
+            payload = canonical_json({
+                "handoff_id": handoff_id,
+                "submission_id": submission_id,
+                "previous_candidate_sha256": candidate["candidate_sha256"],
+                "revisions_requested": revisions,
+                "worker_invocations": invocations,
+            })
+            self.connection.execute(
+                "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                "VALUES(?,?,'delivery.revision_queued',?,?)",
+                (run_id, version, payload, now),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "action": "requeued",
+                "version": version,
+                "replayed": False,
+                "revisions_requested": revisions,
+                "worker_invocations": invocations,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def complete_handoff_terminal(
         self,
         run_id: str,

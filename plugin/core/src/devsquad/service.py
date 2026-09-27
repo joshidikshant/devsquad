@@ -25,6 +25,7 @@ from .reports import (
     build_early_terminal_reports,
     build_terminal_reports,
     project_branch_review_history,
+    validate_saved_review_handoff,
 )
 from .router import capacity_with_live_reservations, load_routing
 from .store import (
@@ -74,7 +75,7 @@ class Service:
         snapshot: dict[str, Any] | None,
         error: dict[str, Any],
     ) -> list[dict[str, Any]] | None:
-        if task.get("workflow") != "branch-review":
+        if task.get("workflow") not in {"branch-review", "issue-delivery"}:
             return None
         reports = build_early_terminal_reports(
             run_id=run_id,
@@ -128,7 +129,7 @@ class Service:
                 for packet in packets)):
             packets.append(handoff.packet)
         packets_by_attempt = {
-            packet["attempt_id"]: validate_branch_review_handoff(packet, snapshot)
+            packet["attempt_id"]: validate_saved_review_handoff(packet, snapshot)
             for packet in packets
         }
         artifacts = store.artifacts_for_run(run_id)
@@ -144,7 +145,21 @@ class Service:
             if attempt["id"] in failed_by_id:
                 attempts.append(failed_by_id[attempt["id"]])
                 continue
-            if attempt.get("role") == "reviewer":
+            if attempt.get("role") == "implementer":
+                iteration = next((
+                    item for item in snapshot.get("delivery_iterations", [])
+                    if item.get("candidate", {}).get("implementation_artifact")
+                    == f"implementation-attempt-{attempt['id']}.json"
+                ), None)
+                if iteration is not None:
+                    attempts.append({
+                        "id": attempt["id"],
+                        "status": "succeeded",
+                        **iteration["implementation"]["attempt"],
+                        "summary": iteration["implementation"].get("summary"),
+                        "candidate": iteration["candidate"],
+                    })
+            elif attempt.get("role") == "reviewer":
                 packet = packets_by_attempt.get(attempt["id"])
                 if packet is not None:
                     attempts.append({
@@ -231,8 +246,10 @@ class Service:
         try:
             run = store.run(run_id)
             snapshot = self._review_snapshot(run)
-            if snapshot.get("task", {}).get("workflow") != "branch-review":
-                raise ConflictError("queued budget failure is not a branch review")
+            if snapshot.get("task", {}).get("workflow") not in {
+                "branch-review", "issue-delivery",
+            }:
+                raise ConflictError("queued budget failure is not a review workflow")
             error = {
                 "error": "BUDGET_EXHAUSTED",
                 "message": "run wall-time budget is exhausted",
@@ -487,9 +504,25 @@ class Service:
                     raise CapabilityUnavailable(
                         "live issue-delivery implementer execution is not available yet"
                     )
-                if (not isinstance(internal_implementation_fixture, dict)
-                        or set(internal_implementation_fixture)
-                        != {"writes", "delay_seconds"}):
+                valid_fixture = (
+                    isinstance(internal_implementation_fixture, dict)
+                    and set(internal_implementation_fixture)
+                    == {"writes", "delay_seconds"}
+                )
+                if (isinstance(internal_implementation_fixture, dict)
+                        and set(internal_implementation_fixture) == {"iterations"}):
+                    fixtures = internal_implementation_fixture["iterations"]
+                    valid_fixture = (
+                        isinstance(fixtures, list)
+                        and 1 <= len(fixtures)
+                        <= task["budget"]["max_revisions"] + 1
+                        and all(
+                            isinstance(item, dict)
+                            and set(item) == {"writes", "delay_seconds"}
+                            for item in fixtures
+                        )
+                    )
+                if not valid_fixture:
                     raise ContractError("internal implementation fixture is invalid")
                 snapshot["internal_implementation_fixture"] = json.loads(
                     canonical_json(internal_implementation_fixture)
@@ -549,10 +582,14 @@ class Service:
             store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
             validated_supersedes_run_id = supersedes_run_id
             validate_task(task, require_existing_repo=True)
+            minimum_headless_invocations = (
+                3 if task["workflow"] == "issue-delivery" else 2
+            )
             if (task["lead"]["mode"] == "headless"
-                    and task["budget"]["max_worker_invocations"] < 2):
+                    and task["budget"]["max_worker_invocations"]
+                    < minimum_headless_invocations):
                 raise ContractError(
-                    "headless branch review requires at least two worker invocations"
+                    "headless workflow has insufficient worker invocations"
                 )
             worktree = store.preparation_worktree(
                 run_id, fencing_token, Path(task["project"]["repo_path"]),
@@ -785,7 +822,8 @@ class Service:
                 try:
                     snapshot = self._review_snapshot(run)
                     handoff = store.handoff_snapshot(run_id)
-                    if (snapshot.get("task", {}).get("workflow") == "branch-review"
+                    if (snapshot.get("task", {}).get("workflow")
+                            in {"branch-review", "issue-delivery"}
                             and handoff is not None):
                         terminal_artifacts = self._paused_review_terminal_artifacts(
                             store,
@@ -826,11 +864,12 @@ class Service:
             run = store.run(run_id)
             handoff_before_claim = store.handoff_snapshot(run_id)
             if (handoff_before_claim is not None
-                    and handoff_before_claim.packet.get("workflow") == "branch-review"
+                    and handoff_before_claim.packet.get("workflow")
+                    in {"branch-review", "issue-delivery"}
                     and self._review_snapshot(run)["task"]["lead"]["mode"]
                     == "headless"):
                 raise ConflictError(
-                    "headless branch review does not accept a host claim"
+                    "headless review does not accept a host claim"
                 )
             claim = store.claim_handoff(run_id, expected_version, owner, decoded)
             snapshot = store.handoff_snapshot(run_id)
@@ -867,7 +906,7 @@ class Service:
         snapshot: dict[str, Any],
         decision: dict[str, Any],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        packet = validate_branch_review_handoff(handoff.packet, snapshot)
+        packet = validate_saved_review_handoff(handoff.packet, snapshot)
         validate_handoff_decision_evidence(decision, packet)
         revisions_used = sum(
             entry["decision"]["disposition"] == "revise"
@@ -1059,11 +1098,15 @@ class Service:
         )
         if gate["action"] == "repeat_review":
             decision = entry["decision"]
-            requeue = store.requeue_review_revision(
-                run_id,
-                handoff.handoff_id,
-                decision["submission_id"],
-                decision["submission_hash"],
+            workflow = snapshot["task"]["workflow"]
+            requeue_method = (
+                store.requeue_delivery_revision
+                if workflow == "issue-delivery"
+                else store.requeue_review_revision
+            )
+            requeue = requeue_method(
+                run_id, handoff.handoff_id,
+                decision["submission_id"], decision["submission_hash"],
             )
             if requeue["action"] == "requeued":
                 queued = store.run(run_id)
@@ -1091,7 +1134,7 @@ class Service:
             }
             error = {
                 "error": "BUDGET_EXHAUSTED",
-                "message": "branch review worker invocation budget is exhausted",
+                "message": f"{workflow} worker invocation or wall budget is exhausted",
             }
         elif gate["action"] == "budget_exhausted":
             error = {
@@ -1312,8 +1355,9 @@ class Service:
             if run["state"] in TERMINAL_STATES: raise ConflictError("terminal run cannot resume; start a superseding run")
             if run["state"] == "awaiting_host" and run["phase"] is None:
                 handoff = store.handoff_snapshot(run_id)
-                if handoff is None or handoff.packet.get("workflow") != "branch-review":
-                    raise ConflictError("run has no resumable branch review handoff")
+                if (handoff is None or handoff.packet.get("workflow")
+                        not in {"branch-review", "issue-delivery"}):
+                    raise ConflictError("run has no resumable review handoff")
                 snapshot = self._review_snapshot(run)
                 if snapshot["task"]["lead"]["mode"] == "headless":
                     continuation = self._continue_headless_lead(
@@ -1332,12 +1376,13 @@ class Service:
                     raise ConflictError("host-led handoff must be completed by its host")
             elif run["state"] == "awaiting_host" and run["phase"] == "handoff_submitted":
                 handoff = store.handoff_snapshot(run_id)
-                if handoff is None or handoff.packet.get("workflow") != "branch-review":
-                    raise ConflictError("run has no resumable branch review submission")
+                if (handoff is None or handoff.packet.get("workflow")
+                        not in {"branch-review", "issue-delivery"}):
+                    raise ConflictError("run has no resumable review submission")
                 snapshot = self._review_snapshot(run)
                 entry = store.recorded_handoff_submission(run_id, handoff.handoff_id)
                 if entry is None:
-                    raise ConflictError("recorded branch review submission is missing")
+                    raise ConflictError("recorded review submission is missing")
                 continuation = self._continue_branch_review_submission(
                     store, run_id, handoff, snapshot, entry,
                 )

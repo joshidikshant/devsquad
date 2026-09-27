@@ -31,6 +31,13 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(snapshot, dict):
         raise ContractError("delivery snapshot must be an object")
     fixture = snapshot.get("internal_implementation_fixture")
+    if isinstance(fixture, dict) and set(fixture) == {"iterations"}:
+        fixtures = fixture["iterations"]
+        index = len(snapshot.get("delivery_iterations", []))
+        if (not isinstance(fixtures, list) or not fixtures
+                or index >= len(fixtures)):
+            raise ContractError("offline implementation fixture iteration is missing")
+        fixture = fixtures[index]
     if not isinstance(fixture, dict) or set(fixture) != {"writes", "delay_seconds"}:
         raise ContractError("offline implementation fixture is incomplete")
     writes, delay = fixture["writes"], fixture["delay_seconds"]

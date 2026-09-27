@@ -138,7 +138,7 @@ def build_handoff_reports(
     if hashlib.sha256(packet_json.encode()).hexdigest() != packet_sha256:
         raise ContractError("handoff report packet hash is invalid")
     json_name, markdown_name = handoff_report_names(sequence)
-    workflow = packet.get("workflow")
+    workflow = packet.get("workflow", "branch-review")
     if workflow not in {"branch-review", "issue-delivery"}:
         raise ContractError("handoff report workflow is invalid")
     report = {
@@ -213,7 +213,8 @@ def build_early_terminal_reports(
         raise ContractError("report run id is invalid")
     if state not in {"failed", "cancelled"}:
         raise ContractError("early terminal report state is invalid")
-    if not isinstance(task, dict) or task.get("workflow") != "branch-review":
+    if (not isinstance(task, dict)
+            or task.get("workflow") not in {"branch-review", "issue-delivery"}):
         raise ContractError("early terminal report task is invalid")
     if snapshot is not None and not isinstance(snapshot, dict):
         raise ContractError("early terminal report snapshot is invalid")
@@ -223,8 +224,15 @@ def build_early_terminal_reports(
         raise ContractError("early terminal report error is invalid")
 
     frozen = snapshot or {}
+    workflow = task["workflow"]
     workspace = frozen.get("workspace")
+    if (not isinstance(workspace, dict) and workflow == "issue-delivery"
+            and isinstance(frozen.get("delivery_iterations"), list)
+            and frozen["delivery_iterations"]):
+        workspace = frozen["delivery_iterations"][-1].get("workspace")
     workspace = workspace if isinstance(workspace, dict) else {}
+    delivery = frozen.get("delivery_workspace")
+    delivery = delivery if isinstance(delivery, dict) else {}
     projected = [
         _unreferenced_artifact_projection(artifact) for artifact in run_artifacts
     ]
@@ -277,14 +285,18 @@ def build_early_terminal_reports(
     receipt = {
         "schema_version": 1,
         "run_id": run_id,
-        "workflow": "branch-review",
+        "workflow": workflow,
         "state": state,
         "phase": phase,
         "completed_at": completed_at,
         "candidate": {
             "sha256": workspace.get("candidate_sha256"),
-            "base_oid": workspace.get("base_oid", frozen.get("base_oid")),
-            "target_oid": workspace.get("target_oid", frozen.get("target_oid")),
+            "base_oid": workspace.get(
+                "base_oid", delivery.get("baseline_oid", frozen.get("base_oid")),
+            ),
+            "target_oid": workspace.get(
+                "target_oid", delivery.get("baseline_oid", frozen.get("target_oid")),
+            ),
         },
         "routing": frozen.get("routing"),
         "review": None,
@@ -338,7 +350,7 @@ def build_early_terminal_reports(
         "error": error,
     }
     lines = [
-        "# DevSquad branch review",
+        f"# DevSquad {workflow}",
         "",
         f"- Run: `{run_id}`",
         f"- State: `{state}`",
@@ -379,6 +391,27 @@ def _decision(value: Any) -> dict[str, Any]:
     return value
 
 
+def validate_saved_review_handoff(
+    packet: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate current or archived delivery evidence against its own workspace."""
+    if snapshot.get("task", {}).get("workflow") != "issue-delivery":
+        return validate_branch_review_handoff(packet, snapshot)
+    candidate_sha256 = packet.get("candidate_sha256")
+    for iteration in snapshot.get("delivery_iterations", []):
+        if (isinstance(iteration, dict)
+                and iteration.get("candidate", {}).get("candidate_sha256")
+                == candidate_sha256
+                and isinstance(iteration.get("workspace"), dict)):
+            historical = dict(snapshot)
+            historical["candidate"] = iteration["candidate"]
+            historical["workspace"] = iteration["workspace"]
+            historical["check_workspace"] = iteration.get("check_workspace")
+            return validate_branch_review_handoff(packet, historical)
+    raise ContractError("delivery handoff does not match a saved candidate iteration")
+
+
 def _history(
     entries: list[dict[str, Any]],
     snapshot: dict[str, Any],
@@ -408,7 +441,7 @@ def _history(
         packet_json = canonical_json(entry["packet"])
         if hashlib.sha256(packet_json.encode()).hexdigest() != entry["packet_sha256"]:
             raise ContractError("branch review report handoff hash is invalid")
-        packet = validate_branch_review_handoff(entry["packet"], snapshot)
+        packet = validate_saved_review_handoff(entry["packet"], snapshot)
         decision = _decision(entry["decision"])
         validate_handoff_decision_evidence(decision, packet)
         identity = (
@@ -418,6 +451,16 @@ def _history(
             candidate = identity
         elif identity != candidate and workflow == "branch-review":
             raise ContractError("branch review report history changes the candidate")
+        elif identity == candidate and workflow == "issue-delivery":
+            raise ContractError("delivery report history repeats a candidate")
+        if workflow == "issue-delivery":
+            iterations = snapshot.get("delivery_iterations", [])
+            if (index >= len(iterations)
+                    or packet["candidate_sha256"]
+                    != iterations[index].get("candidate", {}).get(
+                        "candidate_sha256"
+                    )):
+                raise ContractError("delivery report candidate order is invalid")
         if index < len(entries) - 1 and decision["disposition"] != "revise":
             raise ContractError("only a revision may precede another review attempt")
         attempts.append({
@@ -528,7 +571,7 @@ def build_terminal_reports(
     if workflow not in {"branch-review", "issue-delivery"}:
         raise ContractError("review report workflow is invalid")
     attempts, dispositions = _history(history, snapshot)
-    final_packet = validate_branch_review_handoff(history[-1]["packet"], snapshot)
+    final_packet = validate_saved_review_handoff(history[-1]["packet"], snapshot)
     final_decision = _decision(history[-1]["decision"])
     if (state == "succeeded") != (final_decision["disposition"] == "accept"):
         raise ContractError("terminal state and lead disposition disagree")
@@ -577,15 +620,23 @@ def build_terminal_reports(
             "Reviewer output came from the explicit offline fixture; "
             "it is not live-provider evidence."
         )
+    if "internal_implementation_fixture" in snapshot:
+        limitations.append(
+            "Implementation output came from the explicit offline fixture; "
+            "it is not live-provider evidence."
+        )
     lead_attempts = [evidence["attempt"] for evidence in lead_evidence]
     failed = [] if failed_attempts is None else failed_attempts
     if not isinstance(failed, list) or not all(
             isinstance(attempt, dict)
-            and attempt.get("role") in {"reviewer", "lead"}
+            and attempt.get("role") in {"implementer", "reviewer", "lead"}
             for attempt in failed):
         raise ContractError("failed fallback attempts are invalid")
     failed_reviewers = [
         attempt for attempt in failed if attempt["role"] == "reviewer"
+    ]
+    failed_implementers = [
+        attempt for attempt in failed if attempt["role"] == "implementer"
     ]
     failed_leads = [attempt for attempt in failed if attempt["role"] == "lead"]
     reviewer_attempts = failed_reviewers + attempts
@@ -618,6 +669,7 @@ def build_terminal_reports(
                 "candidate": iteration["candidate"],
                 "evidence_refs": [artifact_name],
             })
+    implementation_attempts = failed_implementers + implementation_attempts
     all_attempts = implementation_attempts + reviewer_attempts + lead_attempts
     all_native_counts = [
         attempt["native_model_requests"] for attempt in all_attempts

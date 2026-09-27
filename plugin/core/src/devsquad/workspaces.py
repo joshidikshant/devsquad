@@ -212,8 +212,11 @@ def reset_check_workspace(
     """Reset only the exact run-owned check worktree before another check pass."""
     review = review_workspace.resolve(strict=True)
     checks = check_workspace.resolve(strict=True)
-    if (review.name != "review-worktree"
-            or checks != review.parent / "check-worktree"):
+    review_prefix = "review-worktree"
+    if not review.name.startswith(review_prefix):
+        raise ContractError("check workspace is not the review run's owned sibling")
+    suffix = review.name[len(review_prefix):]
+    if checks != review.parent / f"check-worktree{suffix}":
         raise ContractError("check workspace is not the review run's owned sibling")
     _validate_workspace(review, review, target_oid, scope_paths)
     _validate_workspace(
@@ -237,6 +240,7 @@ def _prepare_detached_workspace(
     scopes = tuple(_normalized_relative(path, "scope path") for path in scope_paths)
     project = _validate_segment(project_id, "project id")
     run = _validate_segment(run_id, "run id")
+    name = _validate_segment(name, "workspace name")
     workspace = (
         runtime.resolve() / "projects" / project / "runs" / run / name
     )
@@ -273,13 +277,14 @@ def prepare_review_workspace(
     *,
     required_clean_paths: Iterable[str] = (),
     candidate_sha256: str | None = None,
+    workspace_name: str = "review-worktree",
 ) -> dict[str, object]:
     """Create or validate one detached, run-owned worktree at the target commit."""
     repo = source_repo.resolve(strict=True)
     scopes = tuple(_normalized_relative(path, "scope path") for path in scope_paths)
     assert_clean_inputs(repo, scopes, required_clean_paths)
     workspace, scopes = _prepare_detached_workspace(
-        repo, runtime, project_id, run_id, target_oid, scopes, "review-worktree",
+        repo, runtime, project_id, run_id, target_oid, scopes, workspace_name,
     )
     changed = _decode_paths(
         _git(
@@ -318,13 +323,14 @@ def prepare_check_workspace(
     scope_paths: Iterable[str],
     *,
     required_clean_paths: Iterable[str] = (),
+    workspace_name: str = "check-worktree",
 ) -> dict[str, object]:
     """Create an independent candidate worktree for trusted declared checks."""
     repo = source_repo.resolve(strict=True)
     scopes = tuple(_normalized_relative(path, "scope path") for path in scope_paths)
     assert_clean_inputs(repo, scopes, required_clean_paths)
     workspace, scopes = _prepare_detached_workspace(
-        repo, runtime, project_id, run_id, target_oid, scopes, "check-worktree",
+        repo, runtime, project_id, run_id, target_oid, scopes, workspace_name,
     )
     return {
         "schema_version": 1,
@@ -465,6 +471,7 @@ def _freeze_delivery_candidate_unlocked(
     baseline_oid: str,
     write_paths: Iterable[str],
     run_id: str,
+    parent_oid: str | None = None,
 ) -> tuple[dict[str, object], bytes]:
     """Commit one scoped candidate locally and return its stable patch identity."""
     repo = source_repo.resolve(strict=True)
@@ -472,6 +479,8 @@ def _freeze_delivery_candidate_unlocked(
     run = _validate_segment(run_id, "run id")
     if delivery.name != "delivery-worktree":
         raise ContractError("delivery workspace is not a run-owned delivery worktree")
+    expected_parent = parent_oid or baseline_oid
+    expected_parent = resolve_commit(delivery, expected_parent)
     head_oid = resolve_commit(delivery, "HEAD")
     _validate_workspace(
         repo,
@@ -481,14 +490,14 @@ def _freeze_delivery_candidate_unlocked(
         require_clean=False,
     )
     dirties = dirty_paths(delivery)
-    if head_oid != baseline_oid:
+    if head_oid != expected_parent:
         if dirties:
             raise ContractError("frozen delivery candidate has later workspace changes")
         parents = _git(
             delivery, "rev-list", "--parents", "-n", "1", head_oid,
         ).decode().strip().split()
-        if parents != [head_oid, baseline_oid]:
-            raise ContractError("delivery candidate is not a single local baseline commit")
+        if parents != [head_oid, expected_parent]:
+            raise ContractError("delivery candidate is not a single local parent commit")
         marker = _git(
             delivery, "show", "-s", "--format=%s%x00%ae", head_oid,
         ).decode("utf-8", "strict").rstrip("\n").split("\0")
@@ -533,7 +542,11 @@ def _freeze_delivery_candidate_unlocked(
     snapshot, patch = _candidate_snapshot(
         delivery, baseline_oid, commit_oid, write_paths,
     )
-    if patch != staged_patch:
+    committed_delta = _git(
+        delivery,
+        "diff", "--binary", "--no-ext-diff", expected_parent, commit_oid, "--",
+    )
+    if committed_delta != staged_patch:
         raise ContractError("committed delivery patch differs from the staged candidate")
     if dirty_paths(delivery):
         raise ContractError("delivery workspace remained dirty after candidate commit")
@@ -546,6 +559,8 @@ def freeze_delivery_candidate(
     baseline_oid: str,
     write_paths: Iterable[str],
     run_id: str,
+    *,
+    parent_oid: str | None = None,
 ) -> tuple[dict[str, object], bytes]:
     """Serialize candidate freezing so competing recovery importers replay it."""
     delivery = workspace.resolve(strict=True)
@@ -554,7 +569,7 @@ def freeze_delivery_candidate(
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         return _freeze_delivery_candidate_unlocked(
-            source_repo, delivery, baseline_oid, write_paths, run_id,
+            source_repo, delivery, baseline_oid, write_paths, run_id, parent_oid,
         )
     finally:
         fcntl.flock(descriptor, fcntl.LOCK_UN)

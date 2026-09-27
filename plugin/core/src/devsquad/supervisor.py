@@ -405,12 +405,19 @@ class Supervisor:
         delivery = snapshot["delivery_workspace"]
         source_repo = Path(task["project"]["repo_path"]).resolve(strict=True)
         workspace = Path(delivery["path"]).resolve(strict=True)
+        iterations = list(snapshot.get("delivery_iterations", []))
+        iteration = len(iterations) + 1
+        parent_oid = (
+            iterations[-1]["candidate"]["commit_oid"] if iterations
+            else delivery["baseline_oid"]
+        )
         candidate, patch = freeze_delivery_candidate(
             source_repo,
             workspace,
             delivery["baseline_oid"],
             task["scope"]["write_paths"],
             run_id,
+            parent_oid=parent_oid,
         )
         project_id = self.store.run(run_id)["project_id"]
         scope_paths = tuple(dict.fromkeys(
@@ -430,6 +437,10 @@ class Supervisor:
             scope_paths,
             required_clean_paths=config_paths,
             candidate_sha256=candidate["candidate_sha256"],
+            workspace_name=(
+                "review-worktree" if iteration == 1
+                else f"review-worktree-{iteration}"
+            ),
         )
         check_workspace = prepare_check_workspace(
             source_repo,
@@ -439,8 +450,11 @@ class Supervisor:
             candidate["commit_oid"],
             scope_paths,
             required_clean_paths=config_paths,
+            workspace_name=(
+                "check-worktree" if iteration == 1
+                else f"check-worktree-{iteration}"
+            ),
         )
-        iteration = len(snapshot.get("delivery_iterations", [])) + 1
         candidate_record = {
             **candidate,
             "iteration": iteration,
@@ -466,12 +480,17 @@ class Supervisor:
             new_snapshot["internal_review_fixture"] = validate_review_document(
                 fixture_document, task, review_workspace,
             )
-        iterations = list(new_snapshot.get("delivery_iterations", []))
-        iterations.append({
+        revision_request = new_snapshot.pop("revision_request", None)
+        iteration_record = {
             "iteration": iteration,
             "candidate": candidate_record,
             "implementation": evidence,
-        })
+            "workspace": review_workspace,
+            "check_workspace": check_workspace,
+        }
+        if revision_request is not None:
+            iteration_record["revision_request"] = revision_request
+        iterations.append(iteration_record)
         new_snapshot["delivery_iterations"] = iterations
 
         artifacts = list(stream_artifacts)
@@ -589,7 +608,8 @@ class Supervisor:
                     semantic_error = str(exc)
                     receipt["error"] = "IMPLEMENTATION_OUTPUT_INVALID"
                     receipt["message"] = semantic_error
-            elif (role == "lead" and workflow_review and not receipt["cancelled"]
+            elif (role == "lead" and (workflow_review or workflow_delivery)
+                    and not receipt["cancelled"]
                     and not receipt["timed_out"] and receipt["returncode"]==0):
                 try:
                     handoff = self.store.handoff_snapshot(run_id)
@@ -636,7 +656,7 @@ class Supervisor:
                     if role == "lead" else "WORKFLOW_OUTPUT_INVALID"
                 )
                 payload["message"]=semantic_error
-            if workflow_review:
+            if workflow_review or workflow_delivery:
                 from .service import Service
                 prior_attempts, prior_dispositions = Service._saved_review_progress(
                     self.store,
@@ -649,7 +669,7 @@ class Supervisor:
                 elif receipt["timed_out"]:
                     report_error = {
                         "error": "TIMEOUT",
-                        "message": "branch review worker exceeded its deadline",
+                        "message": f"{workflow} worker exceeded its deadline",
                     }
                 elif semantic_error:
                     report_error = {
@@ -668,7 +688,7 @@ class Supervisor:
                         "message": (
                             "headless lead exited before producing a valid disposition"
                             if role == "lead"
-                            else "branch review worker exited before producing a valid handoff"
+                            else f"{workflow} worker exited before producing valid evidence"
                         ),
                         "returncode": receipt["returncode"],
                     }
@@ -719,7 +739,7 @@ class Supervisor:
                     ),
                     events=self.store.events_for_run(run_id),
                     completed_at=datetime.now(timezone.utc).isoformat(),
-                    phase="lead" if role == "lead" else "reviewer",
+                    phase=role,
                     error=report_error,
                     attempt={
                         "id": attempt["id"],

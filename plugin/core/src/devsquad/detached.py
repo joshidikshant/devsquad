@@ -47,6 +47,16 @@ def _profile_index(
     )
     if reviewer is None:
         raise ConflictError("handoff reviewer attempt is missing")
+    if role == "implementer":
+        seen = False
+        used = 0
+        for attempt in attempts:
+            if attempt["id"] == reviewer_id:
+                seen = True
+            elif (seen and attempt.get("role") == "implementer"
+                    and _is_saved_fallback_failure(attempt)):
+                used += 1
+        return used
     if role == "reviewer":
         seen = False
         used = 0
