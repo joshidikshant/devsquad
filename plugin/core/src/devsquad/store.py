@@ -1131,6 +1131,57 @@ class Store:
             )
         ]
 
+    def learning_report(
+        self, project: Path, *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Build a read-only project comparison with explicit missingness."""
+        from .learning import build_comparison_report
+
+        common_dir = git_common_dir(project)
+        project_row = self.connection.execute(
+            "SELECT id FROM projects WHERE git_common_dir=?", (str(common_dir),),
+        ).fetchone()
+        if project_row is None:
+            terminal_runs = []
+            outcome_records = []
+            attempt_profiles = {}
+            project_id = None
+        else:
+            project_id = project_row["id"]
+            terminal_runs = [
+                {"run_id": row["id"], "state": row["state"]}
+                for row in self.connection.execute(
+                    "SELECT id,state FROM runs WHERE project_id=? "
+                    "AND state IN ('succeeded','failed','cancelled') ORDER BY created_at,id",
+                    (project_id,),
+                )
+            ]
+            outcome_records = [
+                {"run_id": row["run_id"], "outcome": json.loads(row["payload_json"])}
+                for row in self.connection.execute(
+                    "SELECT o.run_id,o.payload_json FROM outcomes o "
+                    "JOIN runs r ON r.id=o.run_id WHERE r.project_id=? "
+                    "ORDER BY o.observed_at,o.id",
+                    (project_id,),
+                )
+            ]
+            attempt_profiles = {
+                row["id"]: row["profile_id"]
+                for row in self.connection.execute(
+                    "SELECT a.id,a.profile_id FROM attempts a "
+                    "JOIN runs r ON r.id=a.run_id WHERE r.project_id=?",
+                    (project_id,),
+                )
+            }
+        return build_comparison_report(
+            project_id=project_id,
+            project_path=str(project.resolve(strict=True)),
+            terminal_runs=terminal_runs,
+            outcome_records=outcome_records,
+            attempt_profiles=attempt_profiles,
+            generated_at=_authoritative_now(now).isoformat(),
+        )
+
     def worker_invocations(self, run_id: str) -> int:
         """Count attempts whose durable runner actually crossed the launch fence."""
         return self.connection.execute(

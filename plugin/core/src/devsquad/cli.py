@@ -164,6 +164,15 @@ def command_capacity_observe(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).capacity_observe(observation)), 0
 
 
+def command_outcome_add(args: argparse.Namespace) -> tuple[dict, int]:
+    outcome = _read_json(args.file, "outcome file")
+    return envelope(data=_service(args).outcome_add(args.run, outcome)), 0
+
+
+def command_report(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).learning_report(args.project)), 0
+
+
 def command_status(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).status(args.run)), 0
 def command_events(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).events(args.run, args.after, args.limit)), 0
 def command_result(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).result(args.run)), 0
@@ -260,6 +269,19 @@ def parser() -> argparse.ArgumentParser:
     observe.add_argument("--json", action="store_true")
     observe.add_argument("--runtime-dir", default=runtime_default)
     observe.set_defaults(func=command_capacity_observe)
+    outcome = sub.add_parser("outcome")
+    outcome_sub = outcome.add_subparsers(dest="outcome_command", required=True)
+    outcome_add = outcome_sub.add_parser("add")
+    outcome_add.add_argument("run")
+    outcome_add.add_argument("--file", required=True)
+    outcome_add.add_argument("--json", action="store_true")
+    outcome_add.add_argument("--runtime-dir", default=runtime_default)
+    outcome_add.set_defaults(func=command_outcome_add)
+    report = sub.add_parser("report")
+    report.add_argument("--project", required=True)
+    report.add_argument("--json", action="store_true")
+    report.add_argument("--runtime-dir", default=runtime_default)
+    report.set_defaults(func=command_report)
     handoff = sub.add_parser("handoff")
     handoff_sub = handoff.add_subparsers(dest="handoff_command", required=True)
     claim = handoff_sub.add_parser("claim")

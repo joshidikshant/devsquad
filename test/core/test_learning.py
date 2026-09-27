@@ -99,18 +99,18 @@ class LearningContractTest(unittest.TestCase):
                 "UPDATE runs SET state='succeeded',phase=NULL WHERE id=?",
                 (claim.run_id,),
             )
-            for attempt_id, metadata in (
-                ("attempt-original", {"failure": {"error": "seeded"}}),
-                ("attempt-repair", {}),
+            for attempt_id, profile_id, metadata in (
+                ("attempt-original", "profile-original", {"failure": {"error": "seeded"}}),
+                ("attempt-repair", "profile-repair", {}),
             ):
                 store.connection.execute(
                     "INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,"
-                    "status,heartbeat_at,package_digest,output_metadata,created_at,finished_at,role) "
-                    "VALUES(?,?,?,?,?,'finished',?,?,?,?,?,'implementer')",
+                    "status,heartbeat_at,package_digest,output_metadata,created_at,finished_at,"
+                    "role,profile_id) VALUES(?,?,?,?,?,'finished',?,?,?,?,?,'implementer',?)",
                     (
                         attempt_id, claim.run_id, run["project_id"], str(repository),
                         f"token-{attempt_id}", NOW.isoformat(), "package",
-                        json.dumps(metadata), NOW.isoformat(), NOW.isoformat(),
+                        json.dumps(metadata), NOW.isoformat(), NOW.isoformat(), profile_id,
                     ),
                 )
 
@@ -160,6 +160,29 @@ class LearningContractTest(unittest.TestCase):
             )
             self.assertFalse(
                 history[0]["outcome"]["contributions"][0]["independent_success"],
+            )
+            missing = store.claim_start(repository, "missing-outcome", {}, "owner")
+            store.connection.execute(
+                "UPDATE runs SET state='failed',phase=NULL WHERE id=?",
+                (missing.run_id,),
+            )
+            report = store.learning_report(
+                repository, now=NOW + timedelta(minutes=2),
+            )
+            self.assertEqual(report["sample_size"], 1)
+            self.assertEqual(report["terminal_run_count"], 2)
+            self.assertEqual(report["final_successes"], 1)
+            self.assertEqual(report["escaped_defects"], 1)
+            self.assertEqual(
+                report["selection_modes"]["automatic"]["success_rate"], 1.0,
+            )
+            self.assertEqual(report["profiles"]["profile-original"]["failed"], 1)
+            self.assertEqual(report["profiles"]["profile-repair"]["repairs"], 1)
+            self.assertEqual(
+                report["missingness"]["terminal_runs_without_final_outcome"], 1,
+            )
+            self.assertTrue(
+                report["interpretation"]["final_task_success_is_not_profile_success"],
             )
 
     def test_migration_ten_creates_outcome_ledger(self):

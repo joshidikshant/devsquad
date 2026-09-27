@@ -125,6 +125,32 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, response)
         service.capacity_observe.assert_called_once_with(observation)
 
+    def test_outcome_add_and_report_dispatch(self):
+        outcome = {"schema_version": 1, "outcome_id": "outcome-1"}
+        outcome_file = self.root / "outcome.json"
+        outcome_file.write_text(json.dumps(outcome))
+        service = mock.Mock()
+        service.outcome_add.return_value = {"run_id": "run-1", "replayed": False}
+        code, payload, stderr = self.invoke([
+            "outcome", "add", "run-1", "--file", str(outcome_file),
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(
+            payload, {"run_id": "run-1", "replayed": False},
+        )
+        service.outcome_add.assert_called_once_with("run-1", outcome)
+
+        service = mock.Mock()
+        service.learning_report.return_value = {"sample_size": 3}
+        code, payload, stderr = self.invoke([
+            "report", "--project", str(self.root),
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, {"sample_size": 3})
+        service.learning_report.assert_called_once_with(str(self.root))
+
     def test_handoff_claim_renew_and_complete_dispatch_parsed_objects(self):
         claim_payload = {
             "schema_version": 1,

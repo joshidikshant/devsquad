@@ -790,6 +790,22 @@ class Service:
         finally:
             store.close()
 
+    def outcome_add(self, run_id: str, outcome: dict[str, Any]) -> dict[str, Any]:
+        store = self._store()
+        try:
+            return store.record_outcome(run_id, outcome)
+        finally:
+            store.close()
+
+    def learning_report(self, project: str | Path) -> dict[str, Any]:
+        if not isinstance(project, (str, Path)):
+            raise ContractError("report project path is invalid")
+        store = self._store()
+        try:
+            return store.learning_report(Path(project))
+        finally:
+            store.close()
+
     @staticmethod
     def _status_capacity(store: Store, run: dict[str, Any]) -> dict[str, Any] | None:
         try:

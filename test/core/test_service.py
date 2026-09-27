@@ -165,6 +165,33 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(current["status"], "available")
         self.assertEqual(current["windows"][0]["window_id"], "short")
 
+    def test_outcome_add_and_project_report_share_saved_ledger(self):
+        started = self.service.start(
+            self.task, "learning-report", _internal_fake_delay=.01,
+        )
+        self.wait_state(started["run_id"], {"succeeded"})
+        now = datetime.now(timezone.utc)
+        recorded = self.service.outcome_add(started["run_id"], {
+            "schema_version": 1,
+            "outcome_id": "service-final-outcome",
+            "kind": "final",
+            "verdict": "succeeded",
+            "selection_mode": "automatic",
+            "observed_at": now.isoformat(),
+            "corrects_outcome_id": None,
+            "summary": "The saved fixture run completed successfully.",
+            "criteria": [],
+            "contributions": [],
+            "lead_repairs": [],
+            "evidence_refs": ["result-receipt.json"],
+        })
+        self.assertFalse(recorded["replayed"])
+        report = self.service.learning_report(self.repo)
+        self.assertEqual(report["sample_size"], 1)
+        self.assertEqual(report["terminal_run_count"], 1)
+        self.assertEqual(report["final_successes"], 1)
+        self.assertEqual(report["missingness"]["finals_without_contributions"], 1)
+
     def test_abandoned_preparation_is_reclaimed_from_the_submitted_request(self):
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
         try:
