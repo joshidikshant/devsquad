@@ -275,7 +275,7 @@
       "id": "M6",
       "title": "Shared capacity and evidence-based improvement",
       "depends_on": ["M4", "M5"],
-      "status": "pending",
+      "status": "in_progress",
       "acceptance_section": "M6 — Make capacity and improvement evidence useful",
       "decision_helper_work_packages": [
         {
@@ -316,6 +316,15 @@
         }
       ],
       "evidence": [
+        {
+          "kind": "capacity_checkpoint",
+          "revision": "d170c01",
+          "command_or_action": "255 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions, two-project reservation race, schema-8 active-attempt migration and public capacity CLI/service/routing tests",
+          "outcome": "Schema 9 persists strict scoped quota-window observations and reservations; fresh exhaustion, stale/unknown evidence, model-family sublimits, post-preflight changes and ambiguous ownership now affect deterministic routing and transactional launch without widening billing or permission eligibility.",
+          "artifact": "M6-STATUS.md",
+          "recorded_at": "2026-09-27T08:41:45-07:00",
+          "availability": "tracked_tests"
+        },
         {
           "kind": "early_experiment_checkpoint",
           "revision": "70e59cb",

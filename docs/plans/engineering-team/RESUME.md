@@ -131,6 +131,16 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   error; the compatibility gate is 220 Bash assertions. M5 is now blocked only
   on normal Claude login for the genuine Claude implementation → different-
   model Codex review/check/disposition receipt.
+- M6 shared-capacity work is verified through `d170c01`. Schema 9 persists
+  strict scoped observations and reservations, backfills active schema-8
+  attempts and keeps ambiguous ownership in flight. Two separate projects
+  racing for an unresolved pool create one reservation; fresh exhausted weekly
+  evidence beats short-window availability; stale/estimated/incomplete data
+  remains unknown; reservation rechecks post-preflight changes; and routing
+  applies model/profile sublimits without widening eligibility. `squad capacity
+  observe --file FILE` and frozen/current status evidence are wired. The gate
+  is 255 core tests with 2 optional-SDK skips and 220 Bash assertions. See
+  [M6-STATUS.md](M6-STATUS.md).
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -157,7 +167,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 241 discovered through M5 live-writer recovery; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Python core discovery | 255 discovered through M6 capacity routing; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
 | Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
@@ -194,12 +204,11 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Begin M6 with the shared-capacity observation/reservation model: persist all
-   applicable windows, derive available/exhausted/unknown from fresh evidence,
-   fence concurrent reservations, expose the snapshot through the service/CLI
-   and feed it into deterministic routing. Then add evidence-based outcomes,
-   lifecycle qualification/guarded promotion and the default-off decision
-   helper. Do not rebuild the completed M5 offline path.
+2. Continue M6 with the outcome/learning ledger: final and late corrections,
+   attempt/lead contribution, selection-mode separation, comparable reports
+   and one-variable proposal/rollback evidence. Then add lifecycle
+   qualification/guarded promotion and the default-off decision helper. Do not
+   rebuild the completed M5 offline path or capacity ledger.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.
