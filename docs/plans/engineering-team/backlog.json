@@ -211,7 +211,7 @@
       "id": "M5",
       "title": "Bounded implementation with independent review",
       "depends_on": ["M3"],
-      "status": "in_progress",
+      "status": "blocked",
       "acceptance_section": "M5 — Deliver a bounded engineering change",
       "evidence": [
         {
@@ -258,9 +258,18 @@
           "artifact": "M5-STATUS.md",
           "recorded_at": "2026-09-26T23:58:00-07:00",
           "availability": "tracked_tests"
+        },
+        {
+          "kind": "offline_completion_checkpoint",
+          "revision": "f199cd2",
+          "command_or_action": "241 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions, 19 focused delivery regressions and a controlled live-child supervisor kill",
+          "outcome": "All independent M5 behavior is implemented offline: the frozen Claude bridge records identity/session/usage, same-permission rate-limit fallback and cancellation retain complete history, and revised live-writer recovery cannot launch a duplicate or mutate the source checkout/remotes. Only the genuine authenticated Claude-to-Codex two-harness acceptance receipt remains.",
+          "artifact": "M5-STATUS.md",
+          "recorded_at": "2026-09-27T08:10:15-07:00",
+          "availability": "tracked_tests"
         }
       ],
-      "blocker": null
+      "blocker": "Normal Claude CLI login is required for the genuine bounded Claude implementation followed by different-model Codex review/check/disposition; offline fixtures are not substituted for the two-harness acceptance receipt"
     },
     {
       "id": "M6",

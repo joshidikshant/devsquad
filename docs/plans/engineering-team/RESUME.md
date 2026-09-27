@@ -2,7 +2,7 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 26, 2026
+## Current position — September 27, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` remains the published runtime
@@ -121,6 +121,16 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   tests (2 optional-SDK skips) and 220 Bash assertions. Delivery fallback,
   failure/cancellation history, live Claude execution and the live two-harness
   proof remain open.
+- M5 has completed all independently executable offline work at `f199cd2`.
+  `b7d90cc` freezes the real Claude implementation bridge, records observed
+  identity/session/usage, enforces the same-permission rate-limit fallback and
+  preserves delivery failure/cancellation history. `f199cd2` kills a live
+  revised-implementation supervisor and proves retained ownership, no duplicate
+  writer, successful reap and unchanged source checkout/remotes. The exact core
+  gate is 241 tests with 2 optional-SDK skips and ResourceWarning promoted to
+  error; the compatibility gate is 220 Bash assertions. M5 is now blocked only
+  on normal Claude login for the genuine Claude implementation → different-
+  model Codex review/check/disposition receipt.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -147,7 +157,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 231 discovered through the prepared Jev pilot; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Python core discovery | 241 discovered through M5 live-writer recovery; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
 | Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
@@ -175,8 +185,8 @@ the earlier apparent nonresponses.
 
 The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md),
 [M2-STATUS.md](M2-STATUS.md) and [M3-STATUS.md](M3-STATUS.md).
-[backlog.json](backlog.json) marks M1–M3 complete, M4 blocked on its external
-Claude live gate, and M5 in progress. M6 classifier work packages remain pending.
+[backlog.json](backlog.json) marks M1–M3 complete and M4/M5 blocked only on
+their external Claude live gates. M6 implementation work remains pending.
 Unauthenticated, unsupported or permission-blocked provider paths are not
 advertised as verified.
 
@@ -184,19 +194,18 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M5 Plan 07-02 Task 3 from `4c76887`: complete delivery-specific
-   implementer/reviewer fallback faults, deadline/cancellation terminal history
-   and remaining live-revised-writer recovery. Then wire the already-conformed
-   Claude adapter into live implementation and run the live two-harness gate
-   only after normal provider login. Accept/reject, seeded repair, stale
-   evidence, required-check enforcement, finite revision/invocation budgets,
-   headless lead and prelaunch crash recovery are green; do not rebuild them.
+2. Begin M6 with the shared-capacity observation/reservation model: persist all
+   applicable windows, derive available/exhausted/unknown from fresh evidence,
+   fence concurrent reservations, expose the snapshot through the service/CLI
+   and feed it into deterministic routing. Then add evidence-based outcomes,
+   lifecycle qualification/guarded promotion and the default-off decision
+   helper. Do not rebuild the completed M5 offline path.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.
-4. When M5's evidence shape is stable, execute the small M6 decision-helper
-   work packages alongside other independently ready M6 work. Keep experiments
-   off by default and preserve all existing M4/M5/live acceptance gates.
+4. Execute the small M6 decision-helper work packages alongside other
+   independently ready M6 work. Keep experiments off by default and preserve
+   all existing M4/M5/live acceptance gates.
    Exception already authorized: once TypeSafe login/API-key setup is complete,
    run the prepared one-request synthetic Jev pilot immediately, save the
    private receipt outside Git, and update only redacted aggregate evidence.

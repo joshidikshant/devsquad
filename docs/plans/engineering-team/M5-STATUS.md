@@ -1,22 +1,22 @@
 # M5 implementation status
 
-M5 is **in progress**. This matrix is derived from the authoritative M5
-requirements before implementation; a row becomes verified only when its
-behavioral evidence exists. The milestone remains incomplete until the live
-two-harness gate passes.
+M5 is **blocked on its external live gate**. All independently executable
+offline implementation and fault-injection work is complete; the milestone
+remains incomplete until a normally authenticated Claude implementation and a
+different-model Codex review pass the live two-harness gate.
 
 | Requirement | Planned evidence | Status |
 |---|---|---|
 | Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | verified offline at `d96e9e4` |
 | Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | verified offline at `0e88d73` |
 | Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `0e88d73` |
-| Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | router verified; workflow pending |
+| Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | workflow and identity gate verified offline at `b7d90cc`; live proof pending |
 | Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | verified offline through two distinct candidates at `4c76887` |
-| Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | correction and revision/invocation budgets verified offline at `4c76887`; delivery fallback faults pending |
-| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | mandatory-check gate and accept/reject receipts verified offline at `a1199c6`; invalid-output fault matrix pending |
-| Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | successful repair and headless history verified offline at `4c76887`; failed fallback/cancellation history pending |
-| Crash recovery | Killing a live implementation supervisor cannot create a duplicate writer on resume | initial live-writer and revised prelaunch recovery verified offline at `4c76887`; live revised-writer fault gate pending |
-| Live acceptance | One bounded issue completes across at least two authenticated subscription harnesses with different verified models | pending |
+| Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | correction/budgets verified at `4c76887`; same-permission delivery fallback verified at `b7d90cc` |
+| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | verified offline at `a1199c6` and `b7d90cc` |
+| Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | success, repair, fallback, failure and cancellation history verified offline at `b7d90cc` |
+| Crash recovery | Killing a live implementation supervisor cannot create a duplicate writer on resume | prelaunch and live revised-writer recovery verified offline at `f199cd2` |
+| Live acceptance | One bounded issue completes across at least two authenticated subscription harnesses with different verified models | blocked on normal Claude CLI login |
 
 ## Boundary
 
@@ -115,3 +115,28 @@ terminalizes through its own fenced attempt. The complete gate is **237 core
 tests (2 optional-SDK skips)** with `ResourceWarning` promoted to error and
 **220 Bash assertions**. Delivery fallback/failure/cancellation history, live
 Claude implementation and the live two-harness proof remain open.
+
+## Plan 07-02 checkpoint 3
+
+At `b7d90cc`, the frozen delivery package can invoke the exact preflighted
+Claude binary without importing source-tree adapter resources at runtime. It
+retains the requested and observed identity, native session and usage evidence,
+classifies provider faults through the frozen contract, and permits only the
+predeclared same-permission fallback. A rate-limited implementer therefore
+uses the one frozen fallback without widening tools or permissions, and the
+terminal receipt retains both attempts. Delivery-specific cancellation keeps
+the prior candidate, attempts and lead disposition visible instead of
+collapsing history.
+
+At `f199cd2`, a real controlled subprocess kills the delivery supervisor while
+a revised implementation child is live. Recovery reports retained ownership,
+does not launch a duplicate writer, and cancellation reaps the process while
+the source checkout and remote refs remain unchanged. The exact checkpoint
+passes **241 core tests with 2 optional-SDK skips** and ResourceWarning promoted
+to error. The compatibility gate remains **220/220 Bash assertions**; the last
+code change after that run added only the delivery-specific Python regression.
+
+No independent M5 implementation work remains. The unresolved acceptance gate
+is intentionally not replaced with fixture evidence: normal Claude CLI login
+is required to run a genuine bounded implementation followed by different-
+model Codex review/check/disposition and save the redacted two-harness receipt.
