@@ -14,7 +14,7 @@ sys.path.insert(0, str(CORE / "src"))
 
 from devsquad.contracts import ContractError
 from devsquad.service import Service
-from devsquad.store import Store
+from devsquad.store import Store, request_hash
 from devsquad.workspaces import (
     freeze_delivery_candidate,
     prepare_delivery_workspace,
@@ -222,6 +222,28 @@ class DeliveryWorkspaceTest(unittest.TestCase):
             "summary": "The exact frozen candidate satisfies the task.",
             "findings": [],
         }
+
+    @staticmethod
+    def decision(
+        packet: dict[str, object],
+        submission_id: str,
+        disposition: str,
+        reason: str,
+    ) -> dict[str, object]:
+        body = {
+            "schema_version": 1,
+            "submission_id": submission_id,
+            "disposition": disposition,
+            "reason": reason,
+            "evidence_refs": [
+                {
+                    "artifact_id": reference["artifact_id"],
+                    "sha256": reference["sha256"],
+                }
+                for reference in packet["artifacts"]
+            ],
+        }
+        return {**body, "submission_hash": request_hash(body)}
 
     def wait_for_candidate(self, service: Service, run_id: str) -> dict[str, object]:
         deadline = time.monotonic() + 15
@@ -435,6 +457,85 @@ class DeliveryWorkspaceTest(unittest.TestCase):
                 f"review-attempt-{attempts[1]['id']}.json",
             },
         )
+        self.assert_source_unchanged()
+
+    def test_host_accept_publishes_complete_delivery_receipt(self):
+        service = Service(self.runtime)
+        started = service.start(
+            self.delivery_task(),
+            "accepted-delivery",
+            _internal_implementation_fixture=self.implementation_fixture(),
+            _internal_review_fixture=self.clean_review_fixture(),
+        )
+        self.wait_for_candidate(service, started["run_id"])
+        service.resume(started["run_id"])
+        status = self.wait_for_handoff(service, started["run_id"])
+        claimed = service.handoff_claim(
+            started["run_id"], status["version"], "fixture-host",
+        )
+        packet = claimed["handoff"]["packet"]
+        completed = service.handoff_complete(
+            started["run_id"],
+            claimed["claim"],
+            self.decision(packet, "accept-delivery", "accept", "Candidate accepted."),
+        )
+        self.assertEqual(completed["state"], "succeeded")
+        self.assertEqual(completed["continuation"]["action"], "terminal")
+        result = service.result(started["run_id"])
+        receipt_artifact = next(
+            item for item in result["artifacts"] if item["name"] == "receipt.json"
+        )
+        receipt = json.loads(Path(receipt_artifact["path"]).read_text())
+        self.assertEqual(receipt["workflow"], "issue-delivery")
+        self.assertEqual(receipt["candidate"]["sha256"], packet["candidate_sha256"])
+        self.assertEqual(
+            [attempt["role"] for attempt in receipt["attempts"]],
+            ["implementer", "reviewer"],
+        )
+        self.assertEqual(receipt["delivery_iterations"][0]["iteration"], 1)
+        self.assertEqual(receipt["accounting"]["worker_invocations"], 2)
+        self.assertEqual(receipt["lead"]["disposition"], "accept")
+        self.assert_source_unchanged()
+
+    def test_required_failure_blocks_delivery_accept_and_allows_reject(self):
+        task = self.delivery_task()
+        task["checks"][0] = {
+            **task["checks"][0],
+            "argv": ["python3", "-c", "raise SystemExit(1)"],
+        }
+        service = Service(self.runtime)
+        started = service.start(
+            task,
+            "rejected-delivery",
+            _internal_implementation_fixture=self.implementation_fixture(),
+            _internal_review_fixture=self.clean_review_fixture(),
+        )
+        self.wait_for_candidate(service, started["run_id"])
+        service.resume(started["run_id"])
+        status = self.wait_for_handoff(service, started["run_id"])
+        claimed = service.handoff_claim(
+            started["run_id"], status["version"], "fixture-host",
+        )
+        packet = claimed["handoff"]["packet"]
+        with self.assertRaisesRegex(ContractError, "blocked by required evidence"):
+            service.handoff_complete(
+                started["run_id"],
+                claimed["claim"],
+                self.decision(packet, "blocked-accept", "accept", "Accept anyway."),
+            )
+        completed = service.handoff_complete(
+            started["run_id"],
+            claimed["claim"],
+            self.decision(packet, "reject-delivery", "reject", "Required check failed."),
+        )
+        self.assertEqual(completed["state"], "failed")
+        receipt_artifact = next(
+            item for item in service.result(started["run_id"])["artifacts"]
+            if item["name"] == "receipt.json"
+        )
+        receipt = json.loads(Path(receipt_artifact["path"]).read_text())
+        self.assertEqual(receipt["error"]["error"], "REVIEW_REJECTED")
+        self.assertEqual(receipt["evaluation"]["required_failures"], ["fixture-check"])
         self.assert_source_unchanged()
 
     def test_live_implementer_cannot_be_resumed_into_a_second_writer(self):

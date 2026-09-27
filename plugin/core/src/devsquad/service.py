@@ -1256,21 +1256,23 @@ class Service:
         try:
             run = store.run(run_id)
             handoff = store.handoff_snapshot_by_id(run_id, decoded.handoff_id)
-            branch_review = handoff.packet.get("workflow") == "branch-review"
-            snapshot = self._review_snapshot(run) if branch_review else None
-            if (branch_review and snapshot["task"]["lead"]["mode"] == "headless"
+            managed_review = handoff.packet.get("workflow") in {
+                "branch-review", "issue-delivery",
+            }
+            snapshot = self._review_snapshot(run) if managed_review else None
+            if (managed_review and snapshot["task"]["lead"]["mode"] == "headless"
                     and not decoded.owner_id.startswith("headless-lead:")):
                 raise ConflictError(
-                    "headless branch review does not accept a host completion"
+                    "headless review does not accept a host completion"
                 )
-            if branch_review:
+            if managed_review:
                 self._review_gate(store, run_id, handoff, snapshot, decision)
             submission = store.record_handoff_submission(run_id, decoded, decision)
             continuation = None
-            if branch_review:
+            if managed_review:
                 entry = store.recorded_handoff_submission(run_id, decoded.handoff_id)
                 if entry is None:
-                    raise ConflictError("recorded branch review submission is missing")
+                    raise ConflictError("recorded review submission is missing")
                 continuation = self._continue_branch_review_submission(
                     store, run_id, handoff, snapshot, entry,
                 )
@@ -1296,7 +1298,7 @@ class Service:
             version, package, digest = launch
             self._spawn_daemon(run_id, version, package, digest)
             response["launched"] = True
-        elif branch_review:
+        elif managed_review:
             response["launched"] = False
         return response
 

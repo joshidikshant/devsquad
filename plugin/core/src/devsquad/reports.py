@@ -138,10 +138,13 @@ def build_handoff_reports(
     if hashlib.sha256(packet_json.encode()).hexdigest() != packet_sha256:
         raise ContractError("handoff report packet hash is invalid")
     json_name, markdown_name = handoff_report_names(sequence)
+    workflow = packet.get("workflow")
+    if workflow not in {"branch-review", "issue-delivery"}:
+        raise ContractError("handoff report workflow is invalid")
     report = {
         "schema_version": 1,
         "run_id": run_id,
-        "workflow": "branch-review",
+        "workflow": workflow,
         "state": "awaiting_host",
         "created_at": created_at,
         "handoff_id": handoff_id,
@@ -157,7 +160,7 @@ def build_handoff_reports(
     }
     review = packet.get("review") if isinstance(packet.get("review"), dict) else {}
     lines = [
-        "# DevSquad branch review handoff",
+        f"# DevSquad {workflow} handoff",
         "",
         f"- Run: `{run_id}`",
         f"- Handoff: `{handoff_id}`",
@@ -386,6 +389,9 @@ def _history(
     dispositions = []
     prior_sequence = 0
     candidate = None
+    workflow = snapshot.get("task", {}).get("workflow")
+    if workflow not in {"branch-review", "issue-delivery"}:
+        raise ContractError("review report workflow is invalid")
     for index, entry in enumerate(entries):
         required = {
             "handoff_id", "sequence", "packet", "packet_sha256", "decision",
@@ -410,7 +416,7 @@ def _history(
         )
         if candidate is None:
             candidate = identity
-        elif identity != candidate:
+        elif identity != candidate and workflow == "branch-review":
             raise ContractError("branch review report history changes the candidate")
         if index < len(entries) - 1 and decision["disposition"] != "revise":
             raise ContractError("only a revision may precede another review attempt")
@@ -450,7 +456,7 @@ def project_branch_review_history(
 def _markdown(receipt: dict[str, Any]) -> str:
     review = receipt["review"]
     lines = [
-        "# DevSquad branch review",
+        f"# DevSquad {receipt['workflow']}",
         "",
         f"- Run: `{receipt['run_id']}`",
         f"- State: `{receipt['state']}`",
@@ -515,9 +521,12 @@ def build_terminal_reports(
     if not isinstance(run_id, str) or not run_id:
         raise ContractError("report run id is invalid")
     if state not in {"succeeded", "failed"}:
-        raise ContractError("branch review report state is invalid")
+        raise ContractError("review report state is invalid")
     if not isinstance(snapshot, dict) or not isinstance(snapshot.get("routing"), dict):
         raise ContractError("branch review report snapshot is invalid")
+    workflow = snapshot.get("task", {}).get("workflow")
+    if workflow not in {"branch-review", "issue-delivery"}:
+        raise ContractError("review report workflow is invalid")
     attempts, dispositions = _history(history, snapshot)
     final_packet = validate_branch_review_handoff(history[-1]["packet"], snapshot)
     final_decision = _decision(history[-1]["decision"])
@@ -581,14 +590,42 @@ def build_terminal_reports(
     failed_leads = [attempt for attempt in failed if attempt["role"] == "lead"]
     reviewer_attempts = failed_reviewers + attempts
     lead_attempts = failed_leads + lead_attempts
-    all_attempts = reviewer_attempts + lead_attempts
+    implementation_attempts = []
+    if workflow == "issue-delivery":
+        iterations = snapshot.get("delivery_iterations")
+        if not isinstance(iterations, list) or not iterations:
+            raise ContractError("delivery report has no candidate iterations")
+        for expected_iteration, iteration in enumerate(iterations, 1):
+            if (not isinstance(iteration, dict)
+                    or iteration.get("iteration") != expected_iteration
+                    or not isinstance(iteration.get("candidate"), dict)
+                    or not isinstance(iteration.get("implementation"), dict)
+                    or not isinstance(iteration["implementation"].get("attempt"), dict)):
+                raise ContractError("delivery report candidate iteration is invalid")
+            artifact_name = iteration["candidate"].get("implementation_artifact")
+            if (not isinstance(artifact_name, str)
+                    or not artifact_name.startswith("implementation-attempt-")
+                    or not artifact_name.endswith(".json")):
+                raise ContractError("delivery report implementation artifact is invalid")
+            implementation_attempts.append({
+                "id": artifact_name[
+                    len("implementation-attempt-"):-len(".json")
+                ],
+                "status": "succeeded",
+                "sequence": expected_iteration,
+                **iteration["implementation"]["attempt"],
+                "summary": iteration["implementation"].get("summary"),
+                "candidate": iteration["candidate"],
+                "evidence_refs": [artifact_name],
+            })
+    all_attempts = implementation_attempts + reviewer_attempts + lead_attempts
     all_native_counts = [
         attempt["native_model_requests"] for attempt in all_attempts
     ]
     receipt = {
         "schema_version": 1,
         "run_id": run_id,
-        "workflow": "branch-review",
+        "workflow": workflow,
         "state": state,
         "completed_at": completed_at,
         "candidate": {
@@ -601,7 +638,12 @@ def build_terminal_reports(
         "checks": final_packet["checks"],
         "evaluation": final_packet["evaluation"],
         "criteria": final_packet["evaluation"]["criteria"],
-        "attempts": reviewer_attempts,
+        "attempts": (
+            implementation_attempts + reviewer_attempts
+            if workflow == "issue-delivery" else reviewer_attempts
+        ),
+        **({"delivery_iterations": snapshot["delivery_iterations"]}
+           if workflow == "issue-delivery" else {}),
         "dispositions": dispositions,
         "revisions": {
             "requested": sum(
