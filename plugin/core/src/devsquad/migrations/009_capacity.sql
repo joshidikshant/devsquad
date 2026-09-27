@@ -40,3 +40,28 @@ CREATE TABLE pool_reservations (
 CREATE INDEX pool_reservations_active
 ON pool_reservations(pool_id, reserved_at)
 WHERE reconciled_at IS NULL;
+
+INSERT INTO pool_reservations(
+  id, pool_id, run_id, attempt_id, purpose, profile_id, reserved_at
+)
+SELECT
+  'migrated-attempt-' || id,
+  account_pool_id,
+  run_id,
+  id,
+  'attempt',
+  profile_id,
+  created_at
+FROM attempts
+WHERE account_pool_id IS NOT NULL
+  AND status IN ('reserved', 'running', 'cancelling', 'ownership_ambiguous');
+
+CREATE TRIGGER reconcile_pool_reservation_after_attempt_status
+AFTER UPDATE OF status ON attempts
+WHEN NEW.status NOT IN ('reserved', 'running', 'cancelling', 'ownership_ambiguous')
+BEGIN
+  UPDATE pool_reservations
+  SET reconciled_at = COALESCE(NEW.finished_at, NEW.heartbeat_at),
+      reconcile_reason = 'attempt_status_' || NEW.status
+  WHERE attempt_id = NEW.id AND reconciled_at IS NULL;
+END;

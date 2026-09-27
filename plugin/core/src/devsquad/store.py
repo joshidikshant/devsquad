@@ -180,9 +180,16 @@ class Store:
                 if len(candidates) != 1:
                     raise SchemaVersionError(f"migration {next_version} is missing or ambiguous")
                 sql = candidates[0].read_text()
-                for statement in sql.split(";"):
-                    if statement.strip():
-                        self.connection.execute(statement)
+                statement = ""
+                for line in sql.splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+                        self.connection.execute(statement.strip())
+                        statement = ""
+                if statement.strip():
+                    raise SchemaVersionError(
+                        f"migration {next_version} contains incomplete SQL",
+                    )
                 self.connection.execute("INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)", (next_version, _utc_now()))
                 current = next_version
             self.connection.execute("COMMIT")
@@ -691,14 +698,286 @@ class Store:
             if wall_seconds * 1000 - elapsed_ms < 1000:
                 raise BudgetExhausted("run wall-time budget is exhausted")
 
+    @staticmethod
+    def _pool_observation(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "observation_id": row["observation_id"],
+            "pool_id": row["pool_id"],
+            "window_id": row["window_id"],
+            "applies_to": json.loads(row["applies_to_json"]),
+            "observed_at": row["observed_at"],
+            "expires_at": row["expires_at"],
+            "source": row["source"],
+            "used": row["used"],
+            "limit": row["limit_value"],
+            "unit": row["unit"],
+            "resets_at": row["resets_at"],
+            "confidence": row["confidence"],
+        }
+
+    def _pool_observations(self, pool_id: str) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT observation_id,pool_id,window_id,applies_to_json,observed_at,"
+            "expires_at,source,used,limit_value,unit,resets_at,confidence "
+            "FROM pool_observations WHERE pool_id=? "
+            "ORDER BY observed_at,observation_id",
+            (pool_id,),
+        ).fetchall()
+        return [self._pool_observation(row) for row in rows]
+
+    def record_pool_observation(
+        self, observation: dict[str, Any], *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Persist one immutable, replay-safe capacity observation."""
+        from .capacity import validate_observation
+
+        current = _authoritative_now(now)
+        normalized = validate_observation(observation, now=current)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.connection.execute(
+                "SELECT observation_id,pool_id,window_id,applies_to_json,observed_at,"
+                "expires_at,source,used,limit_value,unit,resets_at,confidence,recorded_at "
+                "FROM pool_observations WHERE observation_id=?",
+                (normalized["observation_id"],),
+            ).fetchone()
+            if existing is not None:
+                stored = self._pool_observation(existing)
+                if stored != normalized:
+                    raise ConflictError(
+                        "capacity observation id was already used with different evidence",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "observation": stored,
+                    "recorded_at": existing["recorded_at"],
+                    "replayed": True,
+                }
+            recorded_at = current.isoformat()
+            self.connection.execute(
+                "INSERT INTO pool_observations("
+                "observation_id,pool_id,window_id,applies_to_json,observed_at,expires_at,"
+                "source,used,limit_value,unit,resets_at,confidence,recorded_at"
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    normalized["observation_id"], normalized["pool_id"],
+                    normalized["window_id"], canonical_json(normalized["applies_to"]),
+                    normalized["observed_at"], normalized["expires_at"],
+                    normalized["source"], normalized["used"], normalized["limit"],
+                    normalized["unit"], normalized["resets_at"],
+                    normalized["confidence"], recorded_at,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "observation": normalized,
+                "recorded_at": recorded_at,
+                "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def capacity_snapshot(
+        self,
+        pool_id: str,
+        *,
+        target: dict[str, Any] | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Return current evidence and local reservations for one pool/target."""
+        from .capacity import derive_pool_capacity
+
+        current = _authoritative_now(now)
+        in_flight = self.connection.execute(
+            "SELECT COUNT(*) FROM pool_reservations "
+            "WHERE pool_id=? AND reconciled_at IS NULL",
+            (pool_id,),
+        ).fetchone()[0]
+        return derive_pool_capacity(
+            pool_id,
+            self._pool_observations(pool_id),
+            target=target,
+            in_flight=in_flight,
+            now=current,
+        )
+
+    @staticmethod
+    def _capacity_target(profile: dict[str, Any]) -> dict[str, str] | None:
+        fields = ("harness", "model_family", "model_id")
+        if all(isinstance(profile.get(field), str) and profile[field] for field in fields):
+            return {field: profile[field] for field in fields}
+        return None
+
+    def _reserve_pool_capacity_locked(
+        self,
+        *,
+        run_id: str,
+        pool_id: str,
+        purpose: str,
+        profile_id: str | None,
+        target: dict[str, Any] | None,
+        max_concurrency: int,
+        unknown_capacity_policy: str,
+        frozen_status: str | None,
+        attempt_id: str | None,
+        now: datetime,
+    ) -> dict[str, Any]:
+        from .capacity import derive_pool_capacity
+
+        if purpose not in {"attempt", "qualification", "classifier"}:
+            raise ContractError("pool reservation purpose is invalid")
+        if type(max_concurrency) is not int or max_concurrency < 1:
+            raise ContractError("pool max_concurrency must be a positive integer")
+        if unknown_capacity_policy not in {"allow_bounded", "block"}:
+            raise ContractError("pool unknown_capacity_policy is invalid")
+        if profile_id is not None and (not isinstance(profile_id, str) or not profile_id):
+            raise ContractError("pool reservation profile_id is invalid")
+        if frozen_status is not None and frozen_status not in {
+            "available", "exhausted", "unknown",
+        }:
+            raise ContractError("frozen pool capacity status is invalid")
+        in_flight = self.connection.execute(
+            "SELECT COUNT(*) FROM pool_reservations "
+            "WHERE pool_id=? AND reconciled_at IS NULL",
+            (pool_id,),
+        ).fetchone()[0]
+        snapshot = derive_pool_capacity(
+            pool_id,
+            self._pool_observations(pool_id),
+            target=target,
+            in_flight=in_flight,
+            now=now,
+        )
+        live_status = snapshot["status"]
+        status = "exhausted" if "exhausted" in {frozen_status, live_status} else live_status
+        if status == "exhausted":
+            raise ConflictError("account pool capacity is exhausted")
+        if status == "unknown" and unknown_capacity_policy == "block":
+            raise ConflictError("unknown account pool capacity is blocked")
+        effective_concurrency = 1 if status == "unknown" else max_concurrency
+        if in_flight >= effective_concurrency:
+            raise ConflictError("account pool concurrency is full")
+        reservation_id = str(uuid.uuid4())
+        self.connection.execute(
+            "INSERT INTO pool_reservations("
+            "id,pool_id,run_id,attempt_id,purpose,profile_id,reserved_at"
+            ") VALUES(?,?,?,?,?,?,?)",
+            (
+                reservation_id, pool_id, run_id, attempt_id, purpose, profile_id,
+                now.isoformat(),
+            ),
+        )
+        return {
+            "schema_version": 1,
+            "reservation_id": reservation_id,
+            "pool_id": pool_id,
+            "run_id": run_id,
+            "attempt_id": attempt_id,
+            "purpose": purpose,
+            "profile_id": profile_id,
+            "reserved_at": now.isoformat(),
+            "capacity_status": status,
+            "capacity_evidence": snapshot,
+        }
+
+    def reserve_pool_capacity(
+        self,
+        run_id: str,
+        pool_id: str,
+        purpose: str,
+        *,
+        profile_id: str | None = None,
+        target: dict[str, Any] | None = None,
+        max_concurrency: int = 1,
+        unknown_capacity_policy: str = "allow_bounded",
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Reserve qualification/classifier capacity under one SQLite write lock."""
+        if purpose == "attempt":
+            raise ContractError("attempt capacity is reserved with its attempt")
+        current = _authoritative_now(now)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if run is None:
+                raise ContractError("run does not exist")
+            if run["state"] in TERMINAL_STATES:
+                raise ConflictError("terminal run cannot reserve pool capacity")
+            reservation = self._reserve_pool_capacity_locked(
+                run_id=run_id,
+                pool_id=pool_id,
+                purpose=purpose,
+                profile_id=profile_id,
+                target=target,
+                max_concurrency=max_concurrency,
+                unknown_capacity_policy=unknown_capacity_policy,
+                frozen_status=None,
+                attempt_id=None,
+                now=current,
+            )
+            self.connection.execute("COMMIT")
+            return reservation
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def reconcile_pool_reservation(
+        self,
+        reservation_id: str,
+        reason: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        if not isinstance(reservation_id, str) or not reservation_id:
+            raise ContractError("pool reservation id is invalid")
+        if not isinstance(reason, str) or not reason:
+            raise ContractError("pool reconciliation reason is invalid")
+        current = _authoritative_now(now)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT pr.*,a.status AS attempt_status FROM pool_reservations pr "
+                "LEFT JOIN attempts a ON a.id=pr.attempt_id WHERE pr.id=?",
+                (reservation_id,),
+            ).fetchone()
+            if row is None:
+                raise ContractError("pool reservation does not exist")
+            if row["reconciled_at"] is not None:
+                if row["reconcile_reason"] != reason:
+                    raise ConflictError("pool reservation was reconciled differently")
+                self.connection.execute("COMMIT")
+                return {**dict(row), "replayed": True}
+            if row["attempt_id"] is not None and row["attempt_status"] in {
+                "reserved", "running", "cancelling", "ownership_ambiguous",
+            }:
+                raise ConflictError("attempt ownership is not reconciled")
+            reconciled_at = current.isoformat()
+            self.connection.execute(
+                "UPDATE pool_reservations SET reconciled_at=?,reconcile_reason=? "
+                "WHERE id=? AND reconciled_at IS NULL",
+                (reconciled_at, reason, reservation_id),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                **dict(row),
+                "reconciled_at": reconciled_at,
+                "reconcile_reason": reason,
+                "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def active_pool_counts(self) -> dict[str, int]:
         return {
-            row["account_pool_id"]: row["in_flight"]
+            row["pool_id"]: row["in_flight"]
             for row in self.connection.execute(
-                "SELECT account_pool_id,COUNT(*) AS in_flight FROM attempts "
-                "WHERE account_pool_id IS NOT NULL AND status IN "
-                "('reserved','running','cancelling','ownership_ambiguous') "
-                "GROUP BY account_pool_id"
+                "SELECT pool_id,COUNT(*) AS in_flight FROM pool_reservations "
+                "WHERE reconciled_at IS NULL GROUP BY pool_id"
             )
         }
 
@@ -787,16 +1066,7 @@ class Store:
                 if (capacity_status == "unknown"
                         and unknown_policy == "block"):
                     raise ConflictError("unknown account pool capacity is blocked")
-                effective_concurrency = (
-                    1 if capacity_status == "unknown" else max_concurrency
-                )
-                in_flight = self.connection.execute(
-                    "SELECT COUNT(*) FROM attempts WHERE account_pool_id=? "
-                    "AND status IN ('reserved','running','cancelling','ownership_ambiguous')",
-                    (account_pool_id,),
-                ).fetchone()[0]
-                if in_flight >= effective_concurrency:
-                    raise ConflictError("account pool concurrency is full")
+                target = self._capacity_target(selected["profile"])
             elif profile_id is not None or profile_index is not None:
                 raise ContractError("attempt profile requires an account pool")
             old = self.connection.execute("SELECT COALESCE(MAX(fencing_token),0) FROM supervisor_claims WHERE run_id=?", (run_id,)).fetchone()[0]
@@ -811,6 +1081,19 @@ class Store:
                  attempt_token, now, package_digest, now, role, account_pool_id,
                  profile_id, profile_index),
             )
+            if account_pool_id is not None:
+                self._reserve_pool_capacity_locked(
+                    run_id=run_id,
+                    pool_id=account_pool_id,
+                    purpose="attempt",
+                    profile_id=profile_id,
+                    target=target,
+                    max_concurrency=max_concurrency,
+                    unknown_capacity_policy=unknown_policy,
+                    frozen_status=capacity_status,
+                    attempt_id=attempt_id,
+                    now=datetime.fromisoformat(now),
+                )
             self.connection.execute("UPDATE runs SET phase='launching',version=?,updated_at=? WHERE id=?", (version, now, run_id))
             event = canonical_json({"attempt_id": attempt_id, "supervisor_token": supervisor_token})
             self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'supervisor.claimed',?,?)", (run_id, version, event, now))

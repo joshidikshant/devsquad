@@ -295,6 +295,12 @@ class StoreTest(unittest.TestCase):
             account_pool_id="shared-pool",
         )
         self.assertEqual(self.store.active_pool_counts(), {"shared-pool": 1})
+        pool_row = self.store.connection.execute(
+            "SELECT attempt_id,reconciled_at FROM pool_reservations WHERE run_id=?",
+            (first.run_id,),
+        ).fetchone()
+        self.assertEqual(pool_row["attempt_id"], reservation.attempt_id)
+        self.assertIsNone(pool_row["reconciled_at"])
         with self.assertRaisesRegex(ConflictError, "account pool concurrency"):
             self.store.reserve_attempt(
                 second.run_id,
@@ -309,6 +315,13 @@ class StoreTest(unittest.TestCase):
             first.run_id, reservation.attempt_token, "succeeded", {},
         )
         self.assertEqual(self.store.active_pool_counts(), {})
+        pool_row = self.store.connection.execute(
+            "SELECT reconciled_at,reconcile_reason FROM pool_reservations "
+            "WHERE attempt_id=?",
+            (reservation.attempt_id,),
+        ).fetchone()
+        self.assertIsNotNone(pool_row["reconciled_at"])
+        self.assertEqual(pool_row["reconcile_reason"], "attempt_status_finished")
         released = self.store.reserve_attempt(
             second.run_id,
             second_version,
@@ -318,6 +331,63 @@ class StoreTest(unittest.TestCase):
             account_pool_id="shared-pool",
         )
         self.assertEqual(released.run_id, second.run_id)
+
+    def test_post_preflight_exhaustion_is_rederived_before_reservation(self):
+        claim = self.store.claim_start(
+            self.repo, "capacity-changed", {"task": {"budget": {"wall_seconds": 300}}},
+            "owner",
+        )
+        version = self.store.complete_preparation(
+            claim.run_id, claim.fencing_token, self.routed_snapshot(status="available"),
+        )
+        now = datetime.now(timezone.utc)
+        self.store.record_pool_observation({
+            "schema_version": 1,
+            "observation_id": "weekly-exhausted-after-preflight",
+            "pool_id": "shared-pool",
+            "window_id": "weekly",
+            "applies_to": {
+                "harnesses": [], "model_families": [], "model_ids": [],
+            },
+            "observed_at": now.isoformat(),
+            "expires_at": (now + timedelta(minutes=10)).isoformat(),
+            "source": "native_reported",
+            "used": 100,
+            "limit": 100,
+            "unit": "percent",
+            "resets_at": (now + timedelta(days=1)).isoformat(),
+            "confidence": "confirmed",
+        }, now=now)
+        with self.assertRaisesRegex(ConflictError, "capacity is exhausted"):
+            self.store.reserve_attempt(
+                claim.run_id, version, "supervisor", "package", "reviewer",
+                account_pool_id="shared-pool",
+            )
+        self.assertEqual(self.store.active_pool_counts(), {})
+
+    def test_ambiguous_attempt_keeps_pool_until_ownership_is_reconciled(self):
+        claim = self.store.claim_start(
+            self.repo, "ambiguous-capacity", {"task": {"budget": {"wall_seconds": 300}}},
+            "owner",
+        )
+        version = self.store.complete_preparation(
+            claim.run_id, claim.fencing_token, self.routed_snapshot(),
+        )
+        reservation = self.store.reserve_attempt(
+            claim.run_id, version, "supervisor", "package", "reviewer",
+            account_pool_id="shared-pool",
+        )
+        self.store.mark_attempt_running(reservation, 1001, 1001, "fixture-process")
+        self.store.block_recovery(
+            claim.run_id, reservation.attempt_token, "identity ambiguous",
+        )
+        self.assertEqual(self.store.active_pool_counts(), {"shared-pool": 1})
+        self.store.request_recovery_cancel(claim.run_id, reservation.attempt_token)
+        self.assertEqual(self.store.active_pool_counts(), {"shared-pool": 1})
+        self.store.finish_recovery_cancel(
+            claim.run_id, reservation.attempt_token, "absence confirmed",
+        )
+        self.assertEqual(self.store.active_pool_counts(), {})
 
     def test_unknown_pool_allows_only_one_transactional_trial(self):
         linked = self.root / "unknown-pool-linked"

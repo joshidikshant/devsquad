@@ -1,9 +1,12 @@
 import copy
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import math
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,7 +14,7 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.capacity import derive_pool_capacity, validate_observation
 from devsquad.contracts import ContractError
-from devsquad.store import Store
+from devsquad.store import ConflictError, Store
 
 
 NOW = datetime(2026, 9, 27, 15, 0, tzinfo=timezone.utc)
@@ -52,6 +55,21 @@ def observation(
 
 
 class CapacityContractTest(unittest.TestCase):
+    @staticmethod
+    def make_repository(path):
+        subprocess.run(["git", "init", "-q", str(path)], check=True)
+        subprocess.run(
+            ["git", "-C", str(path), "config", "user.email", "test@example.invalid"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(path), "config", "user.name", "Test"],
+            check=True,
+        )
+        (path / "README").write_text("fixture\n")
+        subprocess.run(["git", "-C", str(path), "add", "README"], check=True)
+        subprocess.run(["git", "-C", str(path), "commit", "-qm", "base"], check=True)
+
     def test_validation_is_strict_and_normalizes_scopes(self):
         value = observation(applies_to={
             "harnesses": ["grok", "codex"],
@@ -173,6 +191,140 @@ class CapacityContractTest(unittest.TestCase):
                 )
             }
             self.assertTrue({"pool_observations", "pool_reservations"} <= tables)
+
+    def test_store_observation_is_replay_safe_and_stale_evidence_stays_visible(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root)
+            store = Store(path / "state.sqlite3", path / "artifacts")
+            self.addCleanup(store.close)
+            stale = observation(
+                "persisted-stale",
+                expires_at=NOW - timedelta(seconds=1),
+                used=100,
+                limit=100,
+            )
+            first = store.record_pool_observation(stale, now=NOW)
+            replay = store.record_pool_observation(stale, now=NOW)
+            self.assertFalse(first["replayed"])
+            self.assertTrue(replay["replayed"])
+            snapshot = store.capacity_snapshot("shared-pool", now=NOW)
+            self.assertEqual(snapshot["status"], "unknown")
+            self.assertEqual(snapshot["windows"][0]["reason"], "stale_observation")
+
+            changed = copy.deepcopy(stale)
+            changed["used"] = 99
+            with self.assertRaisesRegex(ConflictError, "different evidence"):
+                store.record_pool_observation(changed, now=NOW)
+
+    def test_non_attempt_reservation_is_bounded_and_explicitly_reconciled(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root)
+            repository = path / "repo"
+            self.make_repository(repository)
+            store = Store(path / "state.sqlite3", path / "artifacts")
+            self.addCleanup(store.close)
+            claim = store.claim_start(repository, "classifier-capacity", {}, "owner")
+            reserved = store.reserve_pool_capacity(
+                claim.run_id, "shared-pool", "classifier", now=NOW,
+            )
+            self.assertEqual(store.active_pool_counts(), {"shared-pool": 1})
+            with self.assertRaisesRegex(ConflictError, "concurrency"):
+                store.reserve_pool_capacity(
+                    claim.run_id, "shared-pool", "classifier", now=NOW,
+                )
+            reconciled = store.reconcile_pool_reservation(
+                reserved["reservation_id"], "classifier_finished", now=NOW,
+            )
+            self.assertFalse(reconciled["replayed"])
+            self.assertEqual(store.active_pool_counts(), {})
+            replay = store.reconcile_pool_reservation(
+                reserved["reservation_id"], "classifier_finished", now=NOW,
+            )
+            self.assertTrue(replay["replayed"])
+
+    def test_two_projects_racing_for_unknown_pool_create_one_reservation(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root)
+            repositories = [path / "repo-a", path / "repo-b"]
+            for repository in repositories:
+                self.make_repository(repository)
+            database, artifacts = path / "state.sqlite3", path / "artifacts"
+            store = Store(database, artifacts)
+            run_ids = [
+                store.claim_start(repository, f"run-{index}", {}, "owner").run_id
+                for index, repository in enumerate(repositories)
+            ]
+            store.close()
+            barrier = threading.Barrier(2)
+
+            def reserve(run_id):
+                connection = Store(database, artifacts)
+                try:
+                    barrier.wait()
+                    return connection.reserve_pool_capacity(
+                        run_id, "shared-pool", "qualification", now=NOW,
+                    )["reservation_id"]
+                except ConflictError:
+                    return "conflict"
+                finally:
+                    connection.close()
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                results = list(executor.map(reserve, run_ids))
+            self.assertEqual(results.count("conflict"), 1)
+            winner = next(result for result in results if result != "conflict")
+            store = Store(database, artifacts)
+            self.addCleanup(store.close)
+            self.assertEqual(store.active_pool_counts(), {"shared-pool": 1})
+            store.reconcile_pool_reservation(winner, "qualification_finished", now=NOW)
+
+    def test_schema_eight_active_attempt_is_backfilled_and_reconciled(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root)
+            database = path / "state.sqlite3"
+            import sqlite3
+
+            connection = sqlite3.connect(database)
+            migrations = ROOT / "plugin/core/src/devsquad/migrations"
+            for version in range(1, 9):
+                name = next(migrations.glob(f"{version:03d}_*.sql"))
+                connection.executescript(name.read_text())
+                connection.execute(
+                    "INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",
+                    (version, NOW.isoformat()),
+                )
+            connection.execute(
+                "INSERT INTO projects(id,git_common_dir,created_at) VALUES('p','/tmp/p',?)",
+                (NOW.isoformat(),),
+            )
+            connection.execute(
+                "INSERT INTO runs(id,project_id,idempotency_key,request_hash,"
+                "submitted_request,state,version,created_at,updated_at,worktree_path) "
+                "VALUES('r','p','key','hash','{}','running',1,?,?, '/tmp/w')",
+                (NOW.isoformat(), NOW.isoformat()),
+            )
+            connection.execute(
+                "INSERT INTO attempts(id,run_id,project_id,worktree_path,attempt_token,"
+                "status,heartbeat_at,package_digest,created_at,role,account_pool_id,profile_id) "
+                "VALUES('a','r','p','/tmp/w','token','running',?,'package',?,"
+                "'reviewer','shared-pool','profile-a')",
+                (NOW.isoformat(), NOW.isoformat()),
+            )
+            connection.commit()
+            connection.close()
+
+            store = Store(database, path / "artifacts")
+            self.addCleanup(store.close)
+            self.assertEqual(store.active_pool_counts(), {"shared-pool": 1})
+            row = store.connection.execute(
+                "SELECT purpose,profile_id FROM pool_reservations WHERE attempt_id='a'",
+            ).fetchone()
+            self.assertEqual(tuple(row), ("attempt", "profile-a"))
+            store.connection.execute(
+                "UPDATE attempts SET status='finished',finished_at=? WHERE id='a'",
+                (NOW.isoformat(),),
+            )
+            self.assertEqual(store.active_pool_counts(), {})
 
 
 if __name__ == "__main__":
