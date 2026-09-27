@@ -14,6 +14,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
+from devsquad.capacity import derive_pool_capacity
 from devsquad.contracts import ContractError
 from devsquad.reports import TERMINAL_REPORT_NAMES, build_handoff_reports
 from devsquad.service import Service
@@ -842,10 +843,12 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertEqual(len(receipt["attempts"]), 1)
 
     def test_public_preflight_observes_live_shared_pool_reservations(self):
-        with patch.object(
-            Store, "active_pool_counts",
-            return_value={"fixture-subscription": 1},
-        ):
+        def full_unknown_pool(_store, pool_id, *, target=None, now=None):
+            return derive_pool_capacity(
+                pool_id, [], target=target, in_flight=1, now=now,
+            )
+
+        with patch.object(Store, "capacity_snapshot", full_unknown_pool):
             started = self.service.start(
                 self.task,
                 "pool-full-before-launch",

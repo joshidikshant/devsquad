@@ -28,7 +28,7 @@ from .reports import (
     project_branch_review_history,
     validate_saved_review_handoff,
 )
-from .router import capacity_with_live_reservations, load_routing
+from .router import capacity_with_saved_observations, load_routing
 from .store import (
     ConflictError,
     HandoffClaim,
@@ -424,7 +424,7 @@ class Service:
         internal_review_fixture: dict[str, Any] | None = None,
         internal_lead_fixture: dict[str, Any] | None = None,
         internal_implementation_fixture: dict[str, Any] | None = None,
-        capacity_in_flight: dict[str, int] | None = None,
+        capacity_store: Store | None = None,
     ) -> dict[str, Any]:
         repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
         base_oid = resolve_commit(repo, task["project"]["base_ref"])
@@ -460,12 +460,16 @@ class Service:
             if internal_delay < 0 or internal_delay > 60: raise ContractError("internal fake delay is invalid")
             snapshot["internal_fake_delay"] = internal_delay
         else:
+            if capacity_store is None:
+                raise ContractError("public preflight requires shared capacity state")
             snapshot["routing"] = load_routing(
                 task,
                 config_payloads["profiles_file"],
                 config_payloads["policy_file"],
-                availability=capacity_with_live_reservations(
-                    config_payloads["policy_file"], capacity_in_flight or {},
+                availability=capacity_with_saved_observations(
+                    config_payloads["profiles_file"],
+                    config_payloads["policy_file"],
+                    capacity_store.capacity_snapshot,
                 ),
             )
             if project_id is None or run_id is None:
@@ -618,7 +622,7 @@ class Service:
                 internal_review_fixture=internal_review_fixture,
                 internal_lead_fixture=internal_lead_fixture,
                 internal_implementation_fixture=internal_implementation_fixture,
-                capacity_in_flight=store.active_pool_counts(),
+                capacity_store=store,
             )
             if (task["workflow"] == "issue-delivery"
                     and internal_delay is None
@@ -774,6 +778,43 @@ class Service:
         ).start()
         return process.pid
 
+    def capacity_observe(self, observation: dict[str, Any]) -> dict[str, Any]:
+        """Record one capacity observation and return its current pool view."""
+        store = self._store()
+        try:
+            recorded = store.record_pool_observation(observation)
+            return {
+                "record": recorded,
+                "capacity": store.capacity_snapshot(observation.get("pool_id")),
+            }
+        finally:
+            store.close()
+
+    @staticmethod
+    def _status_capacity(store: Store, run: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            snapshot = json.loads(run["mutable_snapshot"])
+            routing = snapshot["routing"]
+            roles = routing["roles"]
+            frozen = routing["capacity"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            return None
+        current = {}
+        for role in roles.values():
+            for candidate in [role["selected"], *role.get("fallbacks", [])]:
+                profile = candidate["profile"]
+                profile_id = candidate["profile_id"]
+                if profile_id in current:
+                    continue
+                target = {
+                    field: profile[field]
+                    for field in ("harness", "model_family", "model_id")
+                }
+                current[profile_id] = store.capacity_snapshot(
+                    profile["account_pool_id"], target=target,
+                )
+        return {"frozen": frozen, "current": current}
+
     def status(self, run_id: str) -> dict[str, Any]:
         store = self._store()
         try:
@@ -814,6 +855,7 @@ class Service:
                 } if active else None,
                 "handoff": self._handoff_payload(handoff, include_packet=False) if handoff else None,
                 "next_action": next_action,
+                "capacity": self._status_capacity(store, run),
             }
         finally: store.close()
 

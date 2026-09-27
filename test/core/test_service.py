@@ -10,6 +10,7 @@ import tempfile
 import time
 import unittest
 from unittest import mock
+from datetime import datetime, timedelta, timezone
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
@@ -125,6 +126,44 @@ class ServiceTest(unittest.TestCase):
         page=self.service.events(first["run_id"],0,2)
         self.assertEqual(len(page["events"]),2); self.assertIsNotNone(page["next_cursor"])
         with self.assertRaises(ConflictError): self.service.resume(first["run_id"])
+
+    def test_capacity_observation_drives_preflight_and_status_evidence(self):
+        now = datetime.now(timezone.utc)
+        observed = self.service.capacity_observe({
+            "schema_version": 1,
+            "observation_id": "service-capacity-short",
+            "pool_id": "fixture-subscription",
+            "window_id": "short",
+            "applies_to": {
+                "harnesses": [], "model_families": [], "model_ids": [],
+            },
+            "observed_at": now.isoformat(),
+            "expires_at": (now + timedelta(minutes=10)).isoformat(),
+            "source": "manual_reported",
+            "used": 10,
+            "limit": 100,
+            "unit": "percent",
+            "resets_at": (now + timedelta(hours=1)).isoformat(),
+            "confidence": "reported",
+        })
+        self.assertFalse(observed["record"]["replayed"])
+        self.assertEqual(observed["capacity"]["status"], "available")
+        started = self.service.start(
+            self.task,
+            "capacity-status",
+            _internal_review_fixture={
+                "verdict": "clean", "summary": "capacity fixture", "findings": [],
+            },
+        )
+        self.assertEqual(started["state"], "queued", started)
+        status = self.wait_state(started["run_id"], {"awaiting_host"})
+        self.assertEqual(
+            status["capacity"]["frozen"]["fixture-subscription"]["status"],
+            "available",
+        )
+        current = status["capacity"]["current"]["fixture-reviewer"]
+        self.assertEqual(current["status"], "available")
+        self.assertEqual(current["windows"][0]["window_id"], "short")
 
     def test_abandoned_preparation_is_reclaimed_from_the_submitted_request(self):
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")

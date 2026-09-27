@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import hashlib
 import json
-from typing import Any
+from typing import Any, Callable
 
 from .contracts import (
     CapabilityUnavailable,
@@ -29,6 +29,10 @@ WORKFLOW_ROLES = {
     "issue-delivery": ("implementer", "reviewer"),
 }
 CAPACITY_STATES = {"available", "exhausted", "unknown"}
+CAPACITY_EVIDENCE_FIELDS = {
+    "schema_version", "pool_id", "status", "in_flight", "observed_at",
+    "evaluated_at", "target", "windows", "reasons",
+}
 
 
 def _strict_json(payload: bytes | str, label: str) -> tuple[dict[str, Any], str]:
@@ -63,8 +67,52 @@ def _strict_json(payload: bytes | str, label: str) -> tuple[dict[str, Any], str]
     return value, hashlib.sha256(encoded).hexdigest()
 
 
+def _capacity_timestamp(value: Any, field: str, *, nullable: bool = False) -> None:
+    if value is None and nullable:
+        return
+    if not isinstance(value, str) or not value:
+        raise ContractError(f"capacity {field} must be a timestamp")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ContractError(f"capacity {field} must be an ISO timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ContractError(f"capacity {field} must include a timezone")
+
+
+def _capacity_evidence(
+    value: Any,
+    *,
+    pool_id: str,
+    target: dict[str, str] | None,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != CAPACITY_EVIDENCE_FIELDS:
+        raise ContractError("capacity evidence fields are invalid")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        raise ContractError("capacity evidence schema_version is invalid")
+    if value["pool_id"] != pool_id or value["target"] != target:
+        raise ContractError("capacity evidence identity is invalid")
+    if not isinstance(value["status"], str) or value["status"] not in CAPACITY_STATES:
+        raise ContractError("capacity status is invalid")
+    if type(value["in_flight"]) is not int or value["in_flight"] < 0:
+        raise ContractError("capacity in_flight must be a non-negative integer")
+    _capacity_timestamp(value["observed_at"], "observed_at", nullable=True)
+    _capacity_timestamp(value["evaluated_at"], "evaluated_at")
+    if not isinstance(value["windows"], list) or not all(
+        isinstance(item, dict) for item in value["windows"]
+    ):
+        raise ContractError("capacity windows must be an object array")
+    if not isinstance(value["reasons"], list) or not all(
+        isinstance(item, str) and item for item in value["reasons"]
+    ):
+        raise ContractError("capacity reasons must be a string array")
+    return json.loads(canonical_json(value))
+
+
 def _availability_snapshot(
-    policy: dict[str, Any], availability: dict[str, Any] | None,
+    policy: dict[str, Any],
+    profiles: dict[str, dict[str, Any]],
+    availability: dict[str, Any] | None,
 ) -> dict[str, dict[str, Any]]:
     supplied = {} if availability is None else availability
     if not isinstance(supplied, dict):
@@ -77,6 +125,41 @@ def _availability_snapshot(
         observation = supplied.get(pool_id, {"status": "unknown", "in_flight": 0})
         if not isinstance(observation, dict):
             raise ContractError("capacity observation must be an object")
+        if "profiles" in observation:
+            expected_profiles = {
+                profile_id: profile
+                for profile_id, profile in profiles.items()
+                if profile["account_pool_id"] == pool_id
+            }
+            profile_values = observation["profiles"]
+            if not isinstance(profile_values, dict):
+                raise ContractError("capacity profile evidence must be an object")
+            unknown_profiles = set(profile_values) - set(expected_profiles)
+            if unknown_profiles:
+                raise ContractError(
+                    f"capacity references unknown pool profiles: {sorted(unknown_profiles)}",
+                )
+            root = _capacity_evidence(
+                {key: value for key, value in observation.items() if key != "profiles"},
+                pool_id=pool_id,
+                target=None,
+            )
+            root["profiles"] = {}
+            for profile_id, evidence in profile_values.items():
+                profile = expected_profiles[profile_id]
+                target = {
+                    field: profile[field]
+                    for field in ("harness", "model_family", "model_id")
+                }
+                root["profiles"][profile_id] = _capacity_evidence(
+                    evidence, pool_id=pool_id, target=target,
+                )
+            root["max_concurrency"] = pool_policy["max_concurrency"]
+            root["unknown_capacity_policy"] = pool_policy.get(
+                "unknown_capacity_policy", "allow_bounded",
+            )
+            result[pool_id] = root
+            continue
         unknown = set(observation) - {"status", "in_flight", "observed_at"}
         missing = {"status", "in_flight"} - set(observation)
         if unknown or missing:
@@ -163,14 +246,15 @@ def _capacity_reason(
     profile: dict[str, Any], capacity: dict[str, dict[str, Any]],
 ) -> str | None:
     pool = capacity[profile["account_pool_id"]]
-    if pool["status"] == "exhausted":
+    profile_capacity = pool.get("profiles", {}).get(profile["id"], pool)
+    if profile_capacity["status"] == "exhausted":
         return "account_pool_exhausted"
-    if pool["in_flight"] >= pool["max_concurrency"]:
+    if profile_capacity["in_flight"] >= pool["max_concurrency"]:
         return "account_pool_concurrency_full"
-    if pool["status"] == "unknown":
+    if profile_capacity["status"] == "unknown":
         if pool["unknown_capacity_policy"] == "block":
             return "unknown_capacity_blocked"
-        if pool["in_flight"] >= 1:
+        if profile_capacity["in_flight"] >= 1:
             return "unknown_capacity_trial_in_flight"
     return None
 
@@ -256,7 +340,7 @@ def resolve_routing(
     validate_policy(policy)
     profiles = {profile["id"]: profile for profile in profile_registry["profiles"]}
     bindings = profile_registry["bindings"]
-    capacity = _availability_snapshot(policy, availability)
+    capacity = _availability_snapshot(policy, profiles, availability)
     minimum_quality = policy["task_classes"].get(task["task_class"])
     if minimum_quality is None:
         raise PolicyDenied(f"policy does not authorize task class: {task['task_class']}")
@@ -411,3 +495,31 @@ def capacity_with_live_reservations(
         }
         for pool_id in policy["account_pools"]
     }
+
+
+def capacity_with_saved_observations(
+    profiles_payload: bytes | str,
+    policy_payload: bytes | str,
+    snapshot: Callable[..., dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Build per-profile capacity evidence from the shared persisted ledger."""
+    registry, _ = _strict_json(profiles_payload, "profiles file")
+    policy, _ = _strict_json(policy_payload, "policy file")
+    validate_profile_registry(registry)
+    validate_policy(policy)
+    if not callable(snapshot):
+        raise ContractError("capacity snapshot provider is invalid")
+    result: dict[str, dict[str, Any]] = {}
+    for pool_id in policy["account_pools"]:
+        root = snapshot(pool_id, target=None)
+        profile_evidence = {}
+        for profile in registry["profiles"]:
+            if profile["account_pool_id"] != pool_id:
+                continue
+            target = {
+                field: profile[field]
+                for field in ("harness", "model_family", "model_id")
+            }
+            profile_evidence[profile["id"]] = snapshot(pool_id, target=target)
+        result[pool_id] = {**root, "profiles": profile_evidence}
+    return result

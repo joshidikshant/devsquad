@@ -103,6 +103,28 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, response)
         service.resume.assert_called_once_with("run-1", {"attempt_id": "a-1", "disposition": "confirm_dead"})
 
+    def test_capacity_observe_dispatches_file(self):
+        observation = {
+            "schema_version": 1,
+            "observation_id": "obs-1",
+            "pool_id": "pool-a",
+        }
+        observation_file = self.root / "capacity.json"
+        observation_file.write_text(json.dumps(observation))
+        service = mock.Mock()
+        response = {
+            "record": {"replayed": False},
+            "capacity": {"status": "unknown"},
+        }
+        service.capacity_observe.return_value = response
+        code, payload, stderr = self.invoke([
+            "capacity", "observe", "--file", str(observation_file),
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.capacity_observe.assert_called_once_with(observation)
+
     def test_handoff_claim_renew_and_complete_dispatch_parsed_objects(self):
         claim_payload = {
             "schema_version": 1,
@@ -178,6 +200,15 @@ class CliTest(unittest.TestCase):
         self.assertEqual(code, 64)
         self.assertEqual(payload["error"]["code"], "INPUT_INVALID")
         self.assertIn("cannot read task file", payload["error"]["message"])
+
+        malformed.write_text('{"schema_version":1,"schema_version":1}')
+        code, payload, _ = self.invoke([
+            "start", "--task-file", str(malformed),
+            "--idempotency-key", "duplicate-json",
+            "--runtime-dir", str(self.runtime), "--json",
+        ])
+        self.assertEqual(code, 64)
+        self.assertIn("duplicate key", payload["error"]["message"])
 
     def test_setup_filters_hosts_and_treats_a_valid_dry_run_as_completed(self):
         codex = mock.Mock(id="codex")

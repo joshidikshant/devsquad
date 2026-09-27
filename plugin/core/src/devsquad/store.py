@@ -1039,9 +1039,12 @@ class Store:
                             "attempt profile does not match frozen routing order"
                         )
                     capacity = snapshot["routing"]["capacity"][account_pool_id]
+                    profile_capacity = capacity.get("profiles", {}).get(
+                        selected.get("profile_id"), capacity,
+                    )
                     expected_pool = selected["profile"]["account_pool_id"]
                     max_concurrency = capacity["max_concurrency"]
-                    capacity_status = capacity.get("status", "available")
+                    capacity_status = profile_capacity.get("status", "available")
                     unknown_policy = capacity.get(
                         "unknown_capacity_policy", "allow_bounded",
                     )

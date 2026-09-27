@@ -73,9 +73,24 @@ def command_setup(args: argparse.Namespace) -> tuple[dict, int]:
 
 
 def _read_json(path: str, label: str) -> Any:
+    def object_pairs(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError(f"duplicate key: {key}")
+            value[key] = item
+        return value
+
+    def reject_constant(value):
+        raise ValueError(f"non-finite number: {value}")
+
     try:
-        return json.loads(Path(path).read_text())
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return json.loads(
+            Path(path).read_text(),
+            object_pairs_hook=object_pairs,
+            parse_constant=reject_constant,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise ContractError(f"cannot read {label}: {exc}") from exc
 
 
@@ -142,6 +157,11 @@ def command_start(args: argparse.Namespace) -> tuple[dict, int]:
             "cancelled": False,
             "next_action": cancel_command,
         }), 130
+
+
+def command_capacity_observe(args: argparse.Namespace) -> tuple[dict, int]:
+    observation = _read_json(args.file, "capacity observation file")
+    return envelope(data=_service(args).capacity_observe(observation)), 0
 
 
 def command_status(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).status(args.run)), 0
@@ -233,6 +253,13 @@ def parser() -> argparse.ArgumentParser:
         if name == "resume": cmd.add_argument("--recovery-file")
         cmd.set_defaults(func=fn)
     events=sub.add_parser("events"); events.add_argument("run"); events.add_argument("--after",type=int,default=0); events.add_argument("--limit",type=int,default=100); events.add_argument("--json",action="store_true"); events.add_argument("--runtime-dir",default=runtime_default); events.set_defaults(func=command_events)
+    capacity = sub.add_parser("capacity")
+    capacity_sub = capacity.add_subparsers(dest="capacity_command", required=True)
+    observe = capacity_sub.add_parser("observe")
+    observe.add_argument("--file", required=True)
+    observe.add_argument("--json", action="store_true")
+    observe.add_argument("--runtime-dir", default=runtime_default)
+    observe.set_defaults(func=command_capacity_observe)
     handoff = sub.add_parser("handoff")
     handoff_sub = handoff.add_subparsers(dest="handoff_command", required=True)
     claim = handoff_sub.add_parser("claim")

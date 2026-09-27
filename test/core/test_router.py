@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -301,6 +302,52 @@ class RouterTest(unittest.TestCase):
                 self.policy,
                 availability={"pool-a": {"status": "available", "in_flight": 3}},
             )
+
+    def test_profile_scoped_windows_exclude_only_applicable_candidate(self):
+        now = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc).isoformat()
+
+        def evidence(profile, status, reason):
+            target = None if profile is None else {
+                "harness": profile["harness"],
+                "model_family": profile["model_family"],
+                "model_id": profile["model_id"],
+            }
+            return {
+                "schema_version": 1,
+                "pool_id": "pool-a",
+                "status": status,
+                "in_flight": 0,
+                "observed_at": now,
+                "evaluated_at": now,
+                "target": target,
+                "windows": [{"reason": reason}],
+                "reasons": [] if status == "available" else [f"{reason}:weekly"],
+            }
+
+        review_a, review_b = self.registry["profiles"]
+        availability = {
+            "pool-a": {
+                **evidence(None, "unknown", "no_applicable_observations"),
+                "profiles": {
+                    "review-a": evidence(review_a, "available", "window_available"),
+                    "review-b": evidence(review_b, "exhausted", "window_exhausted"),
+                },
+            },
+        }
+        routed = resolve_routing(
+            self.task, self.registry, self.policy, availability=availability,
+        )
+        reviewer = routed["roles"]["reviewer"]
+        self.assertEqual(reviewer["selected"]["profile_id"], "review-a")
+        self.assertEqual(reviewer["excluded"][0], {
+            "reference": {"kind": "alias", "id": "review.deep"},
+            "profile_id": "review-b",
+            "reason": "account_pool_exhausted",
+        })
+        self.assertEqual(
+            routed["capacity"]["pool-a"]["profiles"]["review-b"]["reasons"],
+            ["window_exhausted:weekly"],
+        )
 
     def test_policy_missing_task_class_or_required_role_is_denied(self):
         del self.policy["task_classes"]["fixture-review"]
