@@ -412,8 +412,8 @@ class StoreTest(unittest.TestCase):
             )
 
     def test_migration_records_version_and_refuses_newer_database(self):
-        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 8)
-        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(9,'future')")
+        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 9)
+        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(10,'future')")
         self.store.close()
         with self.assertRaises(SchemaVersionError):
             Store(self.database, self.artifacts)
@@ -428,7 +428,7 @@ class StoreTest(unittest.TestCase):
         connection.commit(); connection.close()
         upgraded = Store(old_db, self.root / "old-artifacts")
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 8)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 9)
         self.assertTrue(upgraded.connection.execute("SELECT 1 FROM sqlite_master WHERE name='attempts'").fetchone())
         attempt_columns = {
             row[1] for row in upgraded.connection.execute("PRAGMA table_info(attempts)")
@@ -445,7 +445,7 @@ class StoreTest(unittest.TestCase):
             connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",(version,"fixture"))
         connection.commit(); connection.close()
         upgraded=Store(old_db,self.root/"v3-artifacts"); self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],8)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],9)
         columns={row[1] for row in upgraded.connection.execute("PRAGMA table_info(runs)")}
         self.assertTrue({"package_path","package_digest","supersedes_run_id"} <= columns)
 

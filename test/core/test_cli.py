@@ -356,7 +356,7 @@ class InstalledWheelMigrationTest(unittest.TestCase):
                 return candidate
         return None
 
-    def test_installed_wheel_contains_and_applies_migrations_through_eight(self):
+    def test_installed_wheel_contains_and_applies_migrations_through_nine(self):
         build_python = self.build_python()
         if build_python is None:
             self.skipTest("offline wheel gate requires setuptools>=68 and wheel; set DEVSQUAD_BUILD_PYTHON")
@@ -398,7 +398,7 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 8
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 9
     attempt_columns = {row[1] for row in store.connection.execute("PRAGMA table_info(attempts)")}
     assert {"role", "account_pool_id", "profile_id", "profile_index"} <= attempt_columns
     columns = {row[1] for row in store.connection.execute("PRAGMA table_info(runs)")}
