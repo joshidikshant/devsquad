@@ -14,7 +14,8 @@ default-off decision helper remain open.
 | Final and late outcomes | Preserve attempt contribution, lead repair, final success and escaped-defect corrections without crediting failed attempts | verified at `d621df2` |
 | Comparison reports | Sample sizes, missingness and separated automatic/pinned/experimental evidence | verified at `45ebc9e` |
 | Frozen experiment evaluation | One-variable paired evaluation/held-out cases, failure evidence, no-change or promotion-proposal verdict and rollback target; evaluation never changes active policy | verified at `edfb3f3` |
-| Draft proposals and held-out rerun | `learn propose`, review packet and post-change held-out/rollback evidence | pending |
+| Draft proposals | `learn propose` emits content-addressed JSON/Markdown with hashes, sample sizes, missingness, failures and rollback; no evidence yields no-change | verified at `98c6685` |
+| Held-out rerun and rollback | Post-change held-out evidence and exercised rollback through lifecycle bindings | pending |
 | Model lifecycle | Templates, qualification budgets, reviewed/guarded-auto promotion, compare-and-swap bindings, new-run-only effects and rollback receipts | pending |
 | Decision helper M6-D1 | Default-off typed contract, fake adapter, cache/accounting and authority/integrity tests | in progress; synthetic Jev probe mechanics only |
 | Jev M6-D2 | One capped synthetic request with exact model/usage/latency/cost receipt | blocked on `TYPESAFE_API_KEY` |
@@ -64,11 +65,19 @@ different specification conflicts.
 The combined checkpoint gate is **263 core tests with 2 optional-SDK skips**
 and ResourceWarning promoted to error, plus **220/220 Bash assertions**.
 
+`98c6685` adds `squad learn propose --project PATH`. It reads one consistent
+ledger snapshot, verifies the latest experiment and evaluation hashes, and
+writes local content-addressed JSON and Markdown drafts under the runtime
+directory. The draft includes selection-mode sample sizes, missingness, all
+recorded evaluation failures and the rollback version. Absent experiment
+evidence produces an explicit `no_change`; even qualifying evidence produces
+only `promotion_proposal`, with `active_policy_changed: false`. The gate is
+**265 core tests with 2 optional-SDK skips** plus **220/220 Bash assertions**.
+
 ## Exact next slice
 
-Add `squad learn propose --project PATH`: derive a local, reviewable proposal
-packet from the comparison report and latest frozen experiment. It must retain
-sample sizes, missingness, every evaluation failure, evidence hashes and the
-rollback target; insufficient or absent evidence must produce `no_change` and
-must not mutate routing. Then implement versioned profile lifecycle bindings,
-qualification and guarded promotion/rollback.
+Implement versioned profile lifecycle bindings, qualification and guarded
+promotion/rollback: allowed templates, bounded trials, compare-and-swap
+binding versions, new-run-only effects, qualified fallback and immutable
+decision receipts. Then exercise a held-out rerun and rollback before wiring
+the default-off decision helper.

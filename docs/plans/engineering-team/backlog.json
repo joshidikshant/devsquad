@@ -335,6 +335,15 @@
           "availability": "tracked_tests"
         },
         {
+          "kind": "learning_proposal_checkpoint",
+          "revision": "98c6685",
+          "command_or_action": "265 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions and focused pure/store/service/filesystem/CLI proposal tests",
+          "outcome": "squad learn propose writes content-addressed local JSON and Markdown from a consistent ledger snapshot, verifies report/experiment/evaluation evidence, preserves sample size, missingness, failures and rollback, returns explicit no-change without evidence and never changes active policy.",
+          "artifact": "M6-STATUS.md",
+          "recorded_at": "2026-09-29T08:50:09Z",
+          "availability": "tracked_tests"
+        },
+        {
           "kind": "early_experiment_checkpoint",
           "revision": "70e59cb",
           "command_or_action": "Prepared and offline-validated the explicitly authorized capped Jev pilot before M6 runtime integration",
