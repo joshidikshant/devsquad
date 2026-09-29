@@ -29,6 +29,15 @@ EXPERIMENT_FIELDS = {
     "evidence_availability", "variable", "cases", "gate", "budget",
     "rollback_target",
 }
+EXPERIMENT_EVALUATION_FIELDS = {
+    "schema_version", "experiment_id", "spec_sha256", "evaluated_at",
+    "verdict", "active_policy_changed", "reasons", "metrics", "cases",
+    "failures", "variable", "rollback_target", "evidence_availability",
+}
+EXPERIMENT_RECORD_FIELDS = {
+    "experiment", "spec_sha256", "evaluation", "evaluation_sha256",
+    "recorded_at",
+}
 
 
 def _now(value: datetime | None) -> datetime:
@@ -563,3 +572,194 @@ def evaluate_experiment(
         "rollback_target": spec["rollback_target"],
         "evidence_availability": spec["evidence_availability"],
     }
+
+
+def build_learning_proposal(
+    report: dict[str, Any],
+    experiment_record: dict[str, Any] | None,
+    *,
+    generated_at: str,
+) -> dict[str, Any]:
+    """Distill saved evidence into a reviewable draft without changing policy."""
+    _timestamp(generated_at, "generated_at")
+    required_report_fields = {
+        "schema_version", "project_id", "project_path", "generated_at",
+        "sample_size", "terminal_run_count", "final_successes",
+        "escaped_defects", "lead_repairs", "selection_modes", "profiles",
+        "missingness", "interpretation",
+    }
+    if not isinstance(report, dict) or set(report) != required_report_fields:
+        raise ContractError("learning proposal report is invalid")
+    if (report["schema_version"] != 1
+            or not isinstance(report["project_path"], str)
+            or not isinstance(report["selection_modes"], dict)
+            or not isinstance(report["missingness"], dict)):
+        raise ContractError("learning proposal report values are invalid")
+    for field in ("sample_size", "terminal_run_count"):
+        if type(report[field]) is not int or report[field] < 0:
+            raise ContractError("learning proposal report counts are invalid")
+    mode_samples = {}
+    for mode in sorted(SELECTION_MODES):
+        row = report["selection_modes"].get(mode)
+        if (not isinstance(row, dict) or type(row.get("sample_size")) is not int
+                or row["sample_size"] < 0):
+            raise ContractError("learning proposal selection samples are invalid")
+        mode_samples[mode] = row["sample_size"]
+
+    report_sha256 = hashlib.sha256(canonical_json(report).encode()).hexdigest()
+    experiment_id = None
+    question = None
+    hypothesis = None
+    variable = None
+    rollback_target = None
+    failures = []
+    reasons = ["no_evaluated_experiment"]
+    verdict = "no_change"
+    evidence_availability = "unavailable"
+    experiment_samples = None
+    experiment_evidence = None
+    if experiment_record is not None:
+        if (not isinstance(experiment_record, dict)
+                or set(experiment_record) != EXPERIMENT_RECORD_FIELDS):
+            raise ContractError("learning proposal experiment record is invalid")
+        spec = validate_experiment(experiment_record["experiment"])
+        evaluation = experiment_record["evaluation"]
+        if (not isinstance(evaluation, dict)
+                or set(evaluation) != EXPERIMENT_EVALUATION_FIELDS):
+            raise ContractError("learning proposal evaluation is invalid")
+        spec_sha256 = hashlib.sha256(canonical_json(spec).encode()).hexdigest()
+        evaluation_sha256 = hashlib.sha256(
+            canonical_json(evaluation).encode(),
+        ).hexdigest()
+        if (experiment_record["spec_sha256"] != spec_sha256
+                or evaluation.get("spec_sha256") != spec_sha256
+                or experiment_record["evaluation_sha256"] != evaluation_sha256):
+            raise ContractError("learning proposal evidence hash is invalid")
+        if (evaluation.get("experiment_id") != spec["experiment_id"]
+                or evaluation.get("verdict") not in {
+                    "no_change", "promotion_proposal",
+                }
+                or evaluation.get("active_policy_changed") is not False
+                or evaluation.get("variable") != spec["variable"]
+                or evaluation.get("rollback_target") != spec["rollback_target"]
+                or not isinstance(evaluation.get("reasons"), list)
+                or not isinstance(evaluation.get("failures"), list)
+                or not isinstance(evaluation.get("metrics"), dict)):
+            raise ContractError("learning proposal evaluation values are invalid")
+        _timestamp(experiment_record["recorded_at"], "recorded_at")
+        metrics = evaluation["metrics"]
+        if set(metrics) != {"evaluation", "held_out"} or any(
+                not isinstance(metrics.get(split), dict)
+                or type(metrics[split].get("declared_pairs")) is not int
+                or type(metrics[split].get("available_pairs")) is not int
+                for split in ("evaluation", "held_out")):
+            raise ContractError("learning proposal experiment samples are invalid")
+        experiment_id = spec["experiment_id"]
+        question = spec["question"]
+        hypothesis = spec["hypothesis"]
+        variable = spec["variable"]
+        rollback_target = spec["rollback_target"]
+        failures = list(evaluation["failures"])
+        reasons = list(evaluation["reasons"])
+        verdict = evaluation["verdict"]
+        evidence_availability = spec["evidence_availability"]
+        experiment_samples = {
+            split: {
+                "declared_pairs": metrics[split]["declared_pairs"],
+                "available_pairs": metrics[split]["available_pairs"],
+            }
+            for split in ("evaluation", "held_out")
+        }
+        experiment_evidence = {
+            "experiment_id": experiment_id,
+            "spec_sha256": spec_sha256,
+            "evaluation_sha256": evaluation_sha256,
+            "recorded_at": experiment_record["recorded_at"],
+        }
+
+    identity = {
+        "project_path": report["project_path"],
+        "report_sha256": report_sha256,
+        "experiment": experiment_evidence,
+        "verdict": verdict,
+    }
+    proposal_id = "proposal-" + hashlib.sha256(
+        canonical_json(identity).encode(),
+    ).hexdigest()[:24]
+    return {
+        "schema_version": 1,
+        "proposal_id": proposal_id,
+        "project_id": report["project_id"],
+        "project_path": report["project_path"],
+        "generated_at": generated_at,
+        "verdict": verdict,
+        "active_policy_changed": False,
+        "question": question,
+        "hypothesis": hypothesis,
+        "variable": variable,
+        "rollback_target": rollback_target,
+        "sample_sizes": {
+            "terminal_runs": report["terminal_run_count"],
+            "final_outcomes": report["sample_size"],
+            "selection_modes": mode_samples,
+            "experiment": experiment_samples,
+        },
+        "missingness": json.loads(canonical_json(report["missingness"])),
+        "reasons": reasons,
+        "failures": failures,
+        "evidence": {
+            "availability": evidence_availability,
+            "report_sha256": report_sha256,
+            "experiment": experiment_evidence,
+        },
+        "decision": {
+            "action": (
+                "review_policy_change"
+                if verdict == "promotion_proposal"
+                else "retain_current_policy"
+            ),
+            "review_required": verdict == "promotion_proposal",
+        },
+    }
+
+
+def render_learning_proposal_markdown(proposal: dict[str, Any]) -> str:
+    """Render a compact local review record for a validated proposal."""
+    if not isinstance(proposal, dict) or proposal.get("schema_version") != 1:
+        raise ContractError("learning proposal is invalid")
+    lines = [
+        f"# Learning proposal {proposal['proposal_id']}",
+        "",
+        f"- Verdict: `{proposal['verdict']}`",
+        f"- Project: `{proposal['project_path']}`",
+        f"- Generated: `{proposal['generated_at']}`",
+        "- Active policy changed: `false`",
+        f"- Next action: `{proposal['decision']['action']}`",
+        "",
+        "## Evidence",
+        "",
+        f"- Report SHA256: `{proposal['evidence']['report_sha256']}`",
+        f"- Final outcomes: {proposal['sample_sizes']['final_outcomes']}",
+        f"- Terminal runs: {proposal['sample_sizes']['terminal_runs']}",
+    ]
+    experiment = proposal["evidence"]["experiment"]
+    if experiment is None:
+        lines.append("- Experiment: none")
+    else:
+        lines.extend([
+            f"- Experiment: `{experiment['experiment_id']}`",
+            f"- Evaluation SHA256: `{experiment['evaluation_sha256']}`",
+            f"- Rollback target: `{proposal['rollback_target']['profile_id']}` "
+            f"binding version {proposal['rollback_target']['binding_version']}",
+        ])
+    lines.extend(["", "## Reasons", ""])
+    lines.extend(
+        [f"- `{reason}`" for reason in proposal["reasons"]]
+        or ["- No gate failures were recorded."]
+    )
+    lines.extend(["", "## Recorded failures", ""])
+    lines.extend(
+        [f"- `{canonical_json(failure)}`" for failure in proposal["failures"]]
+        or ["- None."]
+    )
+    return "\n".join(lines) + "\n"

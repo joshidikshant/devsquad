@@ -815,6 +815,74 @@ class Service:
             store.close()
 
     @staticmethod
+    def _finalize_learning_file(
+        directory: Path, name: str, content: bytes,
+    ) -> dict[str, Any]:
+        digest = hashlib.sha256(content).hexdigest()
+        component = Path(name)
+        if component.name != name or not component.stem or not component.suffix:
+            raise ContractError("learning file name is invalid")
+        destination = directory / f"{component.stem}.{digest}{component.suffix}"
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", dir=directory)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temporary, destination)
+            except FileExistsError:
+                if destination.read_bytes() != content:
+                    raise ConflictError("content-addressed learning file is corrupt")
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        return {
+            "path": str(destination),
+            "sha256": digest,
+            "byte_size": len(content),
+        }
+
+    def learning_propose(self, project: str | Path) -> dict[str, Any]:
+        """Write a local review draft from saved evidence without policy mutation."""
+        from .learning import (
+            build_learning_proposal,
+            render_learning_proposal_markdown,
+        )
+
+        if not isinstance(project, (str, Path)):
+            raise ContractError("proposal project path is invalid")
+        store = self._store()
+        try:
+            inputs = store.learning_proposal_inputs(Path(project))
+        finally:
+            store.close()
+        generated_at = inputs["report"]["generated_at"]
+        proposal = build_learning_proposal(
+            inputs["report"], inputs["experiment"], generated_at=generated_at,
+        )
+        json_content = (canonical_json(proposal) + "\n").encode()
+        markdown_content = render_learning_proposal_markdown(proposal).encode()
+        directory = self.runtime / "learning" / "proposals"
+        directory.mkdir(parents=True, exist_ok=True)
+        return {
+            "proposal": proposal,
+            "artifacts": {
+                "json": self._finalize_learning_file(
+                    directory, f"{proposal['proposal_id']}.json", json_content,
+                ),
+                "markdown": self._finalize_learning_file(
+                    directory, f"{proposal['proposal_id']}.md", markdown_content,
+                ),
+            },
+        }
+
+    @staticmethod
     def _status_capacity(store: Store, run: dict[str, Any]) -> dict[str, Any] | None:
         try:
             snapshot = json.loads(run["mutable_snapshot"])

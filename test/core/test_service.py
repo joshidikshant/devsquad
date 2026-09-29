@@ -191,6 +191,16 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(report["terminal_run_count"], 1)
         self.assertEqual(report["final_successes"], 1)
         self.assertEqual(report["missingness"]["finals_without_contributions"], 1)
+        proposed = self.service.learning_propose(self.repo)
+        self.assertEqual(proposed["proposal"]["verdict"], "no_change")
+        self.assertFalse(proposed["proposal"]["active_policy_changed"])
+        self.assertEqual(
+            proposed["proposal"]["reasons"], ["no_evaluated_experiment"],
+        )
+        for artifact in proposed["artifacts"].values():
+            content = Path(artifact["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(content).hexdigest(), artifact["sha256"])
+            self.assertEqual(len(content), artifact["byte_size"])
 
     def test_abandoned_preparation_is_reclaimed_from_the_submitted_request(self):
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")

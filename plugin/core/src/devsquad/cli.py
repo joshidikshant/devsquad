@@ -178,6 +178,10 @@ def command_policy_evaluate(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).policy_evaluate(experiment)), 0
 
 
+def command_learn_propose(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).learning_propose(args.project)), 0
+
+
 def command_status(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).status(args.run)), 0
 def command_events(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).events(args.run, args.after, args.limit)), 0
 def command_result(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).result(args.run)), 0
@@ -294,6 +298,13 @@ def parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--json", action="store_true")
     evaluate.add_argument("--runtime-dir", default=runtime_default)
     evaluate.set_defaults(func=command_policy_evaluate)
+    learn = sub.add_parser("learn")
+    learn_sub = learn.add_subparsers(dest="learn_command", required=True)
+    propose = learn_sub.add_parser("propose")
+    propose.add_argument("--project", required=True)
+    propose.add_argument("--json", action="store_true")
+    propose.add_argument("--runtime-dir", default=runtime_default)
+    propose.set_defaults(func=command_learn_propose)
     handoff = sub.add_parser("handoff")
     handoff_sub = handoff.add_subparsers(dest="handoff_command", required=True)
     claim = handoff_sub.add_parser("claim")

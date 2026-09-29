@@ -176,6 +176,24 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, response)
         service.policy_evaluate.assert_called_once_with(experiment)
 
+    def test_learn_propose_dispatches_project(self):
+        service = mock.Mock()
+        response = {
+            "proposal": {
+                "verdict": "no_change",
+                "active_policy_changed": False,
+            },
+            "artifacts": {},
+        }
+        service.learning_propose.return_value = response
+        code, payload, stderr = self.invoke([
+            "learn", "propose", "--project", str(self.root),
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.learning_propose.assert_called_once_with(str(self.root))
+
     def test_handoff_claim_renew_and_complete_dispatch_parsed_objects(self):
         claim_payload = {
             "schema_version": 1,

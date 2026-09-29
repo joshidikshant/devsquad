@@ -1,5 +1,6 @@
 import copy
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -12,11 +13,14 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ContractError
 from devsquad.learning import (
+    build_comparison_report,
+    build_learning_proposal,
     evaluate_experiment,
+    render_learning_proposal_markdown,
     validate_experiment,
     validate_outcome,
 )
-from devsquad.store import ConflictError, Store
+from devsquad.store import ConflictError, Store, canonical_json
 
 
 NOW = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc)
@@ -236,6 +240,75 @@ class LearningContractTest(unittest.TestCase):
             changed["hypothesis"] = "Mutated after evaluation."
             with self.assertRaisesRegex(ConflictError, "different specification"):
                 store.evaluate_learning_experiment(changed, now=NOW)
+            inputs = store.learning_proposal_inputs(repository, now=NOW)
+            self.assertEqual(
+                inputs["experiment"]["experiment"]["experiment_id"],
+                spec["experiment_id"],
+            )
+
+    def test_learning_proposal_is_traceable_and_never_changes_policy(self):
+        project_path = "/tmp/experiment-project"
+        report = build_comparison_report(
+            project_id=None,
+            project_path=project_path,
+            terminal_runs=[],
+            outcome_records=[],
+            attempt_profiles={},
+            generated_at=NOW.isoformat(),
+        )
+        no_evidence = build_learning_proposal(
+            report, None, generated_at=NOW.isoformat(),
+        )
+        self.assertEqual(no_evidence["verdict"], "no_change")
+        self.assertFalse(no_evidence["active_policy_changed"])
+        self.assertEqual(no_evidence["reasons"], ["no_evaluated_experiment"])
+        self.assertEqual(
+            no_evidence["decision"],
+            {"action": "retain_current_policy", "review_required": False},
+        )
+
+        spec = experiment(Path(project_path))
+        chains = {}
+        for case in spec["cases"]:
+            chains[case["control_outcome_id"]] = {
+                "final": experimental_final(case["control_outcome_id"], "failed"),
+                "late_corrections": [],
+            }
+            chains[case["candidate_outcome_id"]] = {
+                "final": experimental_final(case["candidate_outcome_id"], "succeeded"),
+                "late_corrections": [],
+            }
+        evaluation = evaluate_experiment(
+            spec, chains, evaluated_at=NOW.isoformat(),
+        )
+        spec_sha256 = hashlib.sha256(
+            canonical_json(validate_experiment(spec)).encode(),
+        ).hexdigest()
+        evaluation_sha256 = hashlib.sha256(
+            canonical_json(evaluation).encode(),
+        ).hexdigest()
+        record = {
+            "experiment": spec,
+            "spec_sha256": spec_sha256,
+            "evaluation": evaluation,
+            "evaluation_sha256": evaluation_sha256,
+            "recorded_at": NOW.isoformat(),
+        }
+        proposal = build_learning_proposal(
+            report, record, generated_at=NOW.isoformat(),
+        )
+        self.assertEqual(proposal["verdict"], "promotion_proposal")
+        self.assertFalse(proposal["active_policy_changed"])
+        self.assertEqual(proposal["rollback_target"]["profile_id"], "profile-a")
+        self.assertEqual(
+            proposal["evidence"]["experiment"]["evaluation_sha256"],
+            evaluation_sha256,
+        )
+        self.assertIn(proposal["proposal_id"], render_learning_proposal_markdown(proposal))
+        tampered = copy.deepcopy(record)
+        tampered["evaluation_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ContractError, "evidence hash"):
+            build_learning_proposal(report, tampered, generated_at=NOW.isoformat())
 
     def test_final_and_late_outcomes_are_append_only_and_attempt_bound(self):
         with tempfile.TemporaryDirectory() as root:

@@ -1189,10 +1189,12 @@ class Store:
         from .learning import evaluate_experiment, validate_experiment
 
         spec = validate_experiment(experiment)
+        project_path = Path(spec["project_path"]).resolve(strict=True)
+        spec = {**spec, "project_path": str(project_path)}
         spec_json = canonical_json(spec)
         spec_sha256 = hashlib.sha256(spec_json.encode()).hexdigest()
         current = _authoritative_now(now)
-        common_dir = git_common_dir(Path(spec["project_path"]))
+        common_dir = git_common_dir(project_path)
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             existing = self.connection.execute(
@@ -1265,6 +1267,43 @@ class Store:
                 "recorded_at": recorded_at,
                 "replayed": False,
             }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def learning_proposal_inputs(
+        self, project: Path, *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Read a consistent report and the latest frozen project experiment."""
+        project_path = project.resolve(strict=True)
+        current = _authoritative_now(now)
+        self.connection.execute("BEGIN")
+        try:
+            report = self.learning_report(project_path, now=current)
+            if report["project_id"] is None:
+                row = self.connection.execute(
+                    "SELECT spec_json,spec_sha256,evaluation_json,evaluation_sha256,"
+                    "recorded_at FROM experiments WHERE project_path=? "
+                    "ORDER BY recorded_at DESC,id DESC LIMIT 1",
+                    (str(project_path),),
+                ).fetchone()
+            else:
+                row = self.connection.execute(
+                    "SELECT spec_json,spec_sha256,evaluation_json,evaluation_sha256,"
+                    "recorded_at FROM experiments WHERE project_id=? OR "
+                    "(project_id IS NULL AND project_path=?) "
+                    "ORDER BY recorded_at DESC,id DESC LIMIT 1",
+                    (report["project_id"], str(project_path)),
+                ).fetchone()
+            experiment = None if row is None else {
+                "experiment": json.loads(row["spec_json"]),
+                "spec_sha256": row["spec_sha256"],
+                "evaluation": json.loads(row["evaluation_json"]),
+                "evaluation_sha256": row["evaluation_sha256"],
+                "recorded_at": row["recorded_at"],
+            }
+            self.connection.execute("COMMIT")
+            return {"report": report, "experiment": experiment}
         except Exception:
             self.connection.execute("ROLLBACK")
             raise
