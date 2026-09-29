@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 12
+SUPPORTED_SCHEMA_VERSION = 13
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -980,6 +980,433 @@ class Store:
                 "WHERE reconciled_at IS NULL GROUP BY pool_id"
             )
         }
+
+    @staticmethod
+    def _decision_observation_payload(
+        row: sqlite3.Row, *, action: str, replayed: bool,
+    ) -> dict[str, Any]:
+        return {
+            "run_id": row["run_id"],
+            "purpose_id": row["purpose_id"],
+            "mode": row["mode"],
+            "cache_key": row["cache_key"],
+            "status": row["status"],
+            "billable_calls": row["billable_calls"],
+            "request": json.loads(row["request_json"]),
+            "response": (
+                json.loads(row["response_json"])
+                if row["response_json"] is not None else None
+            ),
+            "response_sha256": row["response_sha256"],
+            "usage": (
+                json.loads(row["usage_json"])
+                if row["usage_json"] is not None else None
+            ),
+            "error": row["error"],
+            "applied": bool(row["applied"]),
+            "effect": (
+                json.loads(row["effect_json"])
+                if row["effect_json"] is not None else None
+            ),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "recorded_at": row["recorded_at"],
+            "action": action,
+            "replayed": replayed,
+        }
+
+    def _decision_observation_row(
+        self, run_id: str, purpose_id: str,
+    ) -> sqlite3.Row | None:
+        return self.connection.execute(
+            "SELECT o.run_id,o.purpose_id,o.mode,o.applied,o.effect_json,"
+            "o.recorded_at,c.cache_key,c.request_json,c.status,c.response_json,"
+            "c.response_sha256,c.billable_calls,c.usage_json,c.owner_id,c.error,"
+            "c.created_at,c.updated_at FROM run_decision_observations o "
+            "JOIN decision_cache c ON c.cache_key=o.cache_key "
+            "WHERE o.run_id=? AND o.purpose_id=?",
+            (run_id, purpose_id),
+        ).fetchone()
+
+    def claim_decision_observation(
+        self,
+        run_id: str,
+        mode: str,
+        request: dict[str, Any],
+        owner_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Claim at most one decision call or reuse its content-addressed result."""
+        from .decision import decision_cache_key, validate_decision_request
+
+        normalized = validate_decision_request(request)
+        if mode not in {"shadow", "advisory"}:
+            raise ContractError("decision observation mode is invalid")
+        if not isinstance(owner_id, str) or not owner_id:
+            raise ContractError("decision observation owner is invalid")
+        purpose_id = normalized["purpose"]["id"]
+        cache_key = decision_cache_key(normalized)
+        request_json = canonical_json(normalized)
+        recorded_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.connection.execute(
+                "SELECT state FROM runs WHERE id=?", (run_id,),
+            ).fetchone()
+            if run is None:
+                raise ContractError("decision observation run does not exist")
+            if run["state"] in TERMINAL_STATES:
+                raise ConflictError(
+                    "terminal run cannot claim a decision observation",
+                )
+            existing_link = self._decision_observation_row(run_id, purpose_id)
+            if existing_link is not None:
+                if (existing_link["cache_key"] != cache_key
+                        or existing_link["mode"] != mode
+                        or existing_link["request_json"] != request_json):
+                    raise ConflictError(
+                        "run decision purpose was already bound differently",
+                    )
+                status = existing_link["status"]
+                action = "cached"
+                if status == "reserved":
+                    self.connection.execute(
+                        "UPDATE decision_cache SET owner_id=?,updated_at=? "
+                        "WHERE cache_key=? AND status='reserved' AND billable_calls=0",
+                        (owner_id, recorded_at, cache_key),
+                    )
+                    action = "claimed"
+                elif status == "running":
+                    if existing_link["owner_id"] == owner_id:
+                        action = "in_flight"
+                    else:
+                        self.connection.execute(
+                            "UPDATE decision_cache SET status='indeterminate',"
+                            "error=?,updated_at=? WHERE cache_key=? AND status='running'",
+                            (
+                                "prior launched decision call outcome is unknown",
+                                recorded_at, cache_key,
+                            ),
+                        )
+                        action = "abstain"
+                elif status not in {"succeeded", "abstained"}:
+                    action = "abstain"
+                row = self._decision_observation_row(run_id, purpose_id)
+                self.connection.execute("COMMIT")
+                return self._decision_observation_payload(
+                    row, action=action, replayed=True,
+                )
+
+            cached = self.connection.execute(
+                "SELECT * FROM decision_cache WHERE cache_key=?", (cache_key,),
+            ).fetchone()
+            if cached is None:
+                self.connection.execute(
+                    "INSERT INTO decision_cache(cache_key,request_json,status,"
+                    "billable_calls,owner_id,created_at,updated_at) "
+                    "VALUES(?,?,'reserved',0,?,?,?)",
+                    (
+                        cache_key, request_json, owner_id, recorded_at,
+                        recorded_at,
+                    ),
+                )
+                action = "claimed"
+                replayed = False
+            else:
+                if cached["request_json"] != request_json:
+                    raise ConflictError(
+                        "decision cache key has conflicting request evidence",
+                    )
+                action = (
+                    "cached" if cached["status"] in {"succeeded", "abstained"}
+                    else "in_flight" if cached["status"] in {"reserved", "running"}
+                    else "abstain"
+                )
+                replayed = True
+            self.connection.execute(
+                "INSERT INTO run_decision_observations(run_id,purpose_id,cache_key,"
+                "mode,applied,effect_json,recorded_at) VALUES(?,?,?,?,0,NULL,?)",
+                (run_id, purpose_id, cache_key, mode, recorded_at),
+            )
+            row = self._decision_observation_row(run_id, purpose_id)
+            self.connection.execute("COMMIT")
+            return self._decision_observation_payload(
+                row, action=action, replayed=replayed,
+            )
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def launch_decision_call(
+        self, cache_key: str, owner_id: str, *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Fence a possibly billable call before crossing the adapter boundary."""
+        if not isinstance(cache_key, str) or len(cache_key) != 64:
+            raise ContractError("decision cache key is invalid")
+        if not isinstance(owner_id, str) or not owner_id:
+            raise ContractError("decision observation owner is invalid")
+        launched_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT status,billable_calls,owner_id FROM decision_cache "
+                "WHERE cache_key=?", (cache_key,),
+            ).fetchone()
+            if row is None:
+                raise ContractError("decision cache entry does not exist")
+            if (row["status"] != "reserved" or row["billable_calls"] != 0
+                    or row["owner_id"] != owner_id):
+                raise ConflictError("decision call is not launchable")
+            self.connection.execute(
+                "UPDATE decision_cache SET status='running',billable_calls=1,"
+                "updated_at=? WHERE cache_key=? AND status='reserved' "
+                "AND billable_calls=0 AND owner_id=?",
+                (launched_at, cache_key, owner_id),
+            )
+            if self.connection.execute("SELECT changes()").fetchone()[0] != 1:
+                raise ConflictError("decision call launch fence changed")
+            self.connection.execute("COMMIT")
+            return {
+                "cache_key": cache_key, "status": "running",
+                "billable_calls": 1, "launched_at": launched_at,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def complete_decision_call(
+        self,
+        cache_key: str,
+        owner_id: str,
+        response: dict[str, Any],
+        config: dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Persist a valid typed response, or a redacted invalid verdict."""
+        from .decision import validate_decision_response
+
+        row = self.connection.execute(
+            "SELECT request_json FROM decision_cache WHERE cache_key=?",
+            (cache_key,),
+        ).fetchone()
+        if row is None:
+            raise ContractError("decision cache entry does not exist")
+        request = json.loads(row["request_json"])
+        error = None
+        try:
+            normalized = validate_decision_response(request, response, config)
+        except ContractError as exc:
+            normalized = None
+            error = str(exc)
+        completed_at = _authoritative_now(now).isoformat()
+        if normalized is None:
+            status = "invalid"
+            response_json = None
+            response_sha256 = None
+            usage = {
+                "source": "unavailable", "billable_requests": 1,
+                "input_tokens": None, "output_tokens": None, "cost_usd": None,
+            }
+        else:
+            response_json = canonical_json(normalized)
+            response_sha256 = hashlib.sha256(response_json.encode()).hexdigest()
+            usage = normalized["usage"]
+            abstained = (
+                normalized["truncation"]["occurred"]
+                or all(
+                    recommendation["abstain_reason"] is not None
+                    for recommendation in normalized["recommendations"].values()
+                )
+            )
+            status = "abstained" if abstained else "succeeded"
+        usage_json = canonical_json(usage)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            current = self.connection.execute(
+                "SELECT status,owner_id,billable_calls FROM decision_cache "
+                "WHERE cache_key=?", (cache_key,),
+            ).fetchone()
+            if (current is None or current["status"] != "running"
+                    or current["owner_id"] != owner_id
+                    or current["billable_calls"] != 1):
+                raise ConflictError("decision call completion is fenced")
+            self.connection.execute(
+                "UPDATE decision_cache SET status=?,response_json=?,"
+                "response_sha256=?,usage_json=?,error=?,updated_at=? "
+                "WHERE cache_key=? AND status='running' AND owner_id=?",
+                (
+                    status, response_json, response_sha256, usage_json, error,
+                    completed_at, cache_key, owner_id,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "cache_key": cache_key,
+                "status": status,
+                "response": normalized,
+                "response_sha256": response_sha256,
+                "usage": usage,
+                "error": error,
+                "billable_calls": 1,
+                "completed_at": completed_at,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def finish_decision_without_call(
+        self,
+        cache_key: str,
+        owner_id: str,
+        status: str,
+        reason: str,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Record unavailable/cancelled preprocessing without inventing usage."""
+        if status not in {"unavailable", "cancelled"}:
+            raise ContractError("decision no-call status is invalid")
+        if not isinstance(reason, str) or not reason:
+            raise ContractError("decision no-call reason is invalid")
+        recorded_at = _authoritative_now(now).isoformat()
+        usage = {
+            "source": "unavailable", "billable_requests": 0,
+            "input_tokens": None, "output_tokens": None, "cost_usd": None,
+        }
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT status,owner_id,billable_calls FROM decision_cache "
+                "WHERE cache_key=?", (cache_key,),
+            ).fetchone()
+            if (row is None or row["status"] != "reserved"
+                    or row["owner_id"] != owner_id or row["billable_calls"] != 0):
+                raise ConflictError("decision no-call completion is fenced")
+            self.connection.execute(
+                "UPDATE decision_cache SET status=?,usage_json=?,error=?,updated_at=? "
+                "WHERE cache_key=? AND status='reserved' AND owner_id=?",
+                (
+                    status, canonical_json(usage), reason, recorded_at,
+                    cache_key, owner_id,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "cache_key": cache_key, "status": status,
+                "billable_calls": 0, "usage": usage, "error": reason,
+                "recorded_at": recorded_at,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def cancel_decision_observation(
+        self, cache_key: str, owner_id: str, *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Cancel before launch, or preserve uncertainty after a launched call."""
+        cancelled_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT status,billable_calls,owner_id FROM decision_cache "
+                "WHERE cache_key=?", (cache_key,),
+            ).fetchone()
+            if row is None:
+                raise ContractError("decision cache entry does not exist")
+            if row["owner_id"] != owner_id:
+                raise ConflictError("decision cancellation owner changed")
+            if row["status"] not in {"reserved", "running"}:
+                self.connection.execute("COMMIT")
+                return {
+                    "cache_key": cache_key, "status": row["status"],
+                    "billable_calls": row["billable_calls"], "replayed": True,
+                }
+            status = "cancelled" if row["status"] == "reserved" else "indeterminate"
+            reason = (
+                "decision call cancelled before launch"
+                if status == "cancelled"
+                else "decision call cancelled after launch; outcome is unknown"
+            )
+            usage = {
+                "source": "unavailable",
+                "billable_requests": row["billable_calls"],
+                "input_tokens": None, "output_tokens": None, "cost_usd": None,
+            }
+            self.connection.execute(
+                "UPDATE decision_cache SET status=?,usage_json=?,error=?,updated_at=? "
+                "WHERE cache_key=? AND status IN ('reserved','running')",
+                (
+                    status, canonical_json(usage), reason, cancelled_at,
+                    cache_key,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "cache_key": cache_key, "status": status,
+                "billable_calls": row["billable_calls"], "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def record_decision_effect(
+        self,
+        run_id: str,
+        purpose_id: str,
+        cache_key: str,
+        effect: dict[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Bind the frozen routing effect to this run without changing cache data."""
+        effect_json = canonical_json(effect)
+        applied = bool(effect.get("applied_roles"))
+        recorded_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                "SELECT cache_key,applied,effect_json FROM run_decision_observations "
+                "WHERE run_id=? AND purpose_id=?",
+                (run_id, purpose_id),
+            ).fetchone()
+            if row is None or row["cache_key"] != cache_key:
+                raise ConflictError("run decision observation binding changed")
+            if row["effect_json"] is not None:
+                if (row["effect_json"] != effect_json
+                        or bool(row["applied"]) != applied):
+                    raise ConflictError("run decision effect was recorded differently")
+                observation = self._decision_observation_row(run_id, purpose_id)
+                self.connection.execute("COMMIT")
+                return self._decision_observation_payload(
+                    observation, action="cached", replayed=True,
+                )
+            self.connection.execute(
+                "UPDATE run_decision_observations SET applied=?,effect_json=?,"
+                "recorded_at=? WHERE run_id=? AND purpose_id=?",
+                (
+                    int(applied), effect_json, recorded_at, run_id, purpose_id,
+                ),
+            )
+            observation = self._decision_observation_row(run_id, purpose_id)
+            self.connection.execute("COMMIT")
+            return self._decision_observation_payload(
+                observation, action="recorded", replayed=False,
+            )
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def decision_observation(
+        self, run_id: str, purpose_id: str,
+    ) -> dict[str, Any] | None:
+        row = self._decision_observation_row(run_id, purpose_id)
+        if row is None:
+            return None
+        return self._decision_observation_payload(
+            row, action="read", replayed=True,
+        )
 
     def record_outcome(
         self,

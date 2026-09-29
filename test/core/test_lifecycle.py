@@ -598,7 +598,7 @@ class ProfileLifecycleTest(unittest.TestCase):
         version = self.store.connection.execute(
             "SELECT MAX(version) FROM schema_migrations",
         ).fetchone()[0]
-        self.assertEqual(version, 12)
+        self.assertEqual(version, 13)
         tables = {
             row[0] for row in self.store.connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'",
