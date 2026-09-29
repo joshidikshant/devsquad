@@ -135,6 +135,45 @@ class StandaloneInstallerTest(unittest.TestCase):
             "squad 0.1.0",
         )
 
+    def test_known_legacy_release_symlink_is_migrated_but_arbitrary_launcher_is_not(self):
+        legacy = self.install_root / "releases/0.1.0+legacy/venv/bin"
+        legacy.mkdir(parents=True)
+        legacy_squad = legacy / "squad"
+        legacy_squad.write_text("#!/bin/sh\nexit 0\n")
+        legacy_squad.chmod(0o755)
+        self.bin_dir.mkdir()
+        launcher = self.bin_dir / "squad"
+        launcher.symlink_to(legacy_squad)
+
+        migrated = self.install()
+        self.assertTrue(migrated["changed"])
+        self.assertFalse(launcher.is_symlink())
+        self.assertIn("managed-by: devsquad-install-core-v1", launcher.read_text())
+        self.assertTrue(legacy_squad.is_file())
+
+        other_root = self.root / "other-install"
+        other_bin = self.root / "other-bin"
+        other_bin.mkdir()
+        arbitrary = self.root / "arbitrary-squad"
+        arbitrary.write_text("#!/bin/sh\nexit 0\n")
+        arbitrary.chmod(0o755)
+        (other_bin / "squad").symlink_to(arbitrary)
+        environment = {
+            **self.environment,
+            "DEVSQUAD_INSTALL_ROOT": str(other_root),
+            "DEVSQUAD_BIN_DIR": str(other_bin),
+        }
+        refused = subprocess.run(
+            ["/bin/bash", str(INSTALLER), "--json"],
+            text=True,
+            capture_output=True,
+            env=environment,
+            cwd=ROOT,
+        )
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("refusing to replace unmanaged launcher", refused.stderr)
+        self.assertTrue((other_bin / "squad").is_symlink())
+
     def test_composite_claude_reinstall_uses_plugin_hooks_once(self):
         fake_bin = self.root / "fake-bin"
         fake_bin.mkdir()

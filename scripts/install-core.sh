@@ -412,8 +412,26 @@ PY
 fi
 
 LAUNCHER="$BIN_DIR/squad"
-if [ -e "$LAUNCHER" ] && ! grep -q '^# managed-by: devsquad-install-core-v1$' "$LAUNCHER" 2>/dev/null; then
-  fail "refusing to replace unmanaged launcher: $LAUNCHER"
+if { [ -e "$LAUNCHER" ] || [ -L "$LAUNCHER" ]; } \
+    && ! grep -q '^# managed-by: devsquad-install-core-v1$' "$LAUNCHER" 2>/dev/null; then
+  if [ -L "$LAUNCHER" ]; then
+    "$PYTHON" - "$LAUNCHER" "$INSTALL_ROOT/releases" <<'PY' || fail "refusing to replace unmanaged launcher: $LAUNCHER"
+from pathlib import Path
+import sys
+
+launcher = Path(sys.argv[1])
+releases = Path(sys.argv[2]).resolve(strict=True)
+target = launcher.resolve(strict=True)
+try:
+    relative = target.relative_to(releases)
+except ValueError as exc:
+    raise SystemExit("legacy launcher target is outside the release root") from exc
+if len(relative.parts) != 4 or relative.parts[-2:] != ("bin", "squad") or relative.parts[-3] != "venv":
+    raise SystemExit("legacy launcher target is not a DevSquad release command")
+PY
+  else
+    fail "refusing to replace unmanaged launcher: $LAUNCHER"
+  fi
 fi
 LAUNCHER_TEMP="$BIN_DIR/.squad.$$"
 "$PYTHON" - "$LAUNCHER_TEMP" "$INSTALL_ROOT" <<'PY'
