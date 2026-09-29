@@ -256,6 +256,22 @@ class NativeProtocolTest(unittest.TestCase):
 
 
 class CatalogTest(unittest.TestCase):
+    @staticmethod
+    def profile(profile_id, model_id, *, harness="codex"):
+        return {
+            "id": profile_id,
+            "harness": harness,
+            "model_family": "gpt",
+            "model_id": model_id,
+            "effort": {"value": "low", "transport": "native"},
+            "required_tools": ["read"],
+            "permission_policy": "read_only",
+            "account_pool_id": f"{harness}-subscription",
+            "billing_mode": "subscription",
+            "quality_status": "proven",
+            "evidence_refs": ["catalog-fixture"],
+        }
+
     def test_incomplete_refresh_retains_last_good(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "catalog.json"
@@ -269,6 +285,84 @@ class CatalogTest(unittest.TestCase):
             value = update_last_good(Path(tmp) / "catalog.json", harness="codex", version="1", models=[{"id": "surprise-9"}], complete=True)
             self.assertEqual(value["models"][0]["qualification"], "unqualified")
             self.assertIsNone(value["models"][0]["family"])
+
+    def test_changed_effort_revalidates_only_affected_profiles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "catalog.json"
+            profiles = [
+                self.profile("profile-a", "gpt-a"),
+                self.profile("profile-b", "gpt-b"),
+                self.profile("profile-other", "gpt-a", harness="other"),
+            ]
+            update_last_good(
+                path, harness="codex", version="1", complete=True,
+                models=[
+                    {"id": "gpt-a", "modelRevision": "a1", "supportedReasoningEfforts": ["low"]},
+                    {"id": "gpt-b", "modelRevision": "b1", "supportedReasoningEfforts": ["low"]},
+                ],
+                profiles=profiles,
+            )
+            changed = update_last_good(
+                path, harness="codex", version="1", complete=True,
+                models=[
+                    {"id": "gpt-a", "modelRevision": "a2", "supportedReasoningEfforts": ["low", "high"]},
+                    {"id": "gpt-b", "modelRevision": "b1", "supportedReasoningEfforts": ["low"]},
+                ],
+                profiles=profiles,
+            )["catalog_change"]
+            self.assertEqual(changed["changed_model_ids"], ["gpt-a"])
+            self.assertEqual(changed["affected_profile_ids"], ["profile-a"])
+            self.assertEqual(changed["same_id_revision_unknown"], [])
+            self.assertEqual(changed["unavailable_profile_ids"], [])
+            self.assertFalse(changed["binding_changes_applied"])
+
+    def test_same_id_unknown_revision_added_and_removed_models_stay_safe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "catalog.json"
+            profiles = [
+                self.profile("profile-a", "gpt-a"),
+                self.profile("profile-b", "gpt-b"),
+            ]
+            update_last_good(
+                path, harness="codex", version="1", complete=True,
+                models=[
+                    {"id": "gpt-a", "supportedReasoningEfforts": ["low"]},
+                    {"id": "gpt-b", "supportedReasoningEfforts": ["low"]},
+                ],
+                profiles=profiles,
+            )
+            changed = update_last_good(
+                path, harness="codex", version="1", complete=True,
+                models=[
+                    {"id": "gpt-a", "supportedReasoningEfforts": ["low", "high"]},
+                    {"id": "gpt-new", "supportedReasoningEfforts": ["low"]},
+                ],
+                profiles=profiles,
+            )
+            drift = changed["catalog_change"]
+            self.assertEqual(drift["changed_model_ids"], ["gpt-a"])
+            self.assertEqual(drift["same_id_revision_unknown"], ["gpt-a"])
+            self.assertEqual(drift["added_model_ids"], ["gpt-new"])
+            self.assertEqual(drift["unqualified_candidate_ids"], ["gpt-new"])
+            self.assertEqual(drift["removed_model_ids"], ["gpt-b"])
+            self.assertEqual(drift["affected_profile_ids"], ["profile-a", "profile-b"])
+            self.assertEqual(drift["unavailable_profile_ids"], ["profile-b"])
+            self.assertEqual(
+                next(model for model in changed["models"] if model["id"] == "gpt-new")["qualification"],
+                "unqualified",
+            )
+            self.assertFalse(drift["binding_changes_applied"])
+
+    def test_duplicate_catalog_model_ids_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ContractError, "unique"):
+                update_last_good(
+                    Path(tmp) / "catalog.json",
+                    harness="codex",
+                    version="1",
+                    complete=True,
+                    models=[{"id": "gpt-a"}, {"model": "gpt-a"}],
+                )
 
 
 if __name__ == "__main__":
