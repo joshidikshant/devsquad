@@ -47,6 +47,19 @@ inherited, malformed or ambiguous MCP registrations instead of guessing which
 one to replace. An upgrade retains every previous release, so a process that
 started before the selector changed can finish against its frozen package.
 
+Antigravity's non-interactive print mode also enforces project permissions.
+For unattended read-only status checks, add this exact grant to the DevSquad
+project's Permissions list in Antigravity:
+
+```text
+mcp(devsquad/squad_status)
+```
+
+This is narrower than a server wildcard and does not authorize terminal or
+file access. Interactive use may instead approve the requested MCP operation
+when prompted. Do not use the blanket permission-bypass option for setup or a
+smoke test.
+
 ## Operate a run
 
 The generated [command and schema reference](generated/core-reference.md)
@@ -119,27 +132,29 @@ install a new source digest and retain the old directory for run evidence.
 
 The current packaged contract is Python 3.11+, public JSON contract version 1,
 SQLite schema 13 and optional MCP SDK 2.2.0 exactly. Native Codex fixtures and
-the recorded live proof cover bundled `codex-cli 0.153.4`. The Claude worker
-adapter is version-scoped to CLI 2.1.220. Antigravity 1.2.3 and Grok 0.2.111
-have registration evidence but their live worker paths remain blocked by
-trust/permission and expired authentication respectively. Version changes are
-capability drift and require a fresh conformance probe; brand names are not a
-compatibility promise.
+recorded live proofs cover bundled `codex-cli 0.153.4` and
+`codex-cli 0.155.0-alpha.9.2`; the latter passed a fresh native initialize and
+complete model-catalog probe. The resolver prefers that verified bundled
+binary over an older unverified PATH binary. The Claude worker adapter is
+version-scoped to CLI 2.1.220. Antigravity 1.2.13 has a live read-only MCP
+receipt; Grok 0.2.111 has matching registration but expired authentication.
+Version changes are capability drift and require a fresh conformance probe;
+brand names are not a compatibility promise.
 
 Implemented surfaces and evidence:
 
 | Surface | Current evidence |
 |---|---|
-| Terminal | Standalone install, start/status/result/cancel/recovery and update-survival tests |
-| Codex App/CLI | Matching MCP registration and a real saved-run `squad_status` receipt |
+| Terminal | Standalone install plus a real saved-run start and terminal cancellation |
+| Codex App/CLI | Matching MCP registration and a fresh installed-runtime `squad_status` receipt on 0.155.0-alpha.9.2 |
 | Claude Code local Code tab | Matching registration; live operation blocked on normal provider login |
-| Antigravity local IDE/CLI | Matching registration; live scoped operation blocked on trust/permission |
+| Antigravity local IDE/CLI | Matching registration and a live Gemini `squad_status` receipt with one project-scoped grant |
 | Grok Build | Matching registration; live operation blocked on expired authentication |
 
-The evidence source is
-[`M4-local-mcp-2026-09-23.json`](plans/engineering-team/evidence/M4-local-mcp-2026-09-23.json).
-M7 requires new installed-runtime receipts before claiming universal surface
-support.
+The current evidence source is
+[`M7-installed-runtime-2026-09-29.json`](plans/engineering-team/evidence/M7-installed-runtime-2026-09-29.json).
+Claude, Grok and the installed two-model delivery remain open, so universal
+surface support is not yet claimed.
 
 Portable task files, handoff packets, event ledgers and hashed artifacts are
 the cross-host interface. A reviewed upstream Codex integration demonstrates

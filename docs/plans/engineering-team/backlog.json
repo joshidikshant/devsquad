@@ -275,7 +275,7 @@
       "id": "M6",
       "title": "Shared capacity and evidence-based improvement",
       "depends_on": ["M4", "M5"],
-      "status": "in_progress",
+      "status": "blocked",
       "acceptance_section": "M6 — Make capacity and improvement evidence useful",
       "decision_helper_work_packages": [
         {
@@ -387,10 +387,29 @@
       "id": "M7",
       "title": "Installation, migration and all-surface proof",
       "depends_on": ["M6"],
-      "status": "pending",
+      "status": "in_progress",
       "acceptance_section": "M7 — Package, migrate and prove every requested surface",
-      "evidence": [],
-      "blocker": null
+      "evidence": [
+        {
+          "kind": "packaging_checkpoint",
+          "revision": "2275b49",
+          "command_or_action": "299 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 227 Bash assertions, 8 focused installer tests and a fresh offline MCP install",
+          "outcome": "The Claude-independent immutable installer, stable launcher, idempotent update, payload drift checks, legacy-launcher migration, active-run release retention, one-line JSON and pip dependency validation are verified.",
+          "artifact": "M7-STATUS.md",
+          "recorded_at": "2026-09-29T10:34:00Z",
+          "availability": "tracked_tests"
+        },
+        {
+          "kind": "installed_runtime_checkpoint",
+          "revision": "ccba125",
+          "command_or_action": "300 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 227 Bash assertions, exact Codex 0.155 native handshake/model catalog, four-host unchanged setup and live Terminal/Antigravity/Codex saved-run operations",
+          "outcome": "The current immutable MCP release is installed with no drift and all four registrations matching. Terminal started and cancelled one saved run; scoped Gemini and ephemeral Codex observed the identical run/version through the installed MCP server. Claude login, Grok authentication and the installed two-model delivery remain open.",
+          "artifact": "evidence/M7-installed-runtime-2026-09-29.json",
+          "recorded_at": "2026-09-29T10:52:08Z",
+          "availability": "portable_redacted"
+        }
+      ],
+      "blocker": "The clean-home install/setup/doctor walkthrough passed, but the required normal squad review/fix entry layer is still independent implementation work. Universal surface completion then requires normal Claude login for the M4/M5 handoff and delivery receipts plus renewed Grok authentication for its live smoke."
     }
   ],
   "extensions": [

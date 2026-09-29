@@ -63,21 +63,20 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   a normally authenticated Claude Code host to perform the real handoff; the
   labeled SDK client is deliberately not presented as that proof. See the
   [portable redacted evidence](evidence/M4-local-mcp-2026-09-23.json).
-- Last-observed provider readiness outside accepted M3: Claude CLI is not logged in;
-  Grok CLI authentication expired; Gemini CLI's individual-account path is
-  unsupported and its supported successor is Antigravity; Antigravity is
-  authenticated but headless execution still lacks scoped permission/trust.
-  Do not retry these blocked paths, buy credits, use paid API fallback or
-  change global provider settings. Resume a provider gate only after the user
-  completes the corresponding normal login/permission action.
+- Last-observed provider readiness outside accepted M3: Claude CLI is not
+  logged in and Grok CLI authentication is expired. Antigravity 1.2.13 is
+  authenticated and its project-scoped `mcp(devsquad/squad_status)` grant has
+  now produced a live Gemini receipt. Do not retry the blocked Claude/Grok
+  paths, buy credits, use paid API fallback or change global provider settings.
+  Resume those gates only after the user completes the corresponding login.
 - User wants the implementation orchestrated efficiently and preserved across
   Plus-plan interruptions. Avoid recursive subagent fan-out: it consumed the
   shared window rapidly without advancing M3. The recursively created M3
   planning agents all hit the same Plus limit; continue locally until shared
   agent capacity is restored, then use only bounded leaf reviews.
 - Full assignment remains **M1–M7 plus C1**, as specified in
-  [SOL-HANDOFF.md](SOL-HANDOFF.md). M5 is next because it depends on accepted
-  M3, while the external M4 Claude live gate remains recorded and paused.
+  [SOL-HANDOFF.md](SOL-HANDOFF.md). M5 and M6 have no remaining independent
+  work; their external Claude and Jev gates remain recorded while M7 proceeds.
 - M5 Plan 07-01 has started at `d96e9e4`. The core and Bash compatibility
   boundaries now include a Claude 2.1.220 headless adapter with structured
   output, version-scoped model/effort preparation, explicit Read/Glob/Grep or
@@ -174,6 +173,24 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   keeps runtime adoption off. The gate is 291 core tests with 2 optional-SDK
   skips and 220 Bash assertions. M6-D2 remains blocked only on
   `TYPESAFE_API_KEY`; Laya remains conditional on its declared trigger.
+- M7 packaging and the currently available live surfaces are verified through
+  `ccba125`. The immutable standalone installer works without Claude, performs
+  offline exact-lock MCP installation with `pip check`, emits clean JSON,
+  migrates only a recognized legacy launcher, retains old releases and is
+  idempotent. The active installed release is
+  `0.1.0-py31214-4c5f034c67bf-mcp-a26bc88afbef`; setup reports all four host
+  registrations unchanged and doctor is ready. Bundled Codex
+  0.155.0-alpha.9.2 passed native initialize plus a complete seven-model
+  catalog and is preferred over PATH Codex 0.135.0. A terminal-created run was
+  observed through real Gemini/Antigravity and Codex MCP calls, then cancelled
+  from terminal. The gate is 300 core tests with 2 optional-SDK skips, 227 Bash
+  assertions, 8 focused installer tests and 22 installed-SDK tests. See
+  [M7-STATUS.md](M7-STATUS.md) and the
+  [portable redacted evidence](evidence/M7-installed-runtime-2026-09-29.json).
+  The clean-home install/setup/doctor walkthrough passed and exposed the
+  remaining independent M7 defect: normal `squad review` and `squad fix`
+  commands are absent. Claude, Grok and the installed two-model delivery remain
+  external blockers after that task-entry layer is complete.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -200,9 +217,11 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 291 discovered through M6-D1 decision-helper integration; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
-| Bash 3.2 regression suite | 10 test files, 220 assertions passed |
+| Python core discovery | 300 tests passed through M7 Codex binary resolution, with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Bash 3.2 regression suite | 11 test files, 227 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
+| M7 installed runtime | Current immutable release has no source/plugin/installed drift; `pip check`, idempotent reinstall, four-host unchanged setup and doctor passed |
+| M7 live surface proof | Terminal start/cancel plus real Gemini/Antigravity and ephemeral Codex `squad_status` calls observed the same run/version |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
 | M4 cross-surface proof | Real Codex read the terminal-started run through MCP; official SDK clients proved identical ledger, fenced claims, completion and disconnect survival; actual Claude handoff remains blocked on login |
 | Wheel installation | Fresh external venv resolves packaged assets and applies migrations through schema 8 |
@@ -227,29 +246,28 @@ The successful run retained separate stderr files of 138,030 and
 the earlier apparent nonresponses.
 
 The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md),
-[M2-STATUS.md](M2-STATUS.md) and [M3-STATUS.md](M3-STATUS.md).
-[backlog.json](backlog.json) marks M1–M3 complete and M4/M5 blocked only on
-their external Claude live gates. M6 implementation work remains pending.
-Unauthenticated, unsupported or permission-blocked provider paths are not
-advertised as verified.
+[M2-STATUS.md](M2-STATUS.md), [M3-STATUS.md](M3-STATUS.md),
+[M5-STATUS.md](M5-STATUS.md), [M6-STATUS.md](M6-STATUS.md) and
+[M7-STATUS.md](M7-STATUS.md). [backlog.json](backlog.json) marks M1–M3
+complete, M4/M5 blocked on Claude, M6 blocked on the missing Jev key, and M7
+in progress. Unauthenticated or unsupported provider paths are not advertised
+as verified.
 
 ## Exact next work
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M7 with packaging/install/update migration, fresh standalone use,
-   update idempotency and active-run survival, compatibility fixtures,
-   quickstart/troubleshooting and supported local-surface receipts. Do not
-   rebuild the completed M5 offline path or M6 offline implementation.
-3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
-   or trust blockers are resolved. Their live gates remain open, but M5 may
-   proceed independently from accepted M3.
-4. Execute the small M6 decision-helper work packages alongside other
-   independently ready M6 work. Keep experiments off by default and preserve
-   all existing M4/M5/live acceptance gates.
-   Exception already authorized: once TypeSafe login/API-key setup is complete,
-   run the prepared one-request synthetic Jev pilot immediately, save the
-   private receipt outside Git, and update only redacted aggregate evidence.
+2. Implement the missing M7 `squad review` and `squad fix` normal entry layer
+   over the strict saved-run contracts, using bounded preparation and no hand-
+   written task JSON. Keep `squad council` scoped to the separate C1 extension.
+   Do not rebuild the completed M5/M6 offline implementations.
+3. Keep Claude and Grok live probes paused until normal login is restored.
+   Afterward, run the M4 Claude handoff, the M5 installed Claude-to-Codex
+   delivery and one bounded Grok operation, retaining only redacted evidence.
+4. Keep M6 decision guidance off by default. Once `TYPESAFE_API_KEY` is
+   supplied, run the prepared one-request synthetic Jev pilot immediately with
+   no retry and the $0.01 ceiling. Install/run Laya only if the predeclared Jev
+   cost/access/quality trigger fires.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 
