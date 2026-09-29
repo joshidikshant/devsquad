@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -8,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 
 from devsquad_test_fixtures import branch_review_routing_documents
 
@@ -72,6 +74,37 @@ class StandaloneInstallerTest(unittest.TestCase):
         )
         return destination
 
+    def mcp_wheelhouse(self):
+        wheelhouse = self.root / "mcp-wheelhouse"
+        wheelhouse.mkdir()
+        lock = CORE / "requirements-mcp.lock"
+        for raw_line in lock.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            name, version = line.split("==", 1)
+            normalized = re.sub(r"[-_.]+", "_", name)
+            dist_info = f"{normalized}-{version}.dist-info"
+            wheel = wheelhouse / f"{normalized}-{version}-py3-none-any.whl"
+            with zipfile.ZipFile(wheel, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr(
+                    f"{dist_info}/METADATA",
+                    "Metadata-Version: 2.1\n"
+                    f"Name: {name}\n"
+                    f"Version: {version}\n",
+                )
+                archive.writestr(
+                    f"{dist_info}/WHEEL",
+                    "Wheel-Version: 1.0\n"
+                    "Generator: devsquad-test\n"
+                    "Root-Is-Purelib: true\n"
+                    "Tag: py3-none-any\n",
+                )
+                archive.writestr(f"{dist_info}/RECORD", "")
+                if name == "mcp":
+                    archive.writestr("mcp/__init__.py", "")
+        return wheelhouse
+
     def test_fresh_install_requires_no_claude_and_reinstall_is_idempotent(self):
         self.environment["PATH"] = "/usr/bin:/bin"
 
@@ -110,6 +143,27 @@ class StandaloneInstallerTest(unittest.TestCase):
         self.assertEqual((self.install_root / "install-state.json").read_bytes(), before_state)
         self.assertEqual(launcher.read_bytes(), before_launcher)
         self.assertEqual(len(list((self.install_root / "releases").iterdir())), 1)
+
+    def test_offline_mcp_install_keeps_json_clean_and_passes_dependency_check(self):
+        report = self.install(
+            CORE,
+            "--with-mcp",
+            "--mcp-wheelhouse",
+            str(self.mcp_wheelhouse()),
+        )
+
+        self.assertTrue(report["changed"])
+        self.assertTrue(report["installed"]["mcp"])
+        release = Path(report["current_target"])
+        checked = subprocess.run(
+            [str(release / "venv/bin/python"), "-m", "pip", "check"],
+            check=True,
+            text=True,
+            capture_output=True,
+            env=self.environment,
+        )
+        self.assertEqual(checked.stdout.strip(), "No broken requirements found.")
+        self.assertEqual(checked.stderr, "")
 
     def test_composite_installer_succeeds_without_claude(self):
         self.environment["PATH"] = "/usr/bin:/bin"

@@ -353,9 +353,10 @@ dist.mkdir()
 (dist / "RECORD").write_text("")
 PY
   if [ "$WITH_MCP" -eq 1 ]; then
-    "$VENV_PYTHON" -m pip install --disable-pip-version-check --no-index \
+    "$VENV_PYTHON" -m pip install --quiet --disable-pip-version-check --no-index \
       --only-binary=:all: --find-links "$MCP_WHEELHOUSE" \
       -r "$SOURCE_CORE/requirements-mcp.lock"
+    "$VENV_PYTHON" -m pip check >/dev/null
     "$VENV_PYTHON" - <<'PY'
 from importlib import metadata
 import mcp
