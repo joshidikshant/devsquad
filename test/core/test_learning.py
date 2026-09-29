@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ContractError
-from devsquad.learning import validate_outcome
+from devsquad.learning import (
+    evaluate_experiment,
+    validate_experiment,
+    validate_outcome,
+)
 from devsquad.store import ConflictError, Store
 
 
@@ -54,6 +58,66 @@ def final_outcome():
     }
 
 
+def experiment(project_path):
+    return {
+        "schema_version": 1,
+        "experiment_id": "experiment-profile-b",
+        "project_path": str(project_path),
+        "question": "Does profile B improve successful outcomes?",
+        "hypothesis": "Profile B is non-inferior and improves paired success.",
+        "evidence_availability": "tracked_fixture",
+        "variable": {
+            "kind": "profile_binding",
+            "alias": "review.deep",
+            "control_profile_id": "profile-a",
+            "candidate_profile_id": "profile-b",
+        },
+        "cases": [
+            {
+                "case_id": "eval-1", "split": "evaluation",
+                "control_outcome_id": "control-eval-1",
+                "candidate_outcome_id": "candidate-eval-1",
+            },
+            {
+                "case_id": "eval-2", "split": "evaluation",
+                "control_outcome_id": "control-eval-2",
+                "candidate_outcome_id": "candidate-eval-2",
+            },
+            {
+                "case_id": "hold-1", "split": "held_out",
+                "control_outcome_id": "control-hold-1",
+                "candidate_outcome_id": "candidate-hold-1",
+            },
+        ],
+        "gate": {
+            "min_evaluation_pairs": 2,
+            "min_held_out_pairs": 1,
+            "noninferiority_margin": 0.0,
+            "minimum_success_gain": 0.5,
+            "max_candidate_escaped_defects": 0,
+        },
+        "budget": {
+            "max_cases": 3,
+            "max_worker_invocations": 0,
+            "wall_seconds": 60,
+        },
+        "rollback_target": {"profile_id": "profile-a", "binding_version": 7},
+    }
+
+
+def experimental_final(outcome_id, verdict):
+    value = final_outcome()
+    value.update({
+        "outcome_id": outcome_id,
+        "verdict": verdict,
+        "selection_mode": "experimental",
+        "summary": f"Experimental fixture {outcome_id} was {verdict}.",
+        "criteria": [],
+        "contributions": [],
+    })
+    return value
+
+
 class LearningContractTest(unittest.TestCase):
     def test_outcome_contract_rejects_false_success_and_mutation(self):
         normalized = validate_outcome(final_outcome(), now=NOW)
@@ -74,6 +138,104 @@ class LearningContractTest(unittest.TestCase):
         changed["observed_at"] = (NOW + timedelta(minutes=6)).isoformat()
         with self.assertRaisesRegex(ContractError, "clock skew"):
             validate_outcome(changed, now=NOW)
+
+    def test_experiment_gate_promotes_only_complete_held_out_evidence(self):
+        spec = experiment(Path("/tmp/experiment-project"))
+        validate_experiment(spec)
+        chains = {}
+        for case in spec["cases"]:
+            chains[case["control_outcome_id"]] = {
+                "final": experimental_final(case["control_outcome_id"], "failed"),
+                "late_corrections": [],
+            }
+            chains[case["candidate_outcome_id"]] = {
+                "final": experimental_final(case["candidate_outcome_id"], "succeeded"),
+                "late_corrections": [],
+            }
+        promoted = evaluate_experiment(spec, chains, evaluated_at=NOW.isoformat())
+        self.assertEqual(promoted["verdict"], "promotion_proposal")
+        self.assertFalse(promoted["active_policy_changed"])
+        self.assertEqual(
+            promoted["rollback_target"],
+            {"profile_id": "profile-a", "binding_version": 7},
+        )
+
+        missing = dict(chains)
+        del missing["candidate-hold-1"]
+        no_change = evaluate_experiment(spec, missing, evaluated_at=NOW.isoformat())
+        self.assertEqual(no_change["verdict"], "no_change")
+        self.assertIn("insufficient_held_out_pairs", no_change["reasons"])
+
+        escaped = copy.deepcopy(chains)
+        escaped["candidate-hold-1"]["late_corrections"] = [{
+            "verdict": "escaped_defect",
+        }]
+        no_change = evaluate_experiment(spec, escaped, evaluated_at=NOW.isoformat())
+        self.assertEqual(no_change["verdict"], "no_change")
+        self.assertIn(
+            "candidate_escaped_defect_limit_exceeded", no_change["reasons"],
+        )
+
+        invalid = experiment(Path("/tmp/experiment-project"))
+        invalid["rollback_target"]["profile_id"] = "profile-b"
+        with self.assertRaisesRegex(ContractError, "control profile"):
+            validate_experiment(invalid)
+        invalid = experiment(Path("/tmp/experiment-project"))
+        invalid["evidence_availability"] = []
+        with self.assertRaisesRegex(ContractError, "evidence_availability"):
+            validate_experiment(invalid)
+        invalid = experiment(Path("/tmp/experiment-project"))
+        invalid["cases"][0]["split"] = []
+        with self.assertRaisesRegex(ContractError, "case split"):
+            validate_experiment(invalid)
+        invalid_chains = copy.deepcopy(chains)
+        invalid_chains["candidate-hold-1"]["late_corrections"] = [None]
+        with self.assertRaisesRegex(ContractError, "late corrections"):
+            evaluate_experiment(spec, invalid_chains, evaluated_at=NOW.isoformat())
+
+    def test_experiment_evaluation_is_persisted_and_replay_safe(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root)
+            repository = path / "repo"
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repository), "config", "user.email", "test@example.invalid"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "config", "user.name", "Test"],
+                check=True,
+            )
+            (repository / "README").write_text("fixture\n")
+            subprocess.run(["git", "-C", str(repository), "add", "README"], check=True)
+            subprocess.run(["git", "-C", str(repository), "commit", "-qm", "base"], check=True)
+            store = Store(path / "state.sqlite3", path / "artifacts")
+            self.addCleanup(store.close)
+            spec = experiment(repository)
+            for case in spec["cases"]:
+                for arm, verdict in (("control", "failed"), ("candidate", "succeeded")):
+                    outcome_id = case[f"{arm}_outcome_id"]
+                    claim = store.claim_start(
+                        repository, f"run-{outcome_id}", {}, "owner",
+                    )
+                    store.connection.execute(
+                        "UPDATE runs SET state=?,phase=NULL WHERE id=?",
+                        (verdict, claim.run_id),
+                    )
+                    store.record_outcome(
+                        claim.run_id,
+                        experimental_final(outcome_id, verdict),
+                        now=NOW,
+                    )
+            first = store.evaluate_learning_experiment(spec, now=NOW)
+            replay = store.evaluate_learning_experiment(spec, now=NOW)
+            self.assertEqual(first["evaluation"]["verdict"], "promotion_proposal")
+            self.assertFalse(first["replayed"])
+            self.assertTrue(replay["replayed"])
+            changed = copy.deepcopy(spec)
+            changed["hypothesis"] = "Mutated after evaluation."
+            with self.assertRaisesRegex(ConflictError, "different specification"):
+                store.evaluate_learning_experiment(changed, now=NOW)
 
     def test_final_and_late_outcomes_are_append_only_and_attempt_bound(self):
         with tempfile.TemporaryDirectory() as root:
@@ -185,7 +347,7 @@ class LearningContractTest(unittest.TestCase):
                 report["interpretation"]["final_task_success_is_not_profile_success"],
             )
 
-    def test_migration_ten_creates_outcome_ledger(self):
+    def test_current_schema_contains_outcome_ledger(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root)
             store = Store(path / "state.sqlite3", path / "artifacts")
@@ -194,12 +356,19 @@ class LearningContractTest(unittest.TestCase):
                 store.connection.execute(
                     "SELECT MAX(version) FROM schema_migrations",
                 ).fetchone()[0],
-                10,
+                11,
             )
             columns = {
                 row[1] for row in store.connection.execute("PRAGMA table_info(outcomes)")
             }
             self.assertTrue({"outcome_id", "payload_sha256", "corrects_outcome_id"} <= columns)
+            experiment_columns = {
+                row[1]
+                for row in store.connection.execute("PRAGMA table_info(experiments)")
+            }
+            self.assertTrue({
+                "experiment_id", "spec_sha256", "evaluation_sha256", "verdict",
+            } <= experiment_columns)
 
 
 if __name__ == "__main__":

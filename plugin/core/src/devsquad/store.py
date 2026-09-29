@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 10
+SUPPORTED_SCHEMA_VERSION = 11
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -1181,6 +1181,93 @@ class Store:
             attempt_profiles=attempt_profiles,
             generated_at=_authoritative_now(now).isoformat(),
         )
+
+    def evaluate_learning_experiment(
+        self, experiment: dict[str, Any], *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Persist one deterministic, replay-safe experiment evaluation."""
+        from .learning import evaluate_experiment, validate_experiment
+
+        spec = validate_experiment(experiment)
+        spec_json = canonical_json(spec)
+        spec_sha256 = hashlib.sha256(spec_json.encode()).hexdigest()
+        current = _authoritative_now(now)
+        common_dir = git_common_dir(Path(spec["project_path"]))
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.connection.execute(
+                "SELECT spec_json,evaluation_json,evaluation_sha256,recorded_at "
+                "FROM experiments WHERE experiment_id=?",
+                (spec["experiment_id"],),
+            ).fetchone()
+            if existing is not None:
+                if existing["spec_json"] != spec_json:
+                    raise ConflictError(
+                        "experiment id was already used with a different specification",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "experiment": spec,
+                    "evaluation": json.loads(existing["evaluation_json"]),
+                    "evaluation_sha256": existing["evaluation_sha256"],
+                    "recorded_at": existing["recorded_at"],
+                    "replayed": True,
+                }
+            project = self.connection.execute(
+                "SELECT id FROM projects WHERE git_common_dir=?", (str(common_dir),),
+            ).fetchone()
+            project_id = project["id"] if project is not None else None
+            records = []
+            if project_id is not None:
+                records = self.connection.execute(
+                    "SELECT o.payload_json FROM outcomes o "
+                    "JOIN runs r ON r.id=o.run_id WHERE r.project_id=? "
+                    "ORDER BY o.observed_at,o.id",
+                    (project_id,),
+                ).fetchall()
+            chains: dict[str, dict[str, Any]] = {}
+            corrections: dict[str, list[dict[str, Any]]] = {}
+            for record in records:
+                outcome = json.loads(record["payload_json"])
+                if outcome["kind"] == "final":
+                    chains[outcome["outcome_id"]] = {
+                        "final": outcome,
+                        "late_corrections": [],
+                    }
+                else:
+                    corrections.setdefault(
+                        outcome["corrects_outcome_id"], [],
+                    ).append(outcome)
+            for outcome_id, history in corrections.items():
+                if outcome_id in chains:
+                    chains[outcome_id]["late_corrections"] = history
+            evaluation = evaluate_experiment(
+                spec, chains, evaluated_at=current.isoformat(),
+            )
+            evaluation_json = canonical_json(evaluation)
+            evaluation_sha256 = hashlib.sha256(evaluation_json.encode()).hexdigest()
+            recorded_at = current.isoformat()
+            self.connection.execute(
+                "INSERT INTO experiments(experiment_id,project_id,project_path,spec_json,"
+                "spec_sha256,evaluation_json,evaluation_sha256,verdict,recorded_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (
+                    spec["experiment_id"], project_id, spec["project_path"],
+                    spec_json, spec_sha256, evaluation_json, evaluation_sha256,
+                    evaluation["verdict"], recorded_at,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "experiment": spec,
+                "evaluation": evaluation,
+                "evaluation_sha256": evaluation_sha256,
+                "recorded_at": recorded_at,
+                "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def worker_invocations(self, run_id: str) -> int:
         """Count attempts whose durable runner actually crossed the launch fence."""

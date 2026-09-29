@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 from .contracts import ContractError
@@ -22,6 +24,11 @@ CRITERION_STATES = {"passed", "failed", "unknown"}
 CONTRIBUTION_RESULTS = {"failed", "successful", "repair", "finding", "neutral"}
 ROLES = {"worker", "implementer", "reviewer", "lead", "researcher"}
 MAX_CLOCK_SKEW = timedelta(minutes=5)
+EXPERIMENT_FIELDS = {
+    "schema_version", "experiment_id", "project_path", "question", "hypothesis",
+    "evidence_availability", "variable", "cases", "gate", "budget",
+    "rollback_target",
+}
 
 
 def _now(value: datetime | None) -> datetime:
@@ -321,4 +328,238 @@ def build_comparison_report(
             "final_task_success_is_not_profile_success": True,
             "selection_modes_are_not_pooled": True,
         },
+    }
+
+
+def validate_experiment(value: dict[str, Any]) -> dict[str, Any]:
+    """Validate a predeclared one-variable, paired outcome experiment."""
+    if not isinstance(value, dict) or set(value) != EXPERIMENT_FIELDS:
+        raise ContractError("experiment fields are invalid")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        raise ContractError("experiment schema_version is invalid")
+    experiment_id = _identifier(value["experiment_id"], "experiment_id")
+    project_path = value["project_path"]
+    if (not isinstance(project_path, str) or not project_path
+            or not Path(project_path).is_absolute()):
+        raise ContractError("experiment project_path must be absolute")
+    for field in ("question", "hypothesis"):
+        if not isinstance(value[field], str) or not value[field].strip():
+            raise ContractError(f"experiment {field} must be a non-empty string")
+    if (not isinstance(value["evidence_availability"], str)
+            or value["evidence_availability"] not in {
+        "local", "tracked_fixture", "unavailable",
+    }):
+        raise ContractError("experiment evidence_availability is invalid")
+    variable = value["variable"]
+    if not isinstance(variable, dict) or set(variable) != {
+        "kind", "alias", "control_profile_id", "candidate_profile_id",
+    }:
+        raise ContractError("experiment variable fields are invalid")
+    if variable["kind"] != "profile_binding":
+        raise ContractError("experiment variable kind is invalid")
+    for field in ("alias", "control_profile_id", "candidate_profile_id"):
+        _identifier(variable[field], f"variable.{field}")
+    if variable["control_profile_id"] == variable["candidate_profile_id"]:
+        raise ContractError("experiment control and candidate must differ")
+
+    budget = value["budget"]
+    if not isinstance(budget, dict) or set(budget) != {
+        "max_cases", "max_worker_invocations", "wall_seconds",
+    }:
+        raise ContractError("experiment budget fields are invalid")
+    for field in ("max_cases", "wall_seconds"):
+        if type(budget[field]) is not int or budget[field] < 1:
+            raise ContractError(f"experiment budget {field} must be positive")
+    if type(budget["max_worker_invocations"]) is not int or budget["max_worker_invocations"] < 0:
+        raise ContractError("experiment max_worker_invocations must be non-negative")
+
+    cases = value["cases"]
+    if not isinstance(cases, list) or not cases or len(cases) > budget["max_cases"]:
+        raise ContractError("experiment cases exceed the bounded case budget")
+    case_ids = set()
+    normalized_cases = []
+    split_counts = {"evaluation": 0, "held_out": 0}
+    for case in cases:
+        if not isinstance(case, dict) or set(case) != {
+            "case_id", "split", "control_outcome_id", "candidate_outcome_id",
+        }:
+            raise ContractError("experiment case fields are invalid")
+        case_id = _identifier(case["case_id"], "case_id")
+        if case_id in case_ids:
+            raise ContractError("experiment case ids must be unique")
+        case_ids.add(case_id)
+        if not isinstance(case["split"], str) or case["split"] not in split_counts:
+            raise ContractError("experiment case split is invalid")
+        split_counts[case["split"]] += 1
+        control_id = _identifier(case["control_outcome_id"], "control_outcome_id")
+        candidate_id = _identifier(
+            case["candidate_outcome_id"], "candidate_outcome_id",
+        )
+        if control_id == candidate_id:
+            raise ContractError("experiment paired outcomes must differ")
+        normalized_cases.append({
+            "case_id": case_id,
+            "split": case["split"],
+            "control_outcome_id": control_id,
+            "candidate_outcome_id": candidate_id,
+        })
+
+    gate = value["gate"]
+    if not isinstance(gate, dict) or set(gate) != {
+        "min_evaluation_pairs", "min_held_out_pairs", "noninferiority_margin",
+        "minimum_success_gain", "max_candidate_escaped_defects",
+    }:
+        raise ContractError("experiment gate fields are invalid")
+    for field, split in (
+        ("min_evaluation_pairs", "evaluation"),
+        ("min_held_out_pairs", "held_out"),
+    ):
+        if (type(gate[field]) is not int or gate[field] < 1
+                or gate[field] > split_counts[split]):
+            raise ContractError(f"experiment gate {field} is invalid")
+    for field in ("noninferiority_margin", "minimum_success_gain"):
+        number = gate[field]
+        if (isinstance(number, bool) or not isinstance(number, (int, float))
+                or not 0 <= number <= 1):
+            raise ContractError(f"experiment gate {field} must be between zero and one")
+    if (type(gate["max_candidate_escaped_defects"]) is not int
+            or gate["max_candidate_escaped_defects"] < 0):
+        raise ContractError("experiment escaped-defect gate is invalid")
+
+    rollback = value["rollback_target"]
+    if not isinstance(rollback, dict) or set(rollback) != {
+        "profile_id", "binding_version",
+    }:
+        raise ContractError("experiment rollback target fields are invalid")
+    if rollback["profile_id"] != variable["control_profile_id"]:
+        raise ContractError("experiment rollback target must be the control profile")
+    if type(rollback["binding_version"]) is not int or rollback["binding_version"] < 1:
+        raise ContractError("experiment rollback binding_version is invalid")
+    return json.loads(canonical_json({
+        **value,
+        "experiment_id": experiment_id,
+        "variable": dict(variable),
+        "cases": normalized_cases,
+        "gate": dict(gate),
+        "budget": dict(budget),
+        "rollback_target": dict(rollback),
+    }))
+
+
+def evaluate_experiment(
+    experiment: dict[str, Any],
+    outcome_chains: dict[str, dict[str, Any]],
+    *,
+    evaluated_at: str,
+) -> dict[str, Any]:
+    """Evaluate a frozen paired experiment without changing active policy."""
+    spec = validate_experiment(experiment)
+    _timestamp(evaluated_at, "evaluated_at")
+    if not isinstance(outcome_chains, dict):
+        raise ContractError("experiment outcome chains are invalid")
+    rows = []
+    metrics = {
+        split: {
+            "declared_pairs": 0,
+            "available_pairs": 0,
+            "control_successes": 0,
+            "candidate_successes": 0,
+            "candidate_escaped_defects": 0,
+            "control_success_rate": None,
+            "candidate_success_rate": None,
+            "success_gain": None,
+        }
+        for split in ("evaluation", "held_out")
+    }
+    failures = []
+    for case in spec["cases"]:
+        split = case["split"]
+        metrics[split]["declared_pairs"] += 1
+        control = outcome_chains.get(case["control_outcome_id"])
+        candidate = outcome_chains.get(case["candidate_outcome_id"])
+        missing = []
+        if control is None:
+            missing.append("control")
+        if candidate is None:
+            missing.append("candidate")
+        row = {**case, "status": "missing" if missing else "available", "missing": missing}
+        if missing:
+            failures.append({"case_id": case["case_id"], "reason": "missing_outcome"})
+            rows.append(row)
+            continue
+        for arm, chain in (("control", control), ("candidate", candidate)):
+            if (not isinstance(chain, dict) or set(chain) != {"final", "late_corrections"}
+                    or not isinstance(chain["final"], dict)
+                    or not isinstance(chain["late_corrections"], list)):
+                raise ContractError("experiment outcome chain is invalid")
+            if chain["final"].get("kind") != "final":
+                raise ContractError("experiment arm must reference a final outcome")
+            if chain["final"].get("selection_mode") != "experimental":
+                raise ContractError("experiment outcomes must be explicitly experimental")
+            if any(not isinstance(correction, dict)
+                   for correction in chain["late_corrections"]):
+                raise ContractError("experiment late corrections are invalid")
+            row[f"{arm}_verdict"] = chain["final"]["verdict"]
+            row[f"{arm}_escaped_defects"] = sum(
+                correction.get("verdict") == "escaped_defect"
+                for correction in chain["late_corrections"]
+            )
+        metrics[split]["available_pairs"] += 1
+        metrics[split]["control_successes"] += int(row["control_verdict"] == "succeeded")
+        metrics[split]["candidate_successes"] += int(
+            row["candidate_verdict"] == "succeeded",
+        )
+        metrics[split]["candidate_escaped_defects"] += row[
+            "candidate_escaped_defects"
+        ]
+        if row["candidate_verdict"] != "succeeded":
+            failures.append({
+                "case_id": case["case_id"], "reason": "candidate_not_successful",
+            })
+        if row["candidate_escaped_defects"]:
+            failures.append({
+                "case_id": case["case_id"], "reason": "candidate_escaped_defect",
+            })
+        rows.append(row)
+
+    reasons = []
+    total_candidate_escaped = 0
+    for split, row in metrics.items():
+        minimum = spec["gate"][
+            "min_evaluation_pairs" if split == "evaluation" else "min_held_out_pairs"
+        ]
+        if row["available_pairs"] < minimum:
+            reasons.append(f"insufficient_{split}_pairs")
+            continue
+        row["control_success_rate"] = row["control_successes"] / row["available_pairs"]
+        row["candidate_success_rate"] = (
+            row["candidate_successes"] / row["available_pairs"]
+        )
+        row["success_gain"] = row["candidate_success_rate"] - row["control_success_rate"]
+        if (row["candidate_success_rate"] + spec["gate"]["noninferiority_margin"]
+                < row["control_success_rate"]):
+            reasons.append(f"{split}_noninferiority_failed")
+        if row["success_gain"] < spec["gate"]["minimum_success_gain"]:
+            reasons.append(f"{split}_minimum_gain_failed")
+        total_candidate_escaped += row["candidate_escaped_defects"]
+    if total_candidate_escaped > spec["gate"]["max_candidate_escaped_defects"]:
+        reasons.append("candidate_escaped_defect_limit_exceeded")
+
+    verdict = "promotion_proposal" if not reasons else "no_change"
+    return {
+        "schema_version": 1,
+        "experiment_id": spec["experiment_id"],
+        "spec_sha256": hashlib.sha256(
+            canonical_json(spec).encode(),
+        ).hexdigest(),
+        "evaluated_at": evaluated_at,
+        "verdict": verdict,
+        "active_policy_changed": False,
+        "reasons": sorted(set(reasons)),
+        "metrics": metrics,
+        "cases": rows,
+        "failures": failures,
+        "variable": spec["variable"],
+        "rollback_target": spec["rollback_target"],
+        "evidence_availability": spec["evidence_availability"],
     }

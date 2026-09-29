@@ -151,6 +151,31 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, {"sample_size": 3})
         service.learning_report.assert_called_once_with(str(self.root))
 
+    def test_policy_evaluate_dispatches_frozen_experiment(self):
+        experiment = {
+            "schema_version": 1,
+            "experiment_id": "experiment-1",
+            "project_path": str(self.root),
+        }
+        experiment_file = self.root / "experiment.json"
+        experiment_file.write_text(json.dumps(experiment))
+        service = mock.Mock()
+        response = {
+            "evaluation": {
+                "verdict": "no_change",
+                "active_policy_changed": False,
+            },
+            "replayed": False,
+        }
+        service.policy_evaluate.return_value = response
+        code, payload, stderr = self.invoke([
+            "policy", "evaluate", "--experiment", str(experiment_file),
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.policy_evaluate.assert_called_once_with(experiment)
+
     def test_handoff_claim_renew_and_complete_dispatch_parsed_objects(self):
         claim_payload = {
             "schema_version": 1,
@@ -413,7 +438,7 @@ class InstalledWheelMigrationTest(unittest.TestCase):
                 return candidate
         return None
 
-    def test_installed_wheel_contains_and_applies_migrations_through_ten(self):
+    def test_installed_wheel_contains_and_applies_migrations_through_eleven(self):
         build_python = self.build_python()
         if build_python is None:
             self.skipTest("offline wheel gate requires setuptools>=68 and wheel; set DEVSQUAD_BUILD_PYTHON")
@@ -455,7 +480,7 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 10
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 11
     attempt_columns = {row[1] for row in store.connection.execute("PRAGMA table_info(attempts)")}
     assert {"role", "account_pool_id", "profile_id", "profile_index"} <= attempt_columns
     columns = {row[1] for row in store.connection.execute("PRAGMA table_info(runs)")}

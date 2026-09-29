@@ -806,6 +806,14 @@ class Service:
         finally:
             store.close()
 
+    def policy_evaluate(self, experiment: dict[str, Any]) -> dict[str, Any]:
+        """Evaluate and save one frozen learning experiment without promotion."""
+        store = self._store()
+        try:
+            return store.evaluate_learning_experiment(experiment)
+        finally:
+            store.close()
+
     @staticmethod
     def _status_capacity(store: Store, run: dict[str, Any]) -> dict[str, Any] | None:
         try:

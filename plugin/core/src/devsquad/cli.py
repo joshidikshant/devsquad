@@ -173,6 +173,11 @@ def command_report(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).learning_report(args.project)), 0
 
 
+def command_policy_evaluate(args: argparse.Namespace) -> tuple[dict, int]:
+    experiment = _read_json(args.experiment, "experiment file")
+    return envelope(data=_service(args).policy_evaluate(experiment)), 0
+
+
 def command_status(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).status(args.run)), 0
 def command_events(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).events(args.run, args.after, args.limit)), 0
 def command_result(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).result(args.run)), 0
@@ -282,6 +287,13 @@ def parser() -> argparse.ArgumentParser:
     report.add_argument("--json", action="store_true")
     report.add_argument("--runtime-dir", default=runtime_default)
     report.set_defaults(func=command_report)
+    policy = sub.add_parser("policy")
+    policy_sub = policy.add_subparsers(dest="policy_command", required=True)
+    evaluate = policy_sub.add_parser("evaluate")
+    evaluate.add_argument("--experiment", required=True)
+    evaluate.add_argument("--json", action="store_true")
+    evaluate.add_argument("--runtime-dir", default=runtime_default)
+    evaluate.set_defaults(func=command_policy_evaluate)
     handoff = sub.add_parser("handoff")
     handoff_sub = handoff.add_subparsers(dest="handoff_command", required=True)
     claim = handoff_sub.add_parser("claim")

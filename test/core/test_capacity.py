@@ -184,7 +184,7 @@ class CapacityContractTest(unittest.TestCase):
             version = store.connection.execute(
                 "SELECT MAX(version) FROM schema_migrations",
             ).fetchone()[0]
-            self.assertEqual(version, 10)
+            self.assertEqual(version, 11)
             tables = {
                 row[0] for row in store.connection.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'",
