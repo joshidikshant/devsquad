@@ -13,7 +13,7 @@
   "review_followup": "SOL-REVIEW-FOLLOWUP.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
-  "next_milestone": "M3",
+  "next_milestone": "M5",
   "review_checkpoint": {
     "reviewed_revision": "f4fa6577e2e891151231c9c7d3180be6e9e23faa",
     "recorded_on": "2026-09-29",
@@ -22,7 +22,7 @@
     "assessment": "M3 acceptance integrity and M5-M7 independent engineering work are reopened. Historical receipts remain evidence for their recorded scope; credentials are not the only remaining work."
   },
   "review_work_packages": [
-    {"id": "R1", "title": "Candidate integrity through trusted checks", "status": "pending", "milestones": ["M3", "M5"], "depends_on": [], "items": ["F1"]},
+    {"id": "R1", "title": "Candidate integrity through trusted checks", "status": "complete", "milestones": ["M3", "M5"], "depends_on": [], "items": ["F1"], "evidence": "evidence/R1-candidate-integrity-2026-09-29.json", "checkpoint": "Source repair verified by public regressions, mutation matrix, 330-test core gate with 2 optional-SDK skips and independent patch review. Installed refresh remains R8."},
     {"id": "R2", "title": "Observed Claude execution identity", "status": "pending", "milestones": ["M5"], "depends_on": [], "items": ["F2"]},
     {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "pending", "milestones": ["M6"], "depends_on": [], "items": ["F3"]},
     {"id": "R4", "title": "Normal routing, catalog lifecycle and quota", "status": "pending", "milestones": ["M6", "M7"], "depends_on": ["R1", "R2", "R3"], "items": ["F4", "G2"]},
@@ -103,7 +103,8 @@
       "depends_on": ["M2"],
       "status": "in_progress",
       "acceptance_section": "M3 — Ship a useful branch review",
-      "open_review_items": ["F1"],
+      "open_review_items": [],
+      "review_resolution": "F1 source repair is verified under R1; affected installed-runtime refresh remains R8, so M3 is not reclosed yet.",
       "evidence": [
         {
           "kind": "implementation_checkpoint",
@@ -232,7 +233,7 @@
       "depends_on": ["M3"],
       "status": "in_progress",
       "acceptance_section": "M5 — Deliver a bounded engineering change",
-      "open_review_items": ["F1", "F2", "G4"],
+      "open_review_items": ["F2", "G4"],
       "evidence": [
         {
           "kind": "implementation_checkpoint",
@@ -289,7 +290,7 @@
           "availability": "tracked_tests"
         }
       ],
-      "blocker": "Independent R1/R2/R6 repairs remain available. The later genuine Claude-to-Codex delivery gate also requires normal Claude login; fixtures cannot substitute for that receipt."
+      "blocker": "R1 source repair is verified; independent R2/R6 repairs remain available. The later genuine Claude-to-Codex delivery gate also requires normal Claude login; fixtures cannot substitute for that receipt."
     },
     {
       "id": "M6",

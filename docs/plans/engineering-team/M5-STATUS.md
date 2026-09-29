@@ -2,7 +2,8 @@
 
 M5 is **in progress with independent repairs available**. The September 29
 review at `f4fa657` reopened candidate integrity (F1), observed Claude identity
-(F2) and complete normal-command check coverage (G4). Execute R1/R2/R6 in
+(F2) and complete normal-command check coverage (G4). F1/R1 is now repaired
+and verified offline; execute R2/R6 in
 [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The genuine Claude-to-Codex
 live gate additionally remains blocked on normal Claude login.
 
@@ -12,9 +13,9 @@ live gate additionally remains blocked on normal Claude login.
 | Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | verified offline at `0e88d73` |
 | Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `0e88d73` |
 | Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | reopened under R2; prior fixtures do not detect fabricated observed identity; live proof pending |
-| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | reopened under R1/R6 for check mutation and normal-command check coverage |
+| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | R1 check-mutation repair verified offline; R6 normal-command check coverage remains |
 | Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | correction/budgets verified at `4c76887`; same-permission delivery fallback verified at `b7d90cc` |
-| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | historical failure gates pass; R1/R2 must reject invalid candidate/identity evidence |
+| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | R1 candidate integrity now enforced; R2 identity repair remains |
 | Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | success, repair, fallback, failure and cancellation history verified offline at `b7d90cc` |
 | Crash recovery | Killing a live implementation supervisor cannot create a duplicate writer on resume | prelaunch and live revised-writer recovery verified offline at `f199cd2` |
 | Live acceptance | One bounded issue completes across at least two authenticated subscription harnesses with different verified models | pending repairs and normal Claude CLI login |

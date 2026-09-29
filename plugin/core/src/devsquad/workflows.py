@@ -20,7 +20,7 @@ MAX_FINDINGS = 100
 MAX_TEXT_CHARS = 20_000
 MAX_PREVIEW_CHARS = 1024
 FINDING_SEVERITIES = {"critical", "high", "medium", "low"}
-CHECK_STATUSES = {"passed", "failed", "timed_out", "launch_failed"}
+CHECK_STATUSES = {"passed", "failed", "timed_out", "launch_failed", "invalidated", "not_run"}
 REVIEW_MODES = {"standard", "adversarial"}
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT_OID = re.compile(r"[0-9a-f]{40}\Z")
@@ -301,12 +301,16 @@ def validate_check_results(
     candidate_sha256, _, target_oid = _workspace_identity(workspace)
     normalized = []
     for configured, supplied in zip(task["checks"], values):
-        result = _exact(supplied, {
+        version = supplied.get("schema_version") if isinstance(supplied, dict) else None
+        fields = {
             "schema_version", "candidate_sha256", "target_oid", "id", "argv",
             "cwd", "required_to_pass", "status", "returncode", "error_code",
             "duration_ms", "stdout", "stderr",
-        }, "check result")
-        if result["schema_version"] != 1 or type(result["schema_version"]) is not int:
+        }
+        if version == 2:
+            fields.update({"integrity", "output_paths"})
+        result = _exact(supplied, fields, "check result")
+        if type(version) is not int or version not in {1, 2}:
             raise ContractError("check result schema_version is invalid")
         if _sha256(result["candidate_sha256"], "check candidate_sha256") != candidate_sha256:
             raise ContractError("check result targets a different candidate hash")
@@ -315,14 +319,63 @@ def validate_check_results(
         for field in ("id", "argv", "cwd", "required_to_pass"):
             if result[field] != configured[field]:
                 raise ContractError(f"check result changes declared field: {field}")
-        if result["status"] not in CHECK_STATUSES:
+        if not isinstance(result["status"], str) or result["status"] not in CHECK_STATUSES:
             raise ContractError("check result status is invalid")
         if type(result["duration_ms"]) is not int or result["duration_ms"] < 0:
             raise ContractError("check duration_ms must be a non-negative integer")
         status, returncode, error_code = (
             result["status"], result["returncode"], result["error_code"]
         )
-        if status == "passed" and (returncode != 0 or error_code is not None):
+        if version == 2:
+            if result["output_paths"] != configured.get("output_paths", []):
+                raise ContractError("check result changes declared field: output_paths")
+            integrity = _exact(result["integrity"], {
+                "status", "reasons", "before_state_sha256", "after_state_sha256",
+                "changes", "changes_truncated",
+            }, "check integrity")
+            expected = {"invalidated": "violated", "not_run": "not_run"}.get(status, "verified")
+            if integrity["status"] != expected:
+                raise ContractError("check integrity contradicts its status")
+            reasons = integrity["reasons"]
+            if (not isinstance(reasons, list) or len(reasons) > 20
+                    or any(not isinstance(reason, str) or not reason or len(reason) > 200
+                           for reason in reasons)
+                    or (expected == "verified") != (reasons == [])):
+                raise ContractError("check integrity reasons are inconsistent")
+            for field in ("before_state_sha256", "after_state_sha256"):
+                if status == "not_run":
+                    if integrity[field] is not None:
+                        raise ContractError("skipped check cannot claim an integrity observation")
+                else:
+                    _sha256(integrity[field], f"check integrity {field}")
+            changes = integrity["changes"]
+            if (not isinstance(changes, list) or len(changes) > 100
+                    or type(integrity["changes_truncated"]) is not bool):
+                raise ContractError("check integrity changes must be bounded")
+            if status != "invalidated" and (changes or integrity["changes_truncated"]):
+                raise ContractError("clean/skipped check cannot report input changes")
+            if expected == "verified" and integrity["before_state_sha256"] != integrity["after_state_sha256"]:
+                raise ContractError("verified check has differing input fingerprints")
+            for change in changes:
+                _exact(change, {"workspace", "path", "before", "after"}, "check integrity change")
+                if not isinstance(change["workspace"], str) or change["workspace"] not in {"check", "review"}:
+                    raise ContractError("check integrity change workspace is invalid")
+                path = _text(change["path"], "check integrity path", maximum=4096)
+                if PurePosixPath(path).is_absolute() or ".." in PurePosixPath(path).parts:
+                    raise ContractError("check integrity path escapes workspace")
+                for field in ("before", "after"):
+                    if change[field] is not None and change[field] != "undeclared":
+                        _sha256(change[field], f"check change {field}")
+                if change["before"] == change["after"]:
+                    raise ContractError("check integrity change has identical evidence")
+        elif status in {"invalidated", "not_run"}:
+            raise ContractError("check integrity requires schema version 2")
+        if status in {"invalidated", "not_run"} and (
+                error_code != "CLI_ERROR"
+                or (returncode is not None and type(returncode) is not int)
+                or (status == "not_run" and returncode is not None)):
+            raise ContractError("invalidated/skipped check result is inconsistent")
+        if status == "passed" and (type(returncode) is not int or returncode != 0 or error_code is not None):
             raise ContractError("passing check result is inconsistent")
         if status == "failed" and (
             type(returncode) is not int or returncode == 0 or error_code is not None
@@ -376,6 +429,10 @@ def evaluate_branch_review(
             "evidence": evidence,
         })
     candidate_sha256, base_oid, target_oid = _workspace_identity(workspace)
+    integrity_failures = [
+        result["id"] for result in normalized_checks
+        if result.get("integrity", {}).get("status") in {"violated", "not_run"}
+    ]
     return {
         "schema_version": 1,
         "candidate_sha256": candidate_sha256,
@@ -385,10 +442,10 @@ def evaluate_branch_review(
         "required_checks_passed": not required_failures,
         "required_failures": required_failures,
         "report_only_failures": report_only_failures,
-        "accept_allowed": not required_failures,
+        "accept_allowed": not required_failures and not integrity_failures,
         "accept_blockers": [
             f"required_check_failed:{check_id}" for check_id in required_failures
-        ],
+        ] + [f"candidate_integrity_failed:{check_id}" for check_id in integrity_failures],
         "criteria": criteria,
     }
 
@@ -1027,12 +1084,23 @@ def decode_branch_review_evidence(
     payload: bytes | str,
     snapshot: dict[str, Any],
 ) -> dict[str, Any]:
-    return validate_branch_review_evidence(
+    evidence = validate_branch_review_evidence(
         _strict_json_object(
             payload, "branch review evidence", maximum=MAX_EVIDENCE_BYTES,
         ),
         snapshot,
     )
+    require_check_integrity(evidence["checks"])
+    return evidence
+
+
+def require_check_integrity(checks: list[dict[str, Any]]) -> None:
+    """Keep v1 receipts readable, but never use them for a new acceptance."""
+    if any(check.get("schema_version") != 2 for check in checks):
+        raise ContractError(
+            "new acceptance requires candidate integrity verification; "
+            "start a new run to refresh legacy check evidence"
+        )
 
 
 def validate_branch_review_handoff(

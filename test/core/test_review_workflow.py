@@ -13,9 +13,11 @@ from devsquad.workflows import (
     apply_lead_disposition,
     build_review_prompt,
     decode_review_document,
+    decode_branch_review_evidence,
     evaluate_branch_review,
     make_branch_review_evidence,
     review_output_schema,
+    require_check_integrity,
     validate_branch_review_evidence,
     validate_check_results,
     validate_review_document,
@@ -210,6 +212,35 @@ class BranchReviewWorkflowTest(unittest.TestCase):
         invalid["stdout"]["truncated"] = True
         with self.assertRaisesRegex(ContractError, "truncation metadata"):
             validate_check_results([invalid], self.task, self.workspace)
+
+    def test_integrity_is_non_overridable_and_strictly_bound_to_frozen_outputs(self):
+        check = self.check_result("invalidated", returncode=0, error_code="CLI_ERROR")
+        check.update(schema_version=2, output_paths=[], integrity={
+            "status": "violated", "reasons": ["check:tracked_inputs_changed"],
+            "before_state_sha256": "1" * 64, "after_state_sha256": "2" * 64,
+            "changes": [], "changes_truncated": False,
+        })
+        evaluation = evaluate_branch_review(self.task, self.workspace, self.review, [check])
+        self.assertTrue(evaluation["required_checks_passed"])
+        self.assertFalse(evaluation["accept_allowed"])
+        with self.assertRaises(ContractError):
+            apply_lead_disposition(evaluation, "accept", revisions_used=0, max_revisions=1)
+        for field, value in (("status", "passed"), ("output_paths", ["src"])):
+            tampered = copy.deepcopy(check)
+            tampered[field] = value
+            with self.assertRaises(ContractError):
+                validate_check_results([tampered], self.task, self.workspace)
+        check["integrity"]["reasons"] = []
+        with self.assertRaisesRegex(ContractError, "reasons"):
+            validate_check_results([check], self.task, self.workspace)
+
+    def test_legacy_checks_remain_readable_but_cannot_be_imported_or_accepted_anew(self):
+        evidence = make_branch_review_evidence(self.snapshot, self.review, [self.check])
+        self.assertEqual(validate_branch_review_evidence(evidence, self.snapshot), evidence)
+        with self.assertRaisesRegex(ContractError, "integrity verification"):
+            decode_branch_review_evidence(json.dumps(evidence), self.snapshot)
+        with self.assertRaisesRegex(ContractError, "start a new run"):
+            require_check_integrity(evidence["checks"])
 
     def test_report_only_failure_is_visible_but_does_not_block_delivery(self):
         evaluation = evaluate_branch_review(

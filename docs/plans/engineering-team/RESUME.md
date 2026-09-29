@@ -6,15 +6,27 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Review correction and next action
 
-The review of `f4fa6577e2e891151231c9c7d3180be6e9e23faa` supersedes the earlier
-claim that only credentials remain. M1/M2 remain accepted; M3 is reopened for
-candidate integrity (F1); M4 retains its real-Claude-host gate; M5–M7 have
-independent repairs and integration work; C1 remains pending full-delivery
-scope. No runtime repairs were made during the review or this planning update.
+R1's source repair is verified after `399d93d`: the public regression first
+reproduced four unsafe mutation paths (review/delivery × host/headless). The
+repair adds check-boundary fingerprints, explicit permitted output paths,
+non-overridable invalidation, durable mutation evidence and historical receipt
+compatibility. The final core gate ran **330 tests successfully, with 2 optional
+SDK skips**. The final independent bounded R1 audit found no remaining actionable
+issues; all **227 Bash assertions** and the generated-reference check passed.
+See [R1 evidence](evidence/R1-candidate-integrity-2026-09-29.json) for the
+full verification record, source fingerprints and limitations. The installed
+runtime is not yet refreshed; that remains R8 work.
 
-Execute [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), starting at **R1**:
-reproduce source-mutating trusted checks through the public service and prevent
-acceptance of invalid candidate evidence. Then repair Claude identity (R2),
+The review of `f4fa6577e2e891151231c9c7d3180be6e9e23faa` supersedes the earlier
+claim that only credentials remain. M1/M2 remain accepted; M3's F1 source repair
+is verified with installed refresh pending; M4 retains its real-Claude-host gate; M5–M7 have
+independent repairs and integration work; C1 remains pending full-delivery
+scope. R1 is the first implemented repair; do not confuse it with full closure.
+
+Execute [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), starting at **R2**:
+repair Claude identity using native `modelUsage`, keeping effective effort
+unknown when unreported. The plan contains the bounded local/primary-source
+investigation; no live Claude generation was used. Continue with
 independent experiment evidence (R3), routing/catalog/quota (R4), learning
 runtime connections (R5), and normal terminal/readiness/check discovery (R6).
 R7 covers C1 and R8 covers installed/live closure. Authentication and the Jev
@@ -302,10 +314,10 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Execute R1's failing public-service candidate-integrity regression, repair
-   the shared review/delivery gate and checkpoint its evidence. Continue R2/R3,
-   then R4–R6 in dependency order. Preserve later implementation and historical
-   receipts; do not rewrite the architecture or reset completed work.
+2. Execute R2's offline Claude model-identity regressions and strict import gate,
+   then R3 and R4–R6 in dependency order. Preserve the verified R1 repair,
+   explicit check `output_paths` contract and historical receipts. Do not
+   rewrite the architecture or reset completed work.
 3. Keep Claude and Grok live probes paused until normal login is restored.
    Afterward, run the M4 Claude handoff, the M5 installed Claude-to-Codex
    delivery and one bounded Grok operation, retaining only redacted evidence.

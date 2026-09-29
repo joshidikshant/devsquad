@@ -20,6 +20,12 @@ Read `AGENTS.md`, `CONTRIBUTING.md`, [RESUME.md](RESUME.md), this document and
 for each work package. Do not reload the historical chat or restart M1/M2.
 This review supersedes the earlier claim that only credentials remain.
 
+Current execution checkpoint: **R1 source repair verified**, with public
+mutation regressions, a ten-case workspace mutation matrix, historical replay
+coverage and 330-test core gate (two optional-SDK skips). See
+[R1 evidence](evidence/R1-candidate-integrity-2026-09-29.json). Start at **R2**
+after checking current Git state. R2–R8 and installed refresh remain open.
+
 ## Feedback on what has been built
 
 Preserve the substantial working implementation: the durable runner and
@@ -102,6 +108,17 @@ restore invalidated evidence. Preserve per-check temporary HOME behavior.
 
 **Files:** `claude_delivery_worker.py`, `workflows.py`, adapter fixtures and
 delivery tests. Implement conformance offline before spending a live turn.
+
+Investigation checkpoint (September 29): installed Claude `2.1.220` exposes
+`session_id` and `modelUsage` in native result JSON. Preserve all reported model
+entries; `canonicalModel` is pricing normalization, not serving-model proof.
+The result does not report effective effort, so keep it unknown rather than
+copying `--effort`. Multiple entries do not identify a unique writer. Pin the
+parser to tested local capability; current online docs can describe newer CLI
+features. Primary references: [result schema](https://code.claude.com/docs/en/agent-sdk/python#resultmessage),
+[model aliases and effort limits](https://code.claude.com/docs/en/model-config),
+and [usage attribution](https://code.claude.com/docs/en/agent-sdk/cost-tracking).
+Do not replace subscription-compatible safe mode with `--bare`.
 
 1. Verify the supported CLI's native model/session/usage fields against its
    installed schema/help and current official documentation when necessary.
@@ -294,9 +311,8 @@ permission to claim routing improvement.
 
 ## First action for Sol
 
-Start R1 with a failing public service regression for a check that changes
-tracked source. Repair it and prove both host and headless acceptance refuse
-the stale candidate. Commit that verified slice, update the R1 checkpoint,
-then continue R2–R6 without waiting on the Claude login or Jev key. Retain R7
+R1's source repair is verified; continue at R2 with failing native-identity
+and import-tampering regressions. Preserve R1's check-output contract and
+mutation evidence. Continue R2–R6 without waiting on the Claude login or Jev key. Retain R7
 and R8 in the full scope and continue their independent work as dependencies
 become ready.

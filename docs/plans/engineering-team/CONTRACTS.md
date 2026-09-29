@@ -167,6 +167,26 @@ For `issue-delivery`, `revise` loops back to implementation. For `branch-review`
 
 Bind artifacts, findings, tests, dispositions and criteria to a candidate tree/patch hash and resolved baseline. Freeze an implementation candidate into a local run-owned commit before review; reject changes outside scope and capture untracked permitted outputs intentionally. Run checks in a separate candidate worktree so test-generated files cannot alter the reviewed candidate. If a check must change source, that creates a new candidate needing new review. A subsequent code change invalidates affected evidence and triggers review/checks again. Run results contain a patch/commit reference and integration instructions; the coordinator does not alter the user's current checkout.
 
+Each check may declare `output_paths` (default `[]`): at most 32 canonical
+repository-relative file/directory paths for untracked build artifacts. These
+are frozen with the check plan; root/Git metadata/traversal paths are forbidden.
+An output declaration never permits changing tracked candidate files. Ignored
+files are not implicitly approved outputs. Approved outputs may be consumed by
+later checks; undeclared new inputs, tracked content/mode/index changes, HEAD
+changes, or mutation of the review worktree invalidate the check and skip the
+remaining checks. This integrity gate also blocks report-only check acceptance.
+Checks compare actual tracked bytes, independent of Git stat-cache and
+assume-unchanged hints. Unsupported Git submodule inputs fail closed.
+
+Check evidence v2 records integrity status, bounded mutation path/digest
+witnesses and complete state fingerprints alongside the original process exit
+and output. Both handoff and terminal reports retain the failure, including
+when the lead fails. Legacy v1 receipts remain readable and completed decisions
+remain replayable; they cannot authorize a new acceptance. Start a new run to
+refresh unverified legacy checks. Boundary verification applies to trusted
+checks; it is not a sandbox against a malicious command that mutates and
+restores source entirely within one check invocation.
+
 Every attempt receipt includes role, parent step, profile/policy/prompt/schema versions, requested/observed model/effort, tools/permissions, runtime version, input/output hashes, process verdict, artifact verdict, latency, usage by source and error. The run receipt also includes criteria results, all attempt IDs, fallbacks, revisions, lead repairs, final disposition and remaining limitations. Host work is recorded as externally observed with unknown usage where unmeasured; do not omit it or estimate it as zero.
 
 ## 6. Capacity without false precision

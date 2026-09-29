@@ -62,7 +62,7 @@ runtime never infers them from chat history.
 | File | Identifier | Required top-level fields | SHA-256 |
 |---|---|---|---|
 | `adapter.schema.json` | `https://devsquad.local/schemas/adapter-v1.json` | `schema_version`, `name`, `transport`, `binary_candidates`, `capabilities`, `permission_profiles` | `fc6b811b59bd2920d3dc1588d5bf447515a25d87219d07d76e1764efd60ad9c0` |
-| `check-result.schema.json` | `https://devsquad.local/schemas/check-result-v1.json` | `schema_version`, `candidate_sha256`, `target_oid`, `id`, `argv`, `cwd`, `required_to_pass`, `status`, `returncode`, `error_code`, `duration_ms`, `stdout`, `stderr` | `6597b7e6839d6b215c1bb692c3ee5db47ee88495d96bdfa4730db6f56b2c0c32` |
+| `check-result.schema.json` | `https://devsquad.local/schemas/check-result-v2.json` | `schema_version`, `candidate_sha256`, `target_oid`, `id`, `argv`, `cwd`, `required_to_pass`, `status`, `returncode`, `error_code`, `duration_ms`, `stdout`, `stderr` | `5145755d8e60503151f8938f1753c657724f1a2de3a442500c14eda158fe04a1` |
 | `execution-identity.schema.json` | `https://devsquad.local/schemas/execution-identity-v1.json` | `harness`, `harness_version`, `model_provider`, `model_family`, `model`, `effort`, `tools`, `permissions`, `account_pool`, `verification` | `99386fb81c3567bdd3c880b37d363d5ca61cccb3ff35add5eb01a1ad916dfa90` |
 | `launch-spec.schema.json` | `https://devsquad.local/schemas/launch-spec-v1.json` | `schema_version`, `adapter`, `transport`, `argv`, `cwd`, `stdin_path`, `timeout_seconds`, `requested`, `environment` | `12e2c3ffbfee6b3a9e93e41d9dd7d6a2c82a9d62e981d9378307b12f6ff12f5c` |
 | `normalized-result.schema.json` | `https://devsquad.local/schemas/normalized-result-v1.json` | `schema_version`, `execution_status`, `error_code`, `output`, `artifact_status`, `acceptance_status`, `requested`, `observed`, `native_ids`, `events` | `8fb7eec0d3cfc952b9fa839b5fdbe950d5cfe06ed69bbbd3bcf835aad9df753d` |
@@ -70,7 +70,7 @@ runtime never infers them from chat history.
 | `profile.schema.json` | `https://devsquad.local/schemas/profile-v1.json` | `id`, `harness`, `model_family`, `model_id`, `effort`, `required_tools`, `permission_policy`, `account_pool_id`, `billing_mode`, `quality_status`, `evidence_refs` | `fc51b49cd7dd6a134eedf2c2c941301392aef29a2163ac2d307b4fb78509ec96` |
 | `profiles.schema.json` | `https://devsquad.local/schemas/profiles-v1.json` | `schema_version`, `profiles`, `bindings` | `c14823c89d1b81ee93b74f5bbc2701ae975825db795b5f0937c28fc057d84cf1` |
 | `review-result.schema.json` | `https://devsquad.local/schemas/review-result-v1.json` | `schema_version`, `candidate_sha256`, `base_oid`, `target_oid`, `review_mode`, `verdict`, `summary`, `findings` | `96b852543f92dca21dafd6c0bc954f8f56d3dbfb0981d601cc05b9c1c9ba6e6b` |
-| `task.schema.json` | `https://devsquad.local/schemas/task-v1.json` | `schema_version`, `project`, `workflow`, `goal`, `task_class`, `acceptance`, `checks`, `scope`, `lead`, `routing`, `budget`, `origin` | `ec2a700b9dac653b49ffe0bfc6fa24bda92a2a144b0c94e9b66307d93c3bbc19` |
+| `task.schema.json` | `https://devsquad.local/schemas/task-v1.json` | `schema_version`, `project`, `workflow`, `goal`, `task_class`, `acceptance`, `checks`, `scope`, `lead`, `routing`, `budget`, `origin` | `afe02492bccc098c444be6095150b9f9af97d1dbda6187c69bff6b8bd0c4eaac` |
 
 ## Task-shape example
 

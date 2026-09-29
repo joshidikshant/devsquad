@@ -1,9 +1,11 @@
 # M3 implementation status
 
-M3 is **reopened for candidate-integrity repair R1** after the September 29
-review at `f4fa657`. A check that changes tracked source can produce passing
-evidence for the original candidate. See F1 and its required public-service
-regression in [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md).
+M3's reopened **candidate-integrity repair R1 is verified in source**. Public
+review/delivery regressions now block source-changing and undeclared-input
+checks through host/headless disposition, retain evidence and skip dependent
+checks. The final core gate ran 330 tests successfully (two optional SDK skips).
+See [R1 evidence](evidence/R1-candidate-integrity-2026-09-29.json). Installed
+refresh/revalidation remains R8 work; the old installed payload is unchanged.
 
 M3 was accepted at implementation checkpoint `1737667`. That historical gate
 passes 188 core tests with `ResourceWarning` promoted to an error and all 10
@@ -16,7 +18,7 @@ additional provider turn was used for the closeout.
 | Deterministic selection | Versioned profile aliases, exact pins, explicit `none`/`policy` fallback, permission/billing filters and typed capacity produce stable frozen routing snapshots | verified offline |
 | Frozen branch input | Base/target refs resolve to exact OIDs; committed config hashes, candidate hash and detached review/check workspaces remain stable while the submitted checkout, index and HEAD are preserved | verified offline |
 | Reviewer evidence | Strict ordinary/adversarial prompts, review/check/evaluation schemas, candidate binding, read-only identity checks and malformed/denied/disconnected output faults prevent unsupported success | verified offline |
-| Check and lead gates | Report-only/required failures and bounded dispositions have historical tests; source-changing checks expose a candidate-integrity gap | reopened: R1 |
+| Check and lead gates | Source/HEAD/index/mode/undeclared-input mutation invalidates evidence even for report-only checks; host/headless refuse acceptance and later checks are skipped | R1 verified offline; installed refresh pending R8 |
 | Durable host handoff | Waiting JSON/Markdown packets, claim leases, renewal/takeover, stale completion fencing, replay and crash-resume continuation share the saved run ledger | verified offline |
 | Terminal reporting | Success, rejection, preflight failure, worker failure, cancellation, waiting cancellation, timeout and budget exhaustion publish receipt JSON/Markdown, events, manifest and result receipt | verified offline |
 | Headless leadership | Offline and native headless leads run as separate fenced attempts, verify their own frozen identity/evidence and terminalize without host intervention | verified offline |

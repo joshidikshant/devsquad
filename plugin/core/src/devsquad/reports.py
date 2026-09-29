@@ -186,6 +186,7 @@ def build_handoff_reports(
             )
     else:
         lines.append("- No supported findings were reported.")
+    lines.extend(_check_markdown(packet.get("checks", [])))
     lines.extend(["", "## Instructions", "", str(packet.get("instructions") or "")])
     return {
         json_name: (canonical_json(report) + "\n").encode(),
@@ -282,6 +283,13 @@ def build_early_terminal_reports(
         "status": "not_evaluated",
         "evidence_refs": [],
     } for criterion in task.get("acceptance", []) if isinstance(criterion, dict)]
+    # A failed lead does not erase the current candidate's completed review or
+    # check integrity verdict. Never project a prior delivery candidate here.
+    latest_review = next((item for item in reversed(prior)
+        if item.get("role") == "reviewer"
+        and isinstance(item.get("evaluation"), dict)
+        and item["evaluation"].get("candidate_sha256") == workspace.get("candidate_sha256")
+    ), {})
     receipt = {
         "schema_version": 1,
         "run_id": run_id,
@@ -299,9 +307,9 @@ def build_early_terminal_reports(
             ),
         },
         "routing": frozen.get("routing"),
-        "review": None,
-        "checks": [],
-        "evaluation": None,
+        "review": latest_review.get("review"),
+        "checks": latest_review.get("checks", []),
+        "evaluation": latest_review.get("evaluation"),
         "criteria": criteria,
         "attempts": prior + ([attempt_projection] if attempt_projection else []),
         "dispositions": dispositions,
@@ -366,6 +374,7 @@ def build_early_terminal_reports(
         "Start a new run with a new idempotency key after correcting the recorded error.",
         "",
     ]
+    lines.extend(_check_markdown(receipt["checks"]))
     return _contents_with_manifest(
         run_id, receipt, "\n".join(lines), events_content, projected,
     )
@@ -496,6 +505,18 @@ def project_branch_review_history(
     return _history(entries, snapshot)
 
 
+def _check_markdown(checks: list[dict[str, Any]]) -> list[str]:
+    lines = ["", "## Checks", ""]
+    for check in checks:
+        requirement = "required" if check["required_to_pass"] else "report-only"
+        lines.append(f"- `{check['id']}`: **{check['status']}** ({requirement})")
+        for reason in check.get("integrity", {}).get("reasons", []):
+            lines.append(f"  - Candidate integrity: `{reason}`")
+    if not checks:
+        lines.append("- No checks were declared.")
+    return lines
+
+
 def _markdown(receipt: dict[str, Any]) -> str:
     review = receipt["review"]
     lines = [
@@ -525,13 +546,7 @@ def _markdown(receipt: dict[str, Any]) -> str:
                 f"  Evidence: {finding['evidence']}",
             ])
         lines.append("")
-    lines.extend(["## Checks", ""])
-    if receipt["checks"]:
-        for check in receipt["checks"]:
-            requirement = "required" if check["required_to_pass"] else "report-only"
-            lines.append(f"- `{check['id']}`: **{check['status']}** ({requirement})")
-    else:
-        lines.append("- No checks were declared.")
+    lines.extend(_check_markdown(receipt["checks"]))
     lines.extend([
         "",
         "## Lead disposition",

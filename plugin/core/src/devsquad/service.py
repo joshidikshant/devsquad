@@ -47,6 +47,7 @@ from .store import (
 from .validation import validate_task
 from .workflows import (
     apply_lead_disposition,
+    require_check_integrity,
     decode_headless_lead_evidence,
     review_mode,
     validate_branch_review_handoff,
@@ -1352,6 +1353,8 @@ class Service:
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         packet = validate_saved_review_handoff(handoff.packet, snapshot)
         validate_handoff_decision_evidence(decision, packet)
+        if decision.get("disposition") == "accept":
+            require_check_integrity(packet["checks"])
         revisions_used = sum(
             entry["decision"]["disposition"] == "revise"
             for entry in store.branch_review_history(run_id)
@@ -1753,7 +1756,10 @@ class Service:
                     "headless review does not accept a host completion"
                 )
             if managed_review:
-                self._review_gate(store, run_id, handoff, snapshot, decision)
+                # The store still validates the submission hash/identity on a
+                # terminal replay. Do not apply new execution gates retroactively.
+                if run["state"] not in TERMINAL_STATES:
+                    self._review_gate(store, run_id, handoff, snapshot, decision)
             submission = store.record_handoff_submission(run_id, decoded, decision)
             continuation = None
             if managed_review:

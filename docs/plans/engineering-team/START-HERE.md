@@ -50,7 +50,7 @@ Implement DevSquad's September engineering-team plan in this repository.
 Read docs/plans/engineering-team/RESUME.md, current Git state,
 SOL-REVIEW-FOLLOWUP.md, START-HERE.md and the relevant contracts first.
 Preserve existing implementation and historical receipts.
-Start with R1's candidate-integrity regression, then execute the remaining
+R1's source repair is verified; start with R2's observed-identity regressions, then execute the remaining
 review packages through M5–M7 and C1. Do not restart completed M1/M2 work.
 Preserve existing Bash 3.2 wrapper callers and their four error prefixes.
 Keep all distributable core files inside plugin/core; add no cloud service.

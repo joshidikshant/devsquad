@@ -436,6 +436,7 @@ class DurableBranchReviewTest(unittest.TestCase):
             "cwd": ".",
             "timeout_seconds": 10,
             "required_to_pass": True,
+            "output_paths": ["generated.tmp"],
         }]
         run_id, first_wait = self.start_waiting("one-revision")
         first_claim = self.service.handoff_claim(

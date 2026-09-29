@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "work_package": "R1",
+  "status": "source_verified",
+  "baseline_revision": "399d93d",
+  "recorded_on": "2026-09-29",
+  "scope": "Shared branch-review and issue-delivery candidate integrity through trusted checks",
+  "baseline_reproduction": {
+    "command": "python3 -m unittest discover -s test/core -p test_check_integrity_runtime.py -v",
+    "result": "Four mutation regressions failed on unmodified production; two permitted-build-output positive cases passed. Both host and headless paths could continue checking altered source."
+  },
+  "acceptance_mapping": [
+    {"requirement": "Public review/delivery and host/headless cannot accept source-changing report-only checks", "test": "test_check_integrity_runtime.PublicCheckIntegrityTest"},
+    {"requirement": "Undeclared new source is rejected; approved untracked build artifacts remain usable", "test": "test_check_integrity_runtime.PublicCheckIntegrityTest"},
+    {"requirement": "Later checks never consume a contaminated tree; exact candidate and original checkout remain unchanged", "test": "test_check_integrity_runtime.PublicCheckIntegrityTest"},
+    {"requirement": "Restart/replay preserves invalidation and terminal receipt evidence", "test": "test_check_integrity_runtime.PublicCheckIntegrityTest"},
+    {"requirement": "Delete, executable mode, staged/index-only edits, assume-unchanged, HEAD checkout/attachment, symlinks, ignored source and review-tree mutation are detected", "test": "test_workspaces.ReviewWorkspaceTest.test_check_integrity_covers_tracked_modes_index_head_and_hidden_changes"},
+    {"requirement": "Legacy evidence stays readable but cannot authorize a new acceptance; completed submissions remain replayable", "test": "test_review_workflow.BranchReviewWorkflowTest.test_legacy_checks_remain_readable_but_cannot_be_imported_or_accepted_anew and test_check_integrity_runtime.PublicCheckIntegrityTest.test_terminal_completion_replay_preserves_historical_acceptance"},
+    {"requirement": "Output declarations and v2 integrity witnesses cannot widen frozen checks", "test": "test_validation.AdversarialValidationTest.test_check_outputs_are_explicit_bounded_relative_paths and test_review_workflow.BranchReviewWorkflowTest.test_integrity_is_non_overridable_and_strictly_bound_to_frozen_outputs"},
+    {"requirement": "Per-check temporary HOME remains isolated", "test": "test_review_runtime.DurableBranchReviewTest.test_each_trusted_check_gets_a_fresh_isolated_home"}
+  ],
+  "verification": {
+    "core": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src python3 -m unittest discover -s test/core -v: 330 tests ran in 190.386 seconds; OK with 2 optional-SDK skips. The existing SQLite cleanup warning remains recorded.",
+    "bash": "bash test/run.sh: 11 files, 227 assertions passed before the R1 checkpoint; no real provider CLIs required.",
+    "generated_reference": "Current after packaged task/check-result schema updates",
+    "independent_review": "Bounded leaf review identified undeclared source and legacy replay gaps, both repaired; final read-only R1 audit reported no further actionable issues.",
+    "earlier_runs": "An intermediate 71-test run overlapped schema edits and is not verification. The first stable 330-test gate found two path-assertion mistakes and one existing fixture needing an explicit generated-output declaration; none is counted as a pass."
+  },
+  "source_sha256": {
+    "plugin/core/src/devsquad/review_worker.py": "883717bb8e72ed714e5f3362bb9649b549b6ab3ea9568c47a10087278a63ca55",
+    "plugin/core/src/devsquad/workspaces.py": "5b045ee74935ee69eb27f93c959a6cb8a5b3e366a1ea146bd75b3fb65eeedfe0",
+    "plugin/core/src/devsquad/workflows.py": "449237aa230e6a778be42f21f931106beeb15326f1a4fd5054b99fce5e47b7dc",
+    "plugin/core/src/devsquad/service.py": "1f019f4603c14098a93984db1a7d5c48083081687b0461936bdbed9aa5b2a3ae",
+    "plugin/core/src/devsquad/reports.py": "11299daaf9a33e20fbb2bbda1983ed730702b67d1292be330d5e8f0b33228ec4",
+    "plugin/core/src/devsquad/validation.py": "0ed79e40c762d3ab609b5553296135620529fd874f5cc8a5c8c83ef8e62cd5b2"
+  },
+  "limitations": [
+    "No real provider generation or installed runtime replacement occurred; refreshed installed/live proof belongs to R8.",
+    "Integrity is checked at trusted command boundaries, not as a sandbox against deliberate mutate-and-restore inside one invocation.",
+    "Git submodule candidate inputs fail closed pending explicit support.",
+    "The existing unclosed SQLite ResourceWarning remains assigned to R5."
+  ]
+}

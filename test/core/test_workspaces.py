@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -9,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ContractError
+from devsquad.review_worker import run_review_and_checks
 from devsquad.workspaces import (
     assert_clean_inputs,
     committed_regular_file,
@@ -68,6 +70,61 @@ class ReviewWorkspaceTest(unittest.TestCase):
             check=True,
             stdout=subprocess.PIPE,
         ).stdout
+
+    def test_check_integrity_covers_tracked_modes_index_head_and_hidden_changes(self):
+        mutations = {
+            "delete": "p.unlink()",
+            "mode": "p.chmod(0o755)",
+            "staged": "p.write_text('changed\\n'); git('add','src/app.py')",
+            "index-only": "git('update-index','--chmod=+x','src/app.py')",
+            "hidden": "git('update-index','--assume-unchanged','src/app.py'); p.write_text('hidden\\n')",
+            "checkout": f"git('checkout','--detach','{self.base}')",
+            "attach": "git('checkout','-b','check-attached-branch')",
+            "symlink": "p.unlink(); p.symlink_to('../tests/test_app.py')",
+            "ignored-source": "Path('.gitignore').write_text('src/hidden.py\\n'); Path('src/hidden.py').write_text('hidden\\n')",
+            "review-tree": "(Path.cwd().parent/'review-worktree/src/app.py').write_text('changed review\\n')",
+        }
+        for name, mutation in mutations.items():
+            with self.subTest(name=name):
+                workspace = self.prepare(run_id=name)
+                checks_workspace = prepare_check_workspace(
+                    self.repo, self.runtime, "project-1", name, self.target, ("src", "tests"),
+                )
+                task = json.loads((ROOT / "docs/plans/engineering-team/examples/branch-review.json").read_text())
+                script = (
+                    "from pathlib import Path; import subprocess; p=Path('src/app.py'); "
+                    "git=lambda *args: subprocess.run(['git',*args],check=True,capture_output=True); "
+                    + mutation + "; print('mutation completed')"
+                )
+                task["checks"] = [{
+                    "id": "mutation", "argv": [sys.executable, "-c", script], "cwd": ".",
+                    "required_to_pass": False, "timeout_seconds": 10,
+                    # Listing tracked source as an output never permits editing it.
+                    "output_paths": ["src/app.py"],
+                }, {
+                    "id": "later", "argv": [sys.executable, "-c", "print('must not run')"],
+                    "cwd": ".", "required_to_pass": False, "timeout_seconds": 10,
+                }]
+                review = {
+                    "schema_version": 1, "candidate_sha256": workspace["candidate_sha256"],
+                    "base_oid": self.base, "target_oid": self.target,
+                    "review_mode": "standard", "verdict": "clean", "summary": "Fixture", "findings": [],
+                }
+                selected = {
+                    "profile_id": "fixture-reviewer", "profile_sha256": "1" * 64,
+                    "profile": {"harness": "fixture"},
+                    "reference": {"kind": "profile", "id": "fixture-reviewer"}, "binding": None,
+                }
+                evidence = run_review_and_checks({
+                    "task": task, "workspace": workspace, "check_workspace": checks_workspace,
+                    "routing": {"roles": {"reviewer": {"selected": selected}}},
+                }, review)
+                self.assertEqual(evidence["checks"][0]["returncode"], 0)
+                self.assertEqual(evidence["checks"][0]["status"], "invalidated")
+                self.assertEqual(evidence["checks"][1]["status"], "not_run")
+                self.assertEqual(evidence["checks"][1]["stdout"]["total_bytes"], 0)
+                self.assertFalse(evidence["evaluation"]["accept_allowed"])
+                self.assertEqual((self.repo / "src/app.py").read_text(), "VALUE = 'candidate'\n")
 
     def test_workspace_is_detached_frozen_idempotent_and_checkout_preserving(self):
         (self.repo / "notes.txt").write_text("dirty but outside declared inputs\n")

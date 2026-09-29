@@ -1,24 +1,51 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://devsquad.local/schemas/check-result-v1.json",
+  "$id": "https://devsquad.local/schemas/check-result-v2.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "candidate_sha256", "target_oid", "id", "argv", "cwd", "required_to_pass", "status", "returncode", "error_code", "duration_ms", "stdout", "stderr"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "target_oid": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "id": {"type": "string", "minLength": 1},
     "argv": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
     "cwd": {"type": "string"},
     "required_to_pass": {"type": "boolean"},
-    "status": {"enum": ["passed", "failed", "timed_out", "launch_failed"]},
+    "status": {"enum": ["passed", "failed", "timed_out", "launch_failed", "invalidated", "not_run"]},
+    "output_paths": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "integrity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "reasons", "before_state_sha256", "after_state_sha256", "changes", "changes_truncated"],
+      "properties": {
+        "status": {"enum": ["verified", "violated", "not_run"]},
+        "reasons": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 200}},
+        "before_state_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "after_state_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "changes_truncated": {"type": "boolean"},
+        "changes": {"type": "array", "maxItems": 100, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["workspace", "path", "before", "after"],
+          "properties": {
+            "workspace": {"enum": ["check", "review"]},
+            "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+            "before": {"type": ["string", "null"], "pattern": "^([0-9a-f]{64}|undeclared)$"},
+            "after": {"type": ["string", "null"], "pattern": "^([0-9a-f]{64}|undeclared)$"}
+          }
+        }}
+      }
+    },
     "returncode": {"type": ["integer", "null"]},
     "error_code": {"enum": [null, "TIMEOUT", "CLI_ERROR"]},
     "duration_ms": {"type": "integer", "minimum": 0},
     "stdout": {"$ref": "#/$defs/stream"},
     "stderr": {"$ref": "#/$defs/stream"}
   },
+  "allOf": [
+    {"if": {"properties": {"schema_version": {"const": 2}}},
+     "then": {"required": ["integrity", "output_paths"]},
+     "else": {"not": {"anyOf": [{"required": ["integrity"]}, {"required": ["output_paths"]}]}, "properties": {"status": {"enum": ["passed", "failed", "timed_out", "launch_failed"]}}}}
+  ],
   "$defs": {
     "stream": {
       "type": "object",

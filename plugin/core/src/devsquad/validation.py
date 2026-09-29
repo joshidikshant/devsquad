@@ -54,7 +54,7 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
         raise ContractError("checks must be a bounded array")
     check_ids = set()
     for check in value["checks"]:
-        _exact(check, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass"}, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass"}, "check")
+        _exact(check, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass", "output_paths"}, {"id", "argv", "cwd", "timeout_seconds", "required_to_pass"}, "check")
         if not isinstance(check["id"], str) or not check["id"]: raise ContractError("check id must be non-empty")
         if check["id"] in check_ids: raise ContractError("check ids must be unique")
         check_ids.add(check["id"])
@@ -62,6 +62,15 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
         _relative(check["cwd"], "check cwd")
         if not isinstance(check["timeout_seconds"], int) or isinstance(check["timeout_seconds"], bool) or check["timeout_seconds"] <= 0: raise ContractError("check timeout must be positive")
         if type(check["required_to_pass"]) is not bool: raise ContractError("required_to_pass must be boolean")
+        outputs = check.get("output_paths", [])
+        if not isinstance(outputs, list) or len(outputs) > 32:
+            raise ContractError("check output_paths must be a bounded array")
+        for output in outputs:
+            _relative(output, "check output path")
+            if Path(output).as_posix() != output or output == "." or ".git" in Path(output).parts:
+                raise ContractError("check output path must be canonical and exclude Git metadata/root")
+        if len(set(outputs)) != len(outputs):
+            raise ContractError("check output paths must be unique")
     scope = value["scope"]; _exact(scope, {"read_paths", "write_paths"}, {"read_paths", "write_paths"}, "scope")
     if not isinstance(scope["read_paths"], list) or not isinstance(scope["write_paths"], list) or not all(isinstance(p, str) and p for p in scope["read_paths"] + scope["write_paths"]): raise ContractError("scope paths must be non-empty string arrays")
     if len(scope["read_paths"]) + len(scope["write_paths"]) > MAX_SCOPE_PATHS: raise ContractError("scope paths exceed their bound")

@@ -65,6 +65,17 @@ class AdversarialValidationTest(unittest.TestCase):
             value = copy.deepcopy(self.task); mutate(value)
             self.assert_contract_error(validate_task, value)
 
+    def test_check_outputs_are_explicit_bounded_relative_paths(self):
+        valid = copy.deepcopy(self.task)
+        valid["checks"][0]["output_paths"] = ["build", "tests/result.json"]
+        validate_task(valid)
+        for outputs in ("build", ["."], ["../escape"], ["/tmp/out"],
+                        [".git"], ["build/../src"], ["./build"], ["build", "build"],
+                        ["build/"] , [None], [f"out-{i}" for i in range(33)]):
+            invalid = copy.deepcopy(self.task)
+            invalid["checks"][0]["output_paths"] = outputs
+            self.assert_contract_error(validate_task, invalid)
+
     def test_task_accepts_exact_embedded_routing_and_rejects_mixed_sources(self):
         profiles = {
             "schema_version": 1,

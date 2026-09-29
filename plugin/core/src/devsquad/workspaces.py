@@ -6,8 +6,9 @@ import hashlib
 import fcntl
 import os
 from pathlib import Path, PurePosixPath
+import stat
 import subprocess
-from typing import Iterable
+from typing import Any, Iterable
 
 from .contracts import ContractError
 from .store import canonical_json, git_common_dir
@@ -225,6 +226,69 @@ def reset_check_workspace(
     _git(checks, "reset", "--hard", target_oid)
     _git(checks, "clean", "-ffdx")
     _validate_workspace(review, checks, target_oid, scope_paths)
+
+
+def candidate_input_state(
+    workspace: Path, target_oid: str, output_paths: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Fingerprint tracked inputs without trusting index stat/skip-worktree hints.
+
+    Only explicitly approved untracked outputs are excluded. Inventory comes from the
+    frozen commit, so removing a file from the index cannot hide its mutation.
+    Hash actual checked-out bytes (including clean/smudge transformations), not
+    Git's possibly cached diff. This is compared across each check boundary.
+    """
+    root = workspace.resolve(strict=True)
+    top = Path(_git(root, "rev-parse", "--show-toplevel").decode().strip()).resolve()
+    if top != root:
+        raise ContractError("candidate workspace top level changed")
+    files = []
+    for record in _git(root, "ls-tree", "-r", "-z", target_oid).split(b"\0"):
+        if not record:
+            continue
+        metadata, raw_name = record.split(b"\t", 1)
+        mode, kind, _ = metadata.split()
+        name = _decode_paths(raw_name + b"\0", "candidate inventory")[0]
+        if kind != b"blob" or mode not in {b"100644", b"100755", b"120000"}:
+            raise ContractError("candidate integrity does not support Git submodules")
+        path = root / name
+        # A symlink replacing a tracked parent directory must not redirect reads.
+        parent = path.parent.resolve(strict=True)
+        if parent != path.parent:
+            raise ContractError("candidate tracked parent became a symlink")
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            files.append([name, "missing"])
+            continue
+        if stat.S_ISLNK(info.st_mode):
+            files.append([name, "symlink", os.readlink(path)])
+        elif stat.S_ISREG(info.st_mode):
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+            files.append([name, "file", bool(info.st_mode & 0o111), digest.hexdigest()])
+        else:
+            files.append([name, "unsupported"])
+    outputs = tuple(output_paths)
+    unapproved = sorted(
+        name for name in _decode_paths(_git(root, "ls-files", "--others", "-z"), "untracked inputs")
+        if not any(_intersects(name, output) for output in outputs)
+        or not (root / name).resolve().is_relative_to(root)
+    )
+    return {
+        "worktree": str(root) + "\n" + str(git_common_dir(root)),
+        "head": resolve_commit(root, "HEAD"),
+        "branch": _git(root, "rev-parse", "--abbrev-ref", "HEAD").decode().strip(),
+        "index": hashlib.sha256(_git(root, "ls-files", "--stage", "-v", "-z")).hexdigest(),
+        "tracked_inputs": hashlib.sha256(canonical_json(files).encode()).hexdigest(),
+        "undeclared_inputs": hashlib.sha256(canonical_json(unapproved).encode()).hexdigest(),
+        "paths": {
+            entry[0]: hashlib.sha256(canonical_json(entry[1:]).encode()).hexdigest()
+            for entry in files
+        } | {name: "undeclared" for name in unapproved},
+    }
 
 
 def _prepare_detached_workspace(

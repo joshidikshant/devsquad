@@ -20,7 +20,7 @@ from .workflows import (
     make_branch_review_evidence,
     validate_review_document,
 )
-from .workspaces import dirty_paths, reset_check_workspace
+from .workspaces import candidate_input_state, dirty_paths, reset_check_workspace
 
 
 MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
@@ -166,15 +166,82 @@ def run_review_and_checks(
     _verify_finding_locations(normalized_review, review_root)
     if dirty_paths(review_root):
         raise ContractError("reviewer modified the frozen read-only workspace")
-    checks = [
-        _run_check(
-            check,
-            checks_root,
-            workspace["candidate_sha256"],
-            workspace["target_oid"],
-        )
-        for check in task["checks"]
-    ]
+    target_oid = workspace["target_oid"]
+    roots = {"check": checks_root, "review": review_root}
+    outputs = [path for check in task["checks"] for path in check.get("output_paths", [])]
+    baseline = {
+        label: candidate_input_state(root, target_oid, outputs if label == "check" else ())
+        for label, root in roots.items()
+    }
+
+    baseline_sha256 = hashlib.sha256(canonical_json(baseline).encode()).hexdigest()
+
+    def inspect_integrity() -> dict[str, Any]:
+        reasons, changes, states = [], [], {}
+        for label, root in roots.items():
+            try:
+                current = candidate_input_state(root, target_oid, outputs if label == "check" else ())
+            except (ContractError, OSError, ValueError):
+                reasons.append(f"{label}:inspection_failed")
+                states[label] = None
+                continue
+            states[label] = current
+            reasons.extend(
+                f"{label}:{field}_changed" for field, value in baseline[label].items()
+                if field != "paths" and current[field] != value
+            )
+            before, after = baseline[label]["paths"], current["paths"]
+            for path in sorted(before.keys() | after.keys()):
+                if before.get(path) != after.get(path):
+                    changes.append({
+                        "workspace": label, "path": path,
+                        "before": before.get(path), "after": after.get(path),
+                    })
+        return {
+            "reasons": reasons,
+            "before_state_sha256": baseline_sha256,
+            "after_state_sha256": hashlib.sha256(canonical_json(states).encode()).hexdigest(),
+            "changes": changes[:100], "changes_truncated": len(changes) > 100,
+        }
+
+    checks = []
+    invalidated = False
+    for check in task["checks"]:
+        inspection = inspect_integrity() if not invalidated else {
+            "reasons": [], "before_state_sha256": None, "after_state_sha256": None,
+            "changes": [], "changes_truncated": False,
+        }
+        reasons = inspection["reasons"]
+        if invalidated or reasons:
+            # Keep one outcome for every declared check without executing any
+            # dependent command on a contaminated candidate.
+            result = {
+                "candidate_sha256": workspace["candidate_sha256"],
+                "target_oid": target_oid,
+                **{key: check[key] for key in ("id", "argv", "cwd", "required_to_pass")},
+                "status": "not_run" if invalidated else "invalidated",
+                "returncode": None,
+                "error_code": "CLI_ERROR",
+                "duration_ms": 0,
+                "stdout": _empty_stream(),
+                "stderr": _empty_stream(),
+            }
+            integrity_status = "not_run" if invalidated else "violated"
+            reasons = reasons or ["prior_check_invalidated_candidate"]
+        else:
+            result = _run_check(
+                check, checks_root, workspace["candidate_sha256"], target_oid,
+            )
+            inspection = inspect_integrity()
+            reasons = inspection["reasons"]
+            integrity_status = "violated" if reasons else "verified"
+            if reasons:
+                result.update(status="invalidated", error_code="CLI_ERROR")
+        result["schema_version"] = 2
+        result["output_paths"] = check.get("output_paths", [])
+        result["integrity"] = {**inspection, "status": integrity_status, "reasons": reasons}
+        invalidated = invalidated or integrity_status != "verified"
+        checks.append(result)
     return make_branch_review_evidence(
         snapshot, normalized_review, checks, **attempt_metadata,
     )
