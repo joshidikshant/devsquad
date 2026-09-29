@@ -17,6 +17,7 @@ from devsquad.lifecycle import (
     profile_template_violation,
     validate_profile_template,
 )
+from devsquad.router import load_routing
 from devsquad.store import ConflictError, Store
 
 
@@ -77,6 +78,59 @@ def final_outcome(outcome_id, verdict):
         "contributions": [],
         "lead_repairs": [],
         "evidence_refs": [f"{outcome_id}.json"],
+    }
+
+
+def routing_policy():
+    return {
+        "schema_version": 1,
+        "id": "fixture-policy",
+        "version": 3,
+        "roles": {"reviewer": [{"kind": "alias", "id": "review.deep"}]},
+        "task_classes": {"fixture-review-small": "proven"},
+        "require_different_model_for_review": True,
+        "prefer_different_harness_for_review": False,
+        "account_pools": {
+            "pool-a": {
+                "allowed_billing_modes": ["subscription"],
+                "max_concurrency": 2,
+                "unknown_capacity_policy": "allow_bounded",
+            },
+        },
+        "experiment_budget": {},
+    }
+
+
+def review_task(repo, *, pinned_profile_id=None):
+    routing = {
+        "profiles_file": "profiles.json",
+        "policy_file": "policy.json",
+    }
+    if pinned_profile_id is not None:
+        routing["overrides"] = {
+            "reviewer": {"profile_id": pinned_profile_id, "fallback": "none"},
+        }
+    return {
+        "schema_version": 1,
+        "project": {
+            "repo_path": str(repo), "base_ref": "HEAD", "target_ref": "HEAD",
+        },
+        "workflow": "branch-review",
+        "goal": "Verify lifecycle routing.",
+        "task_class": "fixture-review-small",
+        "acceptance": [{
+            "id": "routing", "description": "The expected profile is frozen.",
+            "evidence_kind": "review",
+        }],
+        "checks": [],
+        "scope": {"read_paths": ["README"], "write_paths": []},
+        "lead": {"mode": "host"},
+        "routing": routing,
+        "budget": {
+            "wall_seconds": 60, "max_worker_invocations": 1,
+            "max_revisions": 0, "max_fallbacks_per_step": 0,
+        },
+        "origin": {"surface": "test"},
     }
 
 
@@ -243,6 +297,25 @@ class ProfileLifecycleTest(unittest.TestCase):
         self.assertTrue(self.store.bootstrap_profile_binding(
             template, self.incumbent, version=7, now=NOW,
         )["replayed"])
+        registry = {
+            "schema_version": 1,
+            "profiles": [self.incumbent],
+            "bindings": {
+                "review.deep": {"profile_id": "profile-a", "version": 7},
+            },
+        }
+        profiles_payload = json.dumps(registry, sort_keys=True) + "\n"
+        policy_payload = json.dumps(routing_policy(), sort_keys=True) + "\n"
+        frozen_input = self.store.effective_profile_registry(
+            profiles_payload, policy_payload,
+        )
+        frozen_routing = load_routing(
+            review_task(self.repo), frozen_input["profiles_payload"], policy_payload,
+        )
+        self.assertEqual(
+            frozen_routing["roles"]["reviewer"]["selected"]["profile_id"],
+            "profile-a",
+        )
         evaluation = self.seed_experiment()
         qualified = self.store.record_profile_qualification(
             self.qualification(evaluation), now=NOW,
@@ -282,6 +355,28 @@ class ProfileLifecycleTest(unittest.TestCase):
         self.assertEqual(receipt["to"]["binding_version"], 8)
         self.assertTrue(receipt["affects_new_runs_only"])
         self.assertEqual(self.store.profile_binding("review.deep")["profile_id"], "profile-b")
+        promoted_input = self.store.effective_profile_registry(
+            profiles_payload, policy_payload,
+        )
+        promoted_routing = load_routing(
+            review_task(self.repo), promoted_input["profiles_payload"], policy_payload,
+        )
+        self.assertEqual(
+            promoted_routing["roles"]["reviewer"]["selected"]["profile_id"],
+            "profile-b",
+        )
+        self.assertEqual(
+            frozen_routing["roles"]["reviewer"]["selected"]["profile_id"],
+            "profile-a",
+        )
+        pinned = load_routing(
+            review_task(self.repo, pinned_profile_id="profile-a"),
+            promoted_input["profiles_payload"], policy_payload,
+        )
+        self.assertEqual(
+            pinned["roles"]["reviewer"]["selected"]["profile_id"],
+            "profile-a",
+        )
         winning_request = self.promotion(receipt["decision_id"])
         self.assertTrue(self.store.change_profile_binding(
             winning_request, now=NOW,
@@ -303,6 +398,16 @@ class ProfileLifecycleTest(unittest.TestCase):
         self.assertEqual(rolled_back["receipt"]["to"]["binding_version"], 9)
         self.assertEqual(self.store.profile_binding("review.deep")["profile_id"], "profile-a")
         self.assertEqual(len(self.store.profile_binding_decisions("review.deep")), 2)
+        rollback_input = self.store.effective_profile_registry(
+            profiles_payload, policy_payload,
+        )
+        rollback_routing = load_routing(
+            review_task(self.repo), rollback_input["profiles_payload"], policy_payload,
+        )
+        self.assertEqual(
+            rollback_routing["roles"]["reviewer"]["selected"]["binding"]["version"],
+            9,
+        )
 
     def test_insufficient_evidence_and_disabled_guarded_auto_cannot_promote(self):
         reviewed = lifecycle_template(update_mode="reviewed")

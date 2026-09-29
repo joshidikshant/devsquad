@@ -1840,6 +1840,91 @@ class Store:
             )
         ]
 
+    def effective_profile_registry(
+        self,
+        profiles_payload: bytes | str,
+        policy_payload: bytes | str,
+    ) -> dict[str, Any]:
+        """Overlay policy-matched local bindings without editing project files."""
+        from .router import _strict_json
+        from .validation import validate_policy, validate_profile_registry
+
+        registry, source_sha256 = _strict_json(
+            profiles_payload, "profiles file",
+        )
+        policy, policy_sha256 = _strict_json(policy_payload, "policy file")
+        validate_profile_registry(registry)
+        validate_policy(policy)
+        aliases = sorted({
+            reference["id"]
+            for candidates in policy["roles"].values()
+            for reference in candidates
+            if reference["kind"] == "alias"
+        })
+        if not aliases:
+            return {
+                "profiles_payload": profiles_payload,
+                "source_sha256": source_sha256,
+                "policy_sha256": policy_sha256,
+                "lifecycle_bindings": [],
+            }
+        placeholders = ",".join("?" for _ in aliases)
+        rows = self.connection.execute(
+            "SELECT b.alias,b.profile_id,b.version,b.qualification_id,b.updated_at,"
+            "p.profile_json,p.profile_sha256,t.template_id,t.payload_sha256,"
+            "t.policy_id,t.policy_version FROM profile_bindings b "
+            "JOIN concrete_profiles p ON p.profile_id=b.profile_id "
+            "JOIN profile_templates t ON t.template_id=b.template_id "
+            f"WHERE b.alias IN ({placeholders}) ORDER BY b.alias",
+            tuple(aliases),
+        ).fetchall()
+        applicable = [
+            row for row in rows
+            if (row["policy_id"] == policy["id"]
+                and row["policy_version"] == policy["version"])
+        ]
+        if not applicable:
+            return {
+                "profiles_payload": profiles_payload,
+                "source_sha256": source_sha256,
+                "policy_sha256": policy_sha256,
+                "lifecycle_bindings": [],
+            }
+        effective = json.loads(canonical_json(registry))
+        profiles = {profile["id"]: profile for profile in effective["profiles"]}
+        lifecycle_bindings = []
+        for row in applicable:
+            profile = json.loads(row["profile_json"])
+            existing = profiles.get(profile["id"])
+            if existing is not None and canonical_json(existing) != canonical_json(profile):
+                raise ConflictError(
+                    "runtime profile conflicts with the project profile registry",
+                )
+            if existing is None:
+                effective["profiles"].append(profile)
+                profiles[profile["id"]] = profile
+            effective["bindings"][row["alias"]] = {
+                "profile_id": row["profile_id"],
+                "version": row["version"],
+            }
+            lifecycle_bindings.append({
+                "alias": row["alias"],
+                "profile_id": row["profile_id"],
+                "profile_sha256": row["profile_sha256"],
+                "version": row["version"],
+                "template_id": row["template_id"],
+                "template_sha256": row["payload_sha256"],
+                "qualification_id": row["qualification_id"],
+                "updated_at": row["updated_at"],
+            })
+        effective["profiles"].sort(key=lambda profile: profile["id"])
+        return {
+            "profiles_payload": (canonical_json(effective) + "\n").encode(),
+            "source_sha256": source_sha256,
+            "policy_sha256": policy_sha256,
+            "lifecycle_bindings": lifecycle_bindings,
+        }
+
     def worker_invocations(self, run_id: str) -> int:
         """Count attempts whose durable runner actually crossed the launch fence."""
         return self.connection.execute(

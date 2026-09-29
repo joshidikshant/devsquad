@@ -462,16 +462,26 @@ class Service:
         else:
             if capacity_store is None:
                 raise ContractError("public preflight requires shared capacity state")
-            snapshot["routing"] = load_routing(
-                task,
+            effective_registry = capacity_store.effective_profile_registry(
                 config_payloads["profiles_file"],
                 config_payloads["policy_file"],
+            )
+            snapshot["routing"] = load_routing(
+                task,
+                effective_registry["profiles_payload"],
+                config_payloads["policy_file"],
                 availability=capacity_with_saved_observations(
-                    config_payloads["profiles_file"],
+                    effective_registry["profiles_payload"],
                     config_payloads["policy_file"],
                     capacity_store.capacity_snapshot,
                 ),
             )
+            snapshot["routing"]["profile_registry"].update({
+                "source_sha256": effective_registry["source_sha256"],
+                "lifecycle_bindings": effective_registry[
+                    "lifecycle_bindings"
+                ],
+            })
             if project_id is None or run_id is None:
                 raise ContractError("public preflight requires run-owned workspace identity")
             if task["workflow"] == "branch-review":
