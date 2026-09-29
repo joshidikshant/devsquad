@@ -163,6 +163,17 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   without mutation. The exact gate is 275 core tests with 2 optional-SDK skips
   and 220 Bash assertions. Only the default-off decision helper and its
   external Jev/Laya measurement path remain open in M6.
+- M6-D1 is verified at `87fa9cf`. The optional decision helper defaults to off;
+  shadow records without changing execution, and advisory can only reorder the
+  deterministic router's already-eligible profiles under reviewed gate
+  evidence. Schema 13 fences and caches calls, prevents duplicate paid calls on
+  replay, records launched-unknown outcomes as indeterminate, exposes run
+  accounting in status and stores only hashes/byte counts for task evidence.
+  Malformed, unknown-ID, NaN, pin, permission/quality, drift, cancellation and
+  crash/resume cases fail closed. The frozen synthetic baseline explicitly
+  keeps runtime adoption off. The gate is 291 core tests with 2 optional-SDK
+  skips and 220 Bash assertions. M6-D2 remains blocked only on
+  `TYPESAFE_API_KEY`; Laya remains conditional on its declared trigger.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -189,7 +200,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 275 discovered through the M6 lifecycle/catalog fallback; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Python core discovery | 291 discovered through M6-D1 decision-helper integration; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
 | Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
@@ -226,10 +237,10 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M6 at M6-D1 with the default-off typed decision helper, fake
-   adapter, cache/call accounting and off/shadow/advisory authority tests. Do
-   not rebuild the completed M5 offline path, capacity/outcome ledger,
-   experiment evaluator, proposal generator or profile lifecycle.
+2. Continue M7 with packaging/install/update migration, fresh standalone use,
+   update idempotency and active-run survival, compatibility fixtures,
+   quickstart/troubleshooting and supported local-surface receipts. Do not
+   rebuild the completed M5 offline path or M6 offline implementation.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.

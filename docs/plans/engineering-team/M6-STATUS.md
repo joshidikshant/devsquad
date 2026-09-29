@@ -2,9 +2,9 @@
 
 M6 is **in progress**. Shared capacity, the append-only outcome ledger,
 comparison reports, replay-safe one-variable experiment evaluation, proposal
-generation and the complete offline profile lifecycle are verified. The
-default-off decision helper and its externally blocked Jev measurement remain
-open.
+generation, the complete offline profile lifecycle and the default-off typed
+decision helper are verified. Only the externally blocked Jev measurement and
+its conditional Laya follow-up remain open.
 
 | Requirement | Planned evidence | Status |
 |---|---|---|
@@ -19,7 +19,7 @@ open.
 | Held-out rerun and rollback | Post-change held-out evidence and exercised rollback through lifecycle bindings | verified at `4b27e0c` |
 | Model lifecycle | Templates, qualification budgets, reviewed/guarded-auto promotion, compare-and-swap bindings, new-run-only effects and rollback receipts | verified through `ca4ee73` |
 | Catalog drift and unavailable incumbent | Complete catalog drift scopes revalidation; added models stay unqualified; removed incumbents roll back only to a prior proven/qualified binding or block | verified at `398ae6a` / `ca4ee73` |
-| Decision helper M6-D1 | Default-off typed contract, fake adapter, cache/accounting and authority/integrity tests | in progress; synthetic Jev probe mechanics only |
+| Decision helper M6-D1 | Default-off typed contract, fake adapter, cache/accounting and authority/integrity tests | verified at `87fa9cf` |
 | Jev M6-D2 | One capped synthetic request with exact model/usage/latency/cost receipt | blocked on `TYPESAFE_API_KEY` |
 | Laya M6-D3 | Triggered pinned local comparison and measured keep-off/adopt decision | pending; run only if the declared Jev trigger fires |
 
@@ -105,11 +105,37 @@ catalog evidence and its hash are retained in the immutable rollback receipt.
 The combined checkpoint gate is **275 core tests with 2 optional-SDK skips**
 and ResourceWarning promoted to error, plus **220/220 Bash assertions**.
 
+## Decision-helper checkpoint
+
+`e1afbc6` adds a strict optional policy and typed observation/response contract.
+Omitting the policy or selecting `off` leaves routing unchanged and creates no
+call. `shadow` saves a suggestion without changing execution. `advisory`
+requires reviewed gate evidence and can only reorder the exact profiles already
+accepted by deterministic permission, billing, capability, identity, quality
+and capacity filters. Pins cannot move. Unknown IDs, non-finite scores,
+distribution errors, adapter/language drift, truncation, lateness, abstention
+and insufficient confidence all preserve deterministic routing.
+
+Schema 13 at `7e83b3a` stores content-addressed decision requests, per-run
+links, response/usage evidence and an explicit billable-call count. The launch
+fence is written before an adapter boundary. Resume reuses a completed result;
+a call launched before a crash becomes `indeterminate` and cannot be silently
+retried. Cancellation before launch records zero calls, invalid output is not
+persisted as trusted data, and raw task content is represented only by hashes
+and byte counts.
+
+`87fa9cf` integrates the helper into public preflight and status. The frozen
+snapshot records the observation and any advisory effect before worker adapter
+selection. Missing optional adapters record `unavailable`, zero calls and the
+unchanged route. The deterministic fake adapter proves cache reuse across runs,
+shadow equivalence and advisory ordering. The frozen
+`decision-helper-baseline-v1.json` links only the synthetic public corpus and
+explicitly does not authorize advisory adoption. The gate is **291 core tests
+with 2 optional-SDK skips** and **220/220 Bash assertions**.
+
 ## Exact next slice
 
-Implement M6-D1: the default-off typed decision-helper contract, deterministic
-fake adapter, call/cache/accounting ledger and off/shadow/advisory authority
-tests. It must never widen deterministic routing eligibility or become
-permission, spending, acceptance or promotion authority. Keep the one-request
-Jev M6-D2 gate blocked until `TYPESAFE_API_KEY` is supplied; run Laya only if
-the predeclared fallback trigger fires.
+Keep the one-request Jev M6-D2 gate blocked until `TYPESAFE_API_KEY` is
+supplied. Do not install or run Laya unless the predeclared Jev access,
+cost/usage or measured-quality trigger fires. Continue independent delivery at
+M7 packaging, installation, update safety and real-surface usability.

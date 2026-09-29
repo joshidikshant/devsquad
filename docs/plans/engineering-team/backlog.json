@@ -12,7 +12,7 @@
   "execution_brief": "SOL-HANDOFF.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
-  "next_milestone": "M5",
+  "next_milestone": "M7",
   "milestones": [
     {
       "id": "M1",
@@ -281,7 +281,7 @@
         {
           "id": "M6-D1",
           "title": "Optional typed decision contract and frozen evaluation baseline",
-          "status": "in_progress",
+          "status": "complete",
           "specification": "DECISION-CLASSIFIERS.md",
           "evidence": [
             {
@@ -289,12 +289,22 @@
               "revision": "70e59cb",
               "command_or_action": "One-request dry run plus 5 focused probe tests, 231-test complete core discovery with ResourceWarning promoted to error, and 220 Bash assertions",
               "outcome": "The pinned Jev 1.13 synthetic pilot has 8 cases and 24 typed choices, a $0.01 ceiling, no retry, strict model/probability/usage validation and private-output enforcement; no provider request ran because TypeSafe login/API key is unavailable",
-              "artifact": "experiments/jev-pilot-v1.json",
-              "recorded_at": "2026-09-26T17:26:40Z",
-              "availability": "tracked_fixture_and_tests"
-            }
+            "artifact": "experiments/jev-pilot-v1.json",
+            "recorded_at": "2026-09-26T17:26:40Z",
+            "availability": "tracked_fixture_and_tests"
+          },
+          {
+            "kind": "offline_completion_checkpoint",
+            "revision": "87fa9cf",
+            "command_or_action": "291 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions and focused contract/store/service decision-helper tests",
+            "outcome": "Off is a zero-call no-op; shadow is observation-only; advisory is constrained to the deterministic eligible set. Schema 13 provides replay-safe call/cache accounting, launched-unknown fencing, cancellation evidence and public preflight/status integration without persisting raw task text.",
+            "artifact": "experiments/decision-helper-baseline-v1.json",
+            "recorded_at": "2026-09-29T02:57:24-07:00",
+            "availability": "tracked_fixture_and_tests"
+          }
           ],
-          "checkpoint": "One-request synthetic Jev fixture, strict response validator and five offline probe tests are ready; core run/cache integration remains pending"
+          "checkpoint": "Default-off typed contracts, strict authority bounds, deterministic fake adapter, schema-13 call/cache accounting, crash/cancel/replay fencing, public preflight/status integration and a frozen synthetic baseline are verified at 87fa9cf",
+          "completed_revision": "87fa9cf"
         },
         {
           "id": "M6-D2",
@@ -353,6 +363,15 @@
           "availability": "tracked_tests"
         },
         {
+          "kind": "decision_helper_checkpoint",
+          "revision": "87fa9cf",
+          "command_or_action": "291 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions, strict off/shadow/advisory authority tests, schema-13 cache/call fencing and public preflight/status integration",
+          "outcome": "The optional helper defaults to zero-call off mode; shadow cannot alter execution and advisory can only reorder already-eligible unpinned profiles under reviewed gate evidence. Invalid or uncertain output, missing adapters, cancellation and launched-unknown recovery preserve deterministic routing without duplicate paid calls or raw task persistence.",
+          "artifact": "experiments/decision-helper-baseline-v1.json",
+          "recorded_at": "2026-09-29T02:57:24-07:00",
+          "availability": "tracked_fixture_and_tests"
+        },
+        {
           "kind": "early_experiment_checkpoint",
           "revision": "70e59cb",
           "command_or_action": "Prepared and offline-validated the explicitly authorized capped Jev pilot before M6 runtime integration",
@@ -362,7 +381,7 @@
           "availability": "tracked_fixture_and_tests"
         }
       ],
-      "blocker": null
+      "blocker": "All independent M6 implementation is complete; the single capped Jev M6-D2 measurement requires TYPESAFE_API_KEY, and M6-D3 runs only if its declared Jev fallback trigger fires"
     },
     {
       "id": "M7",
