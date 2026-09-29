@@ -2,7 +2,7 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 27, 2026
+## Current position — September 29, 2026
 
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` remains the published runtime
@@ -151,9 +151,18 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   `98c6685` adds `squad learn propose --project PATH`, which writes
   content-addressed local JSON/Markdown drafts from one consistent ledger
   snapshot, verifies saved evidence hashes and returns explicit no-change when
-  evidence is absent. The exact gate is 265 core tests with 2 optional-SDK
-  skips and 220 Bash assertions. Lifecycle bindings/qualification, held-out
-  rollback and the default-off decision helper remain open.
+  evidence is absent.
+- M6 profile lifecycle is verified through `ca4ee73`. Schema 12 stores
+  versioned templates, immutable concrete profiles, bounded qualification,
+  compare-and-swap bindings and immutable decision receipts. Promotions affect
+  new runs only; exact pins and frozen runs do not float. `4b27e0c` binds
+  ordinary regression rollback to a saved post-change held-out evaluation.
+  `398ae6a` scopes complete catalog drift to affected profiles while keeping
+  additions unqualified, and `ca4ee73` rolls a removed incumbent only to the
+  newest prior proven/qualified profile under the same template or blocks
+  without mutation. The exact gate is 275 core tests with 2 optional-SDK skips
+  and 220 Bash assertions. Only the default-off decision helper and its
+  external Jev/Laya measurement path remain open in M6.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -180,7 +189,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 265 discovered through M6 learning proposals; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Python core discovery | 275 discovered through the M6 lifecycle/catalog fallback; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
 | Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
@@ -217,11 +226,10 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M6 with lifecycle qualification, compare-and-swap reviewed or
-   guarded promotion, new-run-only bindings and rollback receipts. Exercise a
-   held-out rerun/rollback, then add the default-off decision helper. Do not
-   rebuild the completed M5 offline path, capacity ledger, outcome ledger,
-   experiment evaluator or proposal generator.
+2. Continue M6 at M6-D1 with the default-off typed decision helper, fake
+   adapter, cache/call accounting and off/shadow/advisory authority tests. Do
+   not rebuild the completed M5 offline path, capacity/outcome ledger,
+   experiment evaluator, proposal generator or profile lifecycle.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.

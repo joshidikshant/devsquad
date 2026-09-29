@@ -344,6 +344,15 @@
           "availability": "tracked_tests"
         },
         {
+          "kind": "profile_lifecycle_checkpoint",
+          "revision": "ca4ee73",
+          "command_or_action": "275 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions, focused catalog/lifecycle/CLI tests and a complete-catalog removal fallback",
+          "outcome": "Schema 12 lifecycle templates, qualification, compare-and-swap promotion, new-run-only binding changes, held-out regression rollback and immutable receipts are verified. Catalog drift revalidates only affected profiles, keeps additions unqualified, and an unavailable incumbent rolls back only to the newest prior proven/qualified binding under the same template or blocks without mutation.",
+          "artifact": "M6-STATUS.md",
+          "recorded_at": "2026-09-29T02:31:32-07:00",
+          "availability": "tracked_tests"
+        },
+        {
           "kind": "early_experiment_checkpoint",
           "revision": "70e59cb",
           "command_or_action": "Prepared and offline-validated the explicitly authorized capped Jev pilot before M6 runtime integration",
