@@ -1,7 +1,8 @@
 # M6 implementation status
 
-M6 is **in progress**. Shared capacity observations, reservations and routing
-are verified; outcomes, experiments, lifecycle promotion/rollback and the
+M6 is **in progress**. Shared capacity, the append-only outcome ledger,
+comparison reports and replay-safe one-variable experiment evaluation are
+verified. Draft proposal generation, lifecycle promotion/rollback and the
 default-off decision helper remain open.
 
 | Requirement | Planned evidence | Status |
@@ -10,8 +11,10 @@ default-off decision helper remain open.
 | Shared transactional reservations | Two projects share one pool; one-slot races produce one owner; schema-8 active attempts survive migration; ambiguous ownership retains the reservation | verified at `26ce5cf` |
 | Capacity-aware routing | All applicable windows and profile sublimits affect deterministic selection; a later exhausted observation blocks reservation; paid API remains policy-gated | verified at `d170c01` |
 | Public observation/status surface | `squad capacity observe --file FILE`; replay-safe persistence; status shows frozen and current detailed evidence | verified at `d170c01` |
-| Final and late outcomes | Preserve attempt contribution, lead repair, final success and escaped-defect corrections without crediting failed attempts | pending |
-| Comparison reports and proposals | Sample sizes, missingness, selection mode, one-variable experiment, held-out rerun, no-change/promotion proposal and rollback target | pending |
+| Final and late outcomes | Preserve attempt contribution, lead repair, final success and escaped-defect corrections without crediting failed attempts | verified at `d621df2` |
+| Comparison reports | Sample sizes, missingness and separated automatic/pinned/experimental evidence | verified at `45ebc9e` |
+| Frozen experiment evaluation | One-variable paired evaluation/held-out cases, failure evidence, no-change or promotion-proposal verdict and rollback target; evaluation never changes active policy | verified at `edfb3f3` |
+| Draft proposals and held-out rerun | `learn propose`, review packet and post-change held-out/rollback evidence | pending |
 | Model lifecycle | Templates, qualification budgets, reviewed/guarded-auto promotion, compare-and-swap bindings, new-run-only effects and rollback receipts | pending |
 | Decision helper M6-D1 | Default-off typed contract, fake adapter, cache/accounting and authority/integrity tests | in progress; synthetic Jev probe mechanics only |
 | Jev M6-D2 | One capped synthetic request with exact model/usage/latency/cost receipt | blocked on `TYPESAFE_API_KEY` |
@@ -41,11 +44,31 @@ replay-safe JSON, and run status returns both frozen and current windows.
 The checkpoint gate is **255 core tests with 2 optional-SDK skips** and
 ResourceWarning promoted to error, plus **220/220 Bash assertions**.
 
+## Outcome and experiment checkpoint
+
+Schema 10 adds append-only final and late-correction outcomes bound to saved
+runs and attempts. A repaired task can succeed without falsely crediting the
+failed original attempt, while a later escaped defect remains attached to the
+original final verdict. `squad report --project PATH` reports sample size,
+missingness and explicit contribution credit separately for automatic,
+pinned and experimental selections.
+
+Schema 11 adds immutable experiment specifications and replay-safe evaluation.
+`squad policy evaluate --experiment FILE` compares declared control/candidate
+pairs across evaluation and held-out splits, records missing and failed cases,
+enforces non-inferiority/gain/escaped-defect gates and preserves an explicit
+rollback version. Its output is only `no_change` or `promotion_proposal` and
+always records `active_policy_changed: false`; reusing an experiment ID with a
+different specification conflicts.
+
+The combined checkpoint gate is **263 core tests with 2 optional-SDK skips**
+and ResourceWarning promoted to error, plus **220/220 Bash assertions**.
+
 ## Exact next slice
 
-Add the schema-10 outcome ledger and `learning.py`: strict final/late records,
-append-only corrections, attempt/lead contribution attribution, selection-mode
-separation and comparison reports with sample sizes and missingness. Prove that
-a failed original attempt later repaired by another profile yields final task
-success without crediting the failed attempt, and that a late escaped defect
-updates history without erasing the original verdict.
+Add `squad learn propose --project PATH`: derive a local, reviewable proposal
+packet from the comparison report and latest frozen experiment. It must retain
+sample sizes, missingness, every evaluation failure, evidence hashes and the
+rollback target; insufficient or absent evidence must produce `no_change` and
+must not mutate routing. Then implement versioned profile lifecycle bindings,
+qualification and guarded promotion/rollback.

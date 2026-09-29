@@ -326,6 +326,15 @@
           "availability": "tracked_tests"
         },
         {
+          "kind": "learning_evaluation_checkpoint",
+          "revision": "edfb3f3",
+          "command_or_action": "263 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 220 Bash assertions, replay-safe outcome/experiment persistence and public report/evaluate CLI tests",
+          "outcome": "Schemas 10 and 11 preserve final and late outcomes, truthful attempt contribution, selection-mode-separated reports and immutable paired evaluation/held-out experiments. Missing or failed evidence produces no-change, qualifying evidence produces only a promotion proposal with rollback, conflicting replay is fenced and evaluation never mutates active policy.",
+          "artifact": "M6-STATUS.md",
+          "recorded_at": "2026-09-29T08:42:48Z",
+          "availability": "tracked_tests"
+        },
+        {
           "kind": "early_experiment_checkpoint",
           "revision": "70e59cb",
           "command_or_action": "Prepared and offline-validated the explicitly authorized capped Jev pilot before M6 runtime integration",

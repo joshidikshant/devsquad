@@ -141,6 +141,16 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   observe --file FILE` and frozen/current status evidence are wired. The gate
   is 255 core tests with 2 optional-SDK skips and 220 Bash assertions. See
   [M6-STATUS.md](M6-STATUS.md).
+- M6 outcome/report/experiment evaluation is verified through `edfb3f3`.
+  Schema 10 records append-only final and late outcomes with truthful attempt
+  contribution, and reports separate automatic, pinned and experimental
+  evidence with sample size and missingness. Schema 11 freezes one-variable
+  paired experiments, evaluates evaluation and held-out splits, retains every
+  failure and rollback target, rejects conflicting replay and never changes
+  active policy. The public path is `squad policy evaluate --experiment FILE`.
+  The exact gate is 263 core tests with 2 optional-SDK skips and 220 Bash
+  assertions. Draft `learn propose`, lifecycle bindings/qualification and the
+  default-off decision helper remain open.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -167,7 +177,7 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 255 discovered through M6 capacity routing; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Python core discovery | 263 discovered through M6 experiment evaluation; suite OK with 2 optional-SDK skips and ResourceWarning promoted to error |
 | Bash 3.2 regression suite | 10 test files, 220 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
@@ -204,11 +214,11 @@ advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Continue M6 with the outcome/learning ledger: final and late corrections,
-   attempt/lead contribution, selection-mode separation, comparable reports
-   and one-variable proposal/rollback evidence. Then add lifecycle
-   qualification/guarded promotion and the default-off decision helper. Do not
-   rebuild the completed M5 offline path or capacity ledger.
+2. Continue M6 with `learn propose`, keeping insufficient evidence as an
+   explicit no-change and active routing untouched. Then add lifecycle
+   qualification/guarded promotion and rollback, followed by the default-off
+   decision helper. Do not rebuild the completed M5 offline path, capacity
+   ledger, outcome ledger or experiment evaluator.
 3. Keep the M4 Claude/Grok/Antigravity probes paused until their normal login
    or trust blockers are resolved. Their live gates remain open, but M5 may
    proceed independently from accepted M3.
