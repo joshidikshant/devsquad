@@ -1,22 +1,23 @@
 # M5 implementation status
 
-M5 is **blocked on its external live gate**. All independently executable
-offline implementation and fault-injection work is complete; the milestone
-remains incomplete until a normally authenticated Claude implementation and a
-different-model Codex review pass the live two-harness gate.
+M5 is **in progress with independent repairs available**. The September 29
+review at `f4fa657` reopened candidate integrity (F1), observed Claude identity
+(F2) and complete normal-command check coverage (G4). Execute R1/R2/R6 in
+[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The genuine Claude-to-Codex
+live gate additionally remains blocked on normal Claude login.
 
 | Requirement | Planned evidence | Status |
 |---|---|---|
-| Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | verified offline at `d96e9e4` |
+| Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | argv conformance verified at `d96e9e4`; observed identity reopened under R2 |
 | Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | verified offline at `0e88d73` |
 | Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `0e88d73` |
-| Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | workflow and identity gate verified offline at `b7d90cc`; live proof pending |
-| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | verified offline through two distinct candidates at `4c76887` |
+| Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | reopened under R2; prior fixtures do not detect fabricated observed identity; live proof pending |
+| Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | reopened under R1/R6 for check mutation and normal-command check coverage |
 | Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | correction/budgets verified at `4c76887`; same-permission delivery fallback verified at `b7d90cc` |
-| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | verified offline at `a1199c6` and `b7d90cc` |
+| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | historical failure gates pass; R1/R2 must reject invalid candidate/identity evidence |
 | Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | success, repair, fallback, failure and cancellation history verified offline at `b7d90cc` |
 | Crash recovery | Killing a live implementation supervisor cannot create a duplicate writer on resume | prelaunch and live revised-writer recovery verified offline at `f199cd2` |
-| Live acceptance | One bounded issue completes across at least two authenticated subscription harnesses with different verified models | blocked on normal Claude CLI login |
+| Live acceptance | One bounded issue completes across at least two authenticated subscription harnesses with different verified models | pending repairs and normal Claude CLI login |
 
 ## Boundary
 
@@ -136,7 +137,7 @@ passes **241 core tests with 2 optional-SDK skips** and ResourceWarning promoted
 to error. The compatibility gate remains **220/220 Bash assertions**; the last
 code change after that run added only the delivery-specific Python regression.
 
-No independent M5 implementation work remains. The unresolved acceptance gate
-is intentionally not replaced with fixture evidence: normal Claude CLI login
-is required to run a genuine bounded implementation followed by different-
-model Codex review/check/disposition and save the redacted two-harness receipt.
+This checkpoint's independent-completion assessment was superseded by the
+September 29 review. Repair F1/F2/G4 before the genuine implementation and
+different-model review/check/disposition gate. Normal Claude login remains
+required for that redacted two-harness receipt.

@@ -1,10 +1,11 @@
 # M7 implementation status
 
-M7 has **completed all independently executable packaging and normal-entry
-work**. The standalone runtime is installed and usable from terminal, Codex
-and Antigravity. M7 remains blocked on normal Claude and Grok authentication;
-the installed different-model delivery is the same external gate retained by
-M5.
+M7 is **in progress with independent normal-entry and readiness work**.
+Installation and the recorded Codex/Gemini operations work, but the September
+29 review found routing, terminal handoff, authentication-readiness and check-
+discovery gaps (F4/G3/G4). Execute R4/R6/R8 in
+[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). Claude and Grok authentication
+remain additional blockers for the corresponding live proofs.
 
 | Requirement | Evidence | Status |
 |---|---|---|
@@ -18,9 +19,9 @@ M5.
 | Antigravity operation | Gemini 3.8 Flash Low called installed `squad_status` with one project-scoped grant | verified live |
 | Claude Code operation | Registration matching; real operation requires normal login | blocked externally |
 | Grok Build operation | Registration matching; real operation requires renewed authentication | blocked externally |
-| Installed two-model delivery | Genuine Claude implementation followed by different-model Codex review/check/disposition | blocked with M5 |
-| Documentation/CI | Runtime guide, generated command reference and macOS/Python/optional-MCP workflow | clean-home install/setup/doctor passed |
-| Normal task entry | Installed `squad review --base ...` and `squad fix "..."` dry-runs plus an offline end-to-end delivery | verified |
+| Installed two-model delivery | Genuine Claude implementation followed by different-model Codex review/check/disposition | pending M5 repairs and Claude authentication |
+| Documentation/CI | Runtime guide, generated command reference and macOS/Python/optional-MCP workflow | historical installation checks pass; readiness/quickstart updates pending R6 |
+| Normal task entry | Installed `squad review --base ...` and `squad fix "..."` dry-runs plus an offline end-to-end delivery | reopened under R4/R6 for approved routing, terminal completion and check coverage |
 | Live normal Codex review | Exact commit range, verified read-only gpt-5.5/low review, isolated trusted checks and artifact-bound host acceptance | verified live at `b1d52ad` |
 
 ## Current installation
@@ -85,11 +86,13 @@ read-only sandbox, no conversation resume and only the DevSquad MCP server.
 
 ## Exact remaining work
 
-1. After normal Claude login, execute the saved M4 handoff and the M5 genuine
+1. Complete R4/R6 normal routing, terminal disposition, optional run resolution,
+   authentication readiness and committed-target check discovery offline.
+2. After normal Claude login, execute the saved M4 handoff and the M5 genuine
    Claude implementation to different-model Codex delivery.
-2. After Grok login renewal, record one supported Grok Build operation against
+3. After Grok login renewal, record one supported Grok Build operation against
    the same installed runtime.
-3. Re-run the final gates and mark M7 complete only when every required surface
+4. Run the affected final gates and mark M7 complete only when every required surface
    receipt and installed delivery is present.
 
 `squad council` remains attached to the separately gated C1 implementation and

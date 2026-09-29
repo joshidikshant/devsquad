@@ -4,6 +4,35 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ## Current position — September 29, 2026
 
+### Review correction and next action
+
+The review of `f4fa6577e2e891151231c9c7d3180be6e9e23faa` supersedes the earlier
+claim that only credentials remain. M1/M2 remain accepted; M3 is reopened for
+candidate integrity (F1); M4 retains its real-Claude-host gate; M5–M7 have
+independent repairs and integration work; C1 remains pending full-delivery
+scope. No runtime repairs were made during the review or this planning update.
+
+Execute [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), starting at **R1**:
+reproduce source-mutating trusted checks through the public service and prevent
+acceptance of invalid candidate evidence. Then repair Claude identity (R2),
+independent experiment evidence (R3), routing/catalog/quota (R4), learning
+runtime connections (R5), and normal terminal/readiness/check discovery (R6).
+R7 covers C1 and R8 covers installed/live closure. Authentication and the Jev
+key block their specific live subgates, not the independent engineering work.
+
+Fresh review verification ran 317 Python tests successfully (2 optional-SDK
+skips), 227 Bash assertions, generated-reference validation and an installed
+payload comparison. An unclosed SQLite `ResourceWarning` still appeared and
+is assigned to R5. Existing live receipts remain evidence of their exact runs,
+not proof that the newly identified failure cases are safe. See the follow-up
+plan for reproduction details and evidence limits, and
+[backlog.json](backlog.json) for current work-package dependencies.
+
+### Preserved implementation checkpoints
+
+The following records describe earlier implementation and verification;
+the review correction above governs current completion and next work.
+
 - Workspace: `/Users/Dikshant/Desktop/Projects/devsquad`.
 - Build branch: `codex/engineering-team`. `main` remains the published runtime
   baseline. Inspect current refs before acting; later build checkpoints may be
@@ -22,7 +51,7 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   bounded target. `ddb6f51` fixes both: lease authorization now samples time
   after acquiring the SQLite write transaction, and public cancel resumes an
   interrupted `recovery_cleanup`. Both have deterministic regressions.
-- M3 is accepted at `1737667`. The branch-review path now includes frozen
+- M3 was accepted at `1737667` and is now reopened for F1. The branch-review path includes frozen
   routing/input, native and offline reviewers, trusted checks, fenced host and
   headless lead disposition, complete waiting/terminal reports, cumulative
   budgets, transactional pool capacity and bounded frozen fallbacks. The final
@@ -75,8 +104,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   planning agents all hit the same Plus limit; continue locally until shared
   agent capacity is restored, then use only bounded leaf reviews.
 - Full assignment remains **M1–M7 plus C1**, as specified in
-  [SOL-HANDOFF.md](SOL-HANDOFF.md). M5 and M6 have no remaining independent
-  work; their external Claude and Jev gates remain recorded while M7 proceeds.
+  [SOL-HANDOFF.md](SOL-HANDOFF.md). The current review work packages R1–R8
+  replace the earlier credentials-only assessment of M5–M7.
 - M5 Plan 07-01 has started at `d96e9e4`. The core and Bash compatibility
   boundaries now include a Claude 2.1.220 headless adapter with structured
   output, version-scoped model/effort preparation, explicit Read/Glob/Grep or
@@ -120,16 +149,16 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   tests (2 optional-SDK skips) and 220 Bash assertions. Delivery fallback,
   failure/cancellation history, live Claude execution and the live two-harness
   proof remain open.
-- M5 has completed all independently executable offline work at `f199cd2`.
+- M5 was assessed as offline-complete at `f199cd2`; F1/F2/G4 now reopen that assessment.
   `b7d90cc` freezes the real Claude implementation bridge, records observed
   identity/session/usage, enforces the same-permission rate-limit fallback and
   preserves delivery failure/cancellation history. `f199cd2` kills a live
   revised-implementation supervisor and proves retained ownership, no duplicate
   writer, successful reap and unchanged source checkout/remotes. The exact core
   gate is 241 tests with 2 optional-SDK skips and ResourceWarning promoted to
-  error; the compatibility gate is 220 Bash assertions. M5 is now blocked only
-  on normal Claude login for the genuine Claude implementation → different-
-  model Codex review/check/disposition receipt.
+  error; the compatibility gate is 220 Bash assertions. Normal Claude login
+  remains required for the genuine Claude implementation → different-model
+  Codex review/check/disposition receipt, after the independent repairs.
 - M6 shared-capacity work is verified through `d170c01`. Schema 9 persists
   strict scoped observations and reservations, backfills active schema-8
   attempts and keeps ambiguous ownership in flight. Two separate projects
@@ -160,8 +189,8 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   additions unqualified, and `ca4ee73` rolls a removed incumbent only to the
   newest prior proven/qualified profile under the same template or blocks
   without mutation. The exact gate is 275 core tests with 2 optional-SDK skips
-  and 220 Bash assertions. Only the default-off decision helper and its
-  external Jev/Laya measurement path remain open in M6.
+  and 220 Bash assertions. These component checkpoints do not close the
+  evidence-integrity and missing runtime connections now assigned to R3–R5.
 - M6-D1 is verified at `87fa9cf`. The optional decision helper defaults to off;
   shadow records without changing execution, and advisory can only reorder the
   deterministic router's already-eligible profiles under reviewed gate
@@ -202,8 +231,9 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   [installed-runtime evidence](evidence/M7-installed-runtime-2026-09-29.json)
   plus [normal-entry evidence](evidence/M7-normal-entry-2026-09-29.json) and
   [live Codex review evidence](evidence/M7-live-codex-review-2026-09-29.json).
-  M7 has no remaining independent work; normal Claude login, renewed Grok
-  authentication and the installed two-model delivery are external blockers.
+  R4/R6 now identify remaining independent work; normal Claude login, renewed
+  Grok authentication and the installed two-model delivery are additional
+  external gates.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -218,7 +248,7 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   Bash assertions. The live call is
   blocked because the TypeSafe console is at login and no `TYPESAFE_API_KEY`
   exists. Classifier suggestions never become permission/acceptance authority.
-  After the bounded probe, M5 remains the implementation priority.
+  Do not wait for this probe to execute the review repairs starting at R1.
 
 ## Completed and preserved
 
@@ -262,24 +292,30 @@ the earlier apparent nonresponses.
 The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md),
 [M2-STATUS.md](M2-STATUS.md), [M3-STATUS.md](M3-STATUS.md),
 [M5-STATUS.md](M5-STATUS.md), [M6-STATUS.md](M6-STATUS.md) and
-[M7-STATUS.md](M7-STATUS.md). [backlog.json](backlog.json) marks M1–M3
-complete, M4/M5 blocked on Claude, M6 blocked on the missing Jev key, and M7
-blocked only on Claude/Grok live receipts. Unauthenticated or unsupported
-provider paths are not advertised as verified.
+[M7-STATUS.md](M7-STATUS.md). [backlog.json](backlog.json) marks M1/M2 complete,
+M3/M5/M6/M7 in progress, M4 blocked on its real Claude handoff, and C1 pending.
+The review correction and [Sol follow-up plan](SOL-REVIEW-FOLLOWUP.md) govern
+where historical verification is incomplete. Unauthenticated or unsupported
+provider paths must not be advertised as verified.
 
 ## Exact next work
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Keep Claude and Grok live probes paused until normal login is restored.
+2. Execute R1's failing public-service candidate-integrity regression, repair
+   the shared review/delivery gate and checkpoint its evidence. Continue R2/R3,
+   then R4–R6 in dependency order. Preserve later implementation and historical
+   receipts; do not rewrite the architecture or reset completed work.
+3. Keep Claude and Grok live probes paused until normal login is restored.
    Afterward, run the M4 Claude handoff, the M5 installed Claude-to-Codex
    delivery and one bounded Grok operation, retaining only redacted evidence.
-3. Keep M6 decision guidance off by default. Once `TYPESAFE_API_KEY` is
+4. Keep M6 decision guidance off by default. Once `TYPESAFE_API_KEY` is
    supplied, run the prepared one-request synthetic Jev pilot immediately with
    no retry and the $0.01 ceiling. Install/run Laya only if the predeclared Jev
    cost/access/quality trigger fires.
-4. Keep `squad council` scoped to the separately gated C1 extension; it does
-   not reopen M7 and remains pending after the current M5–M7 goal.
+5. Complete the separately gated C1 extension under R7 and audit installed/live
+   closure under R8. C1 is required in the full assignment even though it does
+   not reopen M7. Record each blocked subgate without pausing unrelated work.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 

@@ -1,5 +1,11 @@
 # Sol execution handoff — build, test and make DevSquad usable
 
+**Current continuation:** Start with
+[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The September 29 review at
+`f4fa657` reopened shared M3 acceptance integrity and independent M5–M7 work.
+That plan supplies the current findings, ordered repairs and acceptance gates;
+the full scope and constraints below remain in force.
+
 This is the full execution prompt for Sol. It is an implementation assignment; the underlying runtime is still pending at handoff creation. Copy this document into Sol, or ask Sol to read this file and execute it in full.
 
 ## Objective and persistence

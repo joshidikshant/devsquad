@@ -1,6 +1,11 @@
 # M3 implementation status
 
-M3 is **complete** at implementation checkpoint `1737667`. The final gate
+M3 is **reopened for candidate-integrity repair R1** after the September 29
+review at `f4fa657`. A check that changes tracked source can produce passing
+evidence for the original candidate. See F1 and its required public-service
+regression in [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md).
+
+M3 was accepted at implementation checkpoint `1737667`. That historical gate
 passes 188 core tests with `ResourceWarning` promoted to an error and all 10
 Bash regression files/202 assertions. The bounded live Codex review evidence
 remains the successful subscription-backed run recorded at `9478796`; no
@@ -11,7 +16,7 @@ additional provider turn was used for the closeout.
 | Deterministic selection | Versioned profile aliases, exact pins, explicit `none`/`policy` fallback, permission/billing filters and typed capacity produce stable frozen routing snapshots | verified offline |
 | Frozen branch input | Base/target refs resolve to exact OIDs; committed config hashes, candidate hash and detached review/check workspaces remain stable while the submitted checkout, index and HEAD are preserved | verified offline |
 | Reviewer evidence | Strict ordinary/adversarial prompts, review/check/evaluation schemas, candidate binding, read-only identity checks and malformed/denied/disconnected output faults prevent unsupported success | verified offline |
-| Check and lead gates | Report-only failure stays visible without blocking acceptance; required failure blocks acceptance; host and headless leads support accept/reject/revise with bounded revisions | verified offline |
+| Check and lead gates | Report-only/required failures and bounded dispositions have historical tests; source-changing checks expose a candidate-integrity gap | reopened: R1 |
 | Durable host handoff | Waiting JSON/Markdown packets, claim leases, renewal/takeover, stale completion fencing, replay and crash-resume continuation share the saved run ledger | verified offline |
 | Terminal reporting | Success, rejection, preflight failure, worker failure, cancellation, waiting cancellation, timeout and budget exhaustion publish receipt JSON/Markdown, events, manifest and result receipt | verified offline |
 | Headless leadership | Offline and native headless leads run as separate fenced attempts, verify their own frozen identity/evidence and terminalize without host intervention | verified offline |

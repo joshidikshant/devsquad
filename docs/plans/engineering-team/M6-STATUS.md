@@ -1,24 +1,26 @@
 # M6 implementation status
 
-M6 is **blocked with all independent implementation complete**. Shared capacity, the append-only outcome ledger,
-comparison reports, replay-safe one-variable experiment evaluation, proposal
-generation, the complete offline profile lifecycle and the default-off typed
-decision helper are verified. Only the externally blocked Jev measurement and
-its conditional Laya follow-up remain open.
+M6 is **in progress with independent repairs and integration work available**.
+The component tests below remain useful historical evidence, but the
+September 29 review found reused held-out evidence (F3), normal routing that
+bypasses lifecycle bindings (F4), and missing public outcome/experiment,
+catalog and quota connections (G1/G2). Execute R3–R5 in
+[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The Jev key blocks only its
+separate measurement; it does not block this engineering work.
 
 | Requirement | Planned evidence | Status |
 |---|---|---|
 | Strict capacity evidence | Typed pool/window/scope/source/confidence/TTL validation; stale, estimated and incomplete measurements remain unknown | verified at `21b1331` |
 | Shared transactional reservations | Two projects share one pool; one-slot races produce one owner; schema-8 active attempts survive migration; ambiguous ownership retains the reservation | verified at `26ce5cf` |
 | Capacity-aware routing | All applicable windows and profile sublimits affect deterministic selection; a later exhausted observation blocks reservation; paid API remains policy-gated | verified at `d170c01` |
-| Public observation/status surface | `squad capacity observe --file FILE`; replay-safe persistence; status shows frozen and current detailed evidence | verified at `d170c01` |
-| Final and late outcomes | Preserve attempt contribution, lead repair, final success and escaped-defect corrections without crediting failed attempts | verified at `d621df2` |
-| Comparison reports | Sample sizes, missingness and separated automatic/pinned/experimental evidence | verified at `45ebc9e` |
-| Frozen experiment evaluation | One-variable paired evaluation/held-out cases, failure evidence, no-change or promotion-proposal verdict and rollback target; evaluation never changes active policy | verified at `edfb3f3` |
+| Public observation/status surface | `squad capacity observe --file FILE`; replay-safe persistence; status shows frozen and current detailed evidence | manual path verified at `d170c01`; native ingestion pending R4 |
+| Final and late outcomes | Preserve attempt contribution, lead repair, final success and escaped-defect corrections without crediting failed attempts | manual components verified at `d621df2`; terminal projection pending R5 |
+| Comparison reports | Sample sizes, missingness and separated automatic/pinned/experimental evidence | components verified at `45ebc9e`; public runtime evidence pending R5 |
+| Frozen experiment evaluation | One-variable paired evaluation/held-out cases, failure evidence, no-change or promotion-proposal verdict and rollback target; evaluation never changes active policy | reopened under R3 for reused/non-comparable evidence and R5 for real assignments |
 | Draft proposals | `learn propose` emits content-addressed JSON/Markdown with hashes, sample sizes, missingness, failures and rollback; no evidence yields no-change | verified at `98c6685` |
-| Held-out rerun and rollback | Post-change held-out evidence and exercised rollback through lifecycle bindings | verified at `4b27e0c` |
-| Model lifecycle | Templates, qualification budgets, reviewed/guarded-auto promotion, compare-and-swap bindings, new-run-only effects and rollback receipts | verified through `ca4ee73` |
-| Catalog drift and unavailable incumbent | Complete catalog drift scopes revalidation; added models stay unqualified; removed incumbents roll back only to a prior proven/qualified binding or block | verified at `398ae6a` / `ca4ee73` |
+| Held-out rerun and rollback | Post-change held-out evidence and exercised rollback through lifecycle bindings | historical components at `4b27e0c`; evidence/runtime chain reopened under R3/R5 |
+| Model lifecycle | Templates, qualification budgets, reviewed/guarded-auto promotion, compare-and-swap bindings, new-run-only effects and rollback receipts | components through `ca4ee73`; qualification integrity and normal alias routing reopened under R3/R4 |
+| Catalog drift and unavailable incumbent | Complete catalog drift scopes revalidation; added models stay unqualified; removed incumbents roll back only to a prior proven/qualified binding or block | component tests at `398ae6a` / `ca4ee73`; production discovery connection pending R4 |
 | Decision helper M6-D1 | Default-off typed contract, fake adapter, cache/accounting and authority/integrity tests | verified at `87fa9cf` |
 | Jev M6-D2 | One capped synthetic request with exact model/usage/latency/cost receipt | blocked on `TYPESAFE_API_KEY` |
 | Laya M6-D3 | Triggered pinned local comparison and measured keep-off/adopt decision | pending; run only if the declared Jev trigger fires |
@@ -135,8 +137,7 @@ with 2 optional-SDK skips** and **220/220 Bash assertions**.
 
 ## Exact next slice
 
-Keep the one-request Jev M6-D2 gate blocked until `TYPESAFE_API_KEY` is
-supplied. Do not install or run Laya unless the predeclared Jev access,
-cost/usage or measured-quality trigger fires. M7's independently executable
-packaging, installation, update-safety and Codex review work is complete; its
-remaining live gates do not substitute for the Jev measurement.
+Begin R3's failing repeated-outcome regression, then wire R4/R5 through public
+saved runs. Keep the one-request Jev M6-D2 gate blocked until
+`TYPESAFE_API_KEY` is supplied. Do not install or run Laya unless its declared
+trigger fires. A synthetic pilot does not prove production routing quality.

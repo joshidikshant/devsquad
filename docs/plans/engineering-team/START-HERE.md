@@ -1,10 +1,12 @@
 # DevSquad: coding-agent entry point
 
 **Build status: implementation in progress.** After an interruption, read
-[RESUME.md](RESUME.md) first and compare it with current Git state. M1–M3 are
-accepted; M4's actual Claude handoff is externally blocked and M5 is in
-progress. See [backlog.json](backlog.json) for evidence. Do not restart the
-architecture exercise.
+[RESUME.md](RESUME.md) first and compare it with current Git state. M1/M2 are
+accepted; the September 29 review reopened M3 acceptance integrity and M5–M7
+implementation gaps. M4's actual Claude handoff remains externally blocked.
+Execute [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md) and use
+[backlog.json](backlog.json) for evidence. Do not restart the architecture
+exercise.
 
 **Full-build assignment:** Use [SOL-HANDOFF.md](SOL-HANDOFF.md) for the user's request to have Sol execute everything, test thoroughly and make normal use simple. It includes M1–M7 plus the opt-in Council feature, and adds guided task entry over the same contracts.
 
@@ -46,9 +48,10 @@ task upload is authorized.
 ```text
 Implement DevSquad's September engineering-team plan in this repository.
 Read docs/plans/engineering-team/RESUME.md, current Git state,
-START-HERE.md and its contracts first. Preserve existing implementation.
-Start at the earliest pending milestone whose dependencies are complete.
-Implement M1 and pass its gate, then continue through M2–M7 and C1.
+SOL-REVIEW-FOLLOWUP.md, START-HERE.md and the relevant contracts first.
+Preserve existing implementation and historical receipts.
+Start with R1's candidate-integrity regression, then execute the remaining
+review packages through M5–M7 and C1. Do not restart completed M1/M2 work.
 Preserve existing Bash 3.2 wrapper callers and their four error prefixes.
 Keep all distributable core files inside plugin/core; add no cloud service.
 Use fake CLIs for development; real provider runs are bounded smoke tests.

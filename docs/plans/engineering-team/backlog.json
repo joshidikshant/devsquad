@@ -10,9 +10,27 @@
   "model_lifecycle_and_native_adapters": "MODEL-LIFECYCLE-AND-NATIVE-ADAPTERS.md",
   "decision_classifiers": "DECISION-CLASSIFIERS.md",
   "execution_brief": "SOL-HANDOFF.md",
+  "review_followup": "SOL-REVIEW-FOLLOWUP.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
-  "next_milestone": "M7",
+  "next_milestone": "M3",
+  "review_checkpoint": {
+    "reviewed_revision": "f4fa6577e2e891151231c9c7d3180be6e9e23faa",
+    "recorded_on": "2026-09-29",
+    "artifact": "SOL-REVIEW-FOLLOWUP.md",
+    "verification": "317 Python tests completed successfully with 2 optional-SDK skips; 227 Bash assertions passed; recurring SQLite cleanup warning remains; new integrity reproductions expose missing coverage",
+    "assessment": "M3 acceptance integrity and M5-M7 independent engineering work are reopened. Historical receipts remain evidence for their recorded scope; credentials are not the only remaining work."
+  },
+  "review_work_packages": [
+    {"id": "R1", "title": "Candidate integrity through trusted checks", "status": "pending", "milestones": ["M3", "M5"], "depends_on": [], "items": ["F1"]},
+    {"id": "R2", "title": "Observed Claude execution identity", "status": "pending", "milestones": ["M5"], "depends_on": [], "items": ["F2"]},
+    {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "pending", "milestones": ["M6"], "depends_on": [], "items": ["F3"]},
+    {"id": "R4", "title": "Normal routing, catalog lifecycle and quota", "status": "pending", "milestones": ["M6", "M7"], "depends_on": ["R1", "R2", "R3"], "items": ["F4", "G2"]},
+    {"id": "R5", "title": "Public saved-run outcomes and bounded experiments", "status": "pending", "milestones": ["M6"], "depends_on": ["R3", "R4"], "items": ["G1"]},
+    {"id": "R6", "title": "Normal terminal experience and readiness", "status": "pending", "milestones": ["M5", "M7"], "depends_on": ["R1", "R2", "R4", "R5"], "items": ["G3", "G4"]},
+    {"id": "R7", "title": "Complete Council within existing runner", "status": "pending", "milestones": ["C1"], "depends_on": ["R1", "R2", "R3", "R4", "R5", "R6"], "items": ["G5"]},
+    {"id": "R8", "title": "Installed proofs, external gates and closure audit", "status": "pending", "milestones": ["M4", "M5", "M6", "M7", "C1"], "depends_on": ["R1", "R2", "R3", "R4", "R5", "R6"], "items": [], "note": "Core installed proofs may proceed before R7; full-delivery closure also requires R7. Auth/key-dependent subgates remain separately blocked."}
+  ],
   "milestones": [
     {
       "id": "M1",
@@ -83,8 +101,9 @@
       "id": "M3",
       "title": "Usable branch review from terminal",
       "depends_on": ["M2"],
-      "status": "complete",
+      "status": "in_progress",
       "acceptance_section": "M3 — Ship a useful branch review",
+      "open_review_items": ["F1"],
       "evidence": [
         {
           "kind": "implementation_checkpoint",
@@ -211,8 +230,9 @@
       "id": "M5",
       "title": "Bounded implementation with independent review",
       "depends_on": ["M3"],
-      "status": "blocked",
+      "status": "in_progress",
       "acceptance_section": "M5 — Deliver a bounded engineering change",
+      "open_review_items": ["F1", "F2", "G4"],
       "evidence": [
         {
           "kind": "implementation_checkpoint",
@@ -269,14 +289,15 @@
           "availability": "tracked_tests"
         }
       ],
-      "blocker": "Normal Claude CLI login is required for the genuine bounded Claude implementation followed by different-model Codex review/check/disposition; offline fixtures are not substituted for the two-harness acceptance receipt"
+      "blocker": "Independent R1/R2/R6 repairs remain available. The later genuine Claude-to-Codex delivery gate also requires normal Claude login; fixtures cannot substitute for that receipt."
     },
     {
       "id": "M6",
       "title": "Shared capacity and evidence-based improvement",
       "depends_on": ["M4", "M5"],
-      "status": "blocked",
+      "status": "in_progress",
       "acceptance_section": "M6 — Make capacity and improvement evidence useful",
+      "open_review_items": ["F3", "F4", "G1", "G2"],
       "decision_helper_work_packages": [
         {
           "id": "M6-D1",
@@ -381,14 +402,15 @@
           "availability": "tracked_fixture_and_tests"
         }
       ],
-      "blocker": "All independent M6 implementation is complete; the single capped Jev M6-D2 measurement requires TYPESAFE_API_KEY, and M6-D3 runs only if its declared Jev fallback trigger fires"
+      "blocker": "Independent R3-R5 evidence, routing, learning and observation integration remains. Only the separate single-request Jev measurement requires TYPESAFE_API_KEY; Laya remains conditional."
     },
     {
       "id": "M7",
       "title": "Installation, migration and all-surface proof",
       "depends_on": ["M6"],
-      "status": "blocked",
+      "status": "in_progress",
       "acceptance_section": "M7 — Package, migrate and prove every requested surface",
+      "open_review_items": ["F4", "G3", "G4"],
       "evidence": [
         {
           "kind": "packaging_checkpoint",
@@ -427,7 +449,7 @@
           "availability": "portable_redacted"
         }
       ],
-      "blocker": "All independently executable M7 work is complete. Universal surface completion requires normal Claude login for the M4/M5 handoff and installed delivery receipts plus renewed Grok authentication for its live smoke."
+      "blocker": "Independent R4/R6 normal-entry, readiness and check-discovery work remains. Final live surface and delivery receipts additionally require Claude login and renewed Grok authentication."
     }
   ],
   "extensions": [
