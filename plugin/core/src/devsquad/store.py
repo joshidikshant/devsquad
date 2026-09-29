@@ -1667,6 +1667,7 @@ class Store:
                     "guarded automatic promotion is not enabled",
                 )
             qualification_payload = None
+            rollback_evaluation = None
             if request["action"] == "promote":
                 qualification = self.connection.execute(
                     "SELECT q.alias,q.template_id,q.profile_id,q.verdict,"
@@ -1738,6 +1739,35 @@ class Store:
                     raise ContractError(
                         "guarded automation cannot change lifecycle policy",
                     )
+                regression = self.connection.execute(
+                    "SELECT spec_json,evaluation_json,evaluation_sha256,verdict "
+                    "FROM experiments WHERE experiment_id=?",
+                    (request["experiment_id"],),
+                ).fetchone()
+                if (regression is None
+                        or regression["evaluation_sha256"]
+                        != request["evaluation_sha256"]
+                        or regression["verdict"] != "no_change"):
+                    raise ContractError(
+                        "rollback requires saved no-change regression evidence",
+                    )
+                regression_spec = json.loads(regression["spec_json"])
+                regression_evaluation = json.loads(regression["evaluation_json"])
+                variable = regression_spec["variable"]
+                if (variable["alias"] != request["alias"]
+                        or variable["candidate_profile_id"] != current["profile_id"]
+                        or variable["control_profile_id"] != target_profile["id"]):
+                    raise ContractError(
+                        "rollback experiment does not compare the active and target profiles",
+                    )
+                rollback_evaluation = {
+                    "experiment_id": request["experiment_id"],
+                    "evaluation_sha256": request["evaluation_sha256"],
+                    "verdict": regression["verdict"],
+                    "reasons": regression_evaluation["reasons"],
+                    "metrics": regression_evaluation["metrics"],
+                    "failures": regression_evaluation["failures"],
+                }
             if target_profile["id"] == current["profile_id"]:
                 raise ConflictError("binding already targets the requested profile")
             new_version = current["version"] + 1
@@ -1774,6 +1804,7 @@ class Store:
                     request["rollback_target"]
                     if request["action"] == "rollback" else None
                 ),
+                "rollback_evaluation": rollback_evaluation,
                 "effective_at": recorded_at,
                 "affects_new_runs_only": True,
             }

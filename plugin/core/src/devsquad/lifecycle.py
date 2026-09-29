@@ -26,7 +26,7 @@ QUALIFICATION_FIELDS = {
 BINDING_CHANGE_FIELDS = {
     "schema_version", "decision_id", "action", "alias",
     "expected_binding_version", "qualification_id", "rollback_target",
-    "actor", "reason", "evidence_refs",
+    "experiment_id", "evaluation_sha256", "actor", "reason", "evidence_refs",
 }
 SHA256_LENGTH = 64
 
@@ -309,8 +309,11 @@ def validate_binding_change(value: dict[str, Any]) -> dict[str, Any]:
     rollback_target = value["rollback_target"]
     if value["action"] == "promote":
         _identifier(qualification_id, "binding change qualification_id")
-        if rollback_target is not None:
-            raise ContractError("promotion cannot specify a rollback target")
+        if (rollback_target is not None or value["experiment_id"] is not None
+                or value["evaluation_sha256"] is not None):
+            raise ContractError(
+                "promotion cannot specify rollback experiment evidence",
+            )
     else:
         if qualification_id is not None:
             raise ContractError("rollback cannot specify a qualification")
@@ -318,6 +321,8 @@ def validate_binding_change(value: dict[str, Any]) -> dict[str, Any]:
         _identifier(rollback_target["profile_id"], "rollback profile_id")
         if type(rollback_target["binding_version"]) is not int or rollback_target["binding_version"] < 1:
             raise ContractError("rollback binding_version is invalid")
+        _identifier(value["experiment_id"], "rollback experiment_id")
+        _sha256(value["evaluation_sha256"], "rollback evaluation_sha256")
     if value["actor"] not in {"human", "guarded_auto"}:
         raise ContractError("binding change actor is invalid")
     reason = _identifier(value["reason"], "binding change reason")
@@ -345,7 +350,7 @@ def render_binding_decision_markdown(receipt: dict[str, Any]) -> str:
         "schema_version", "decision_id", "action", "alias", "actor", "reason",
         "evidence_refs", "from", "to", "qualification_id", "qualification",
         "policy", "rollback_target", "requested_rollback_target", "effective_at",
-        "affects_new_runs_only",
+        "rollback_evaluation", "affects_new_runs_only",
     }
     if not isinstance(receipt, dict) or set(receipt) != required:
         raise ContractError("binding decision receipt is invalid")

@@ -163,21 +163,32 @@ class ProfileLifecycleTest(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
-    def seed_experiment(self):
+    def seed_experiment(
+        self,
+        *,
+        experiment_id="experiment-profile-b",
+        candidate_succeeds=True,
+    ):
+        suffix = experiment_id.replace("experiment-", "")
         cases = [
             {
                 "case_id": "eval-1", "split": "evaluation",
-                "control_outcome_id": "control-eval",
-                "candidate_outcome_id": "candidate-eval",
+                "control_outcome_id": f"control-eval-{suffix}",
+                "candidate_outcome_id": f"candidate-eval-{suffix}",
             },
             {
                 "case_id": "hold-1", "split": "held_out",
-                "control_outcome_id": "control-hold",
-                "candidate_outcome_id": "candidate-hold",
+                "control_outcome_id": f"control-hold-{suffix}",
+                "candidate_outcome_id": f"candidate-hold-{suffix}",
             },
         ]
         for case in cases:
-            for arm, verdict in (("control", "failed"), ("candidate", "succeeded")):
+            verdicts = (
+                (("control", "failed"), ("candidate", "succeeded"))
+                if candidate_succeeds
+                else (("control", "succeeded"), ("candidate", "failed"))
+            )
+            for arm, verdict in verdicts:
                 outcome_id = case[f"{arm}_outcome_id"]
                 claim = self.store.claim_start(
                     self.repo, f"run-{outcome_id}", {}, "owner",
@@ -191,7 +202,7 @@ class ProfileLifecycleTest(unittest.TestCase):
                 )
         spec = {
             "schema_version": 1,
-            "experiment_id": "experiment-profile-b",
+            "experiment_id": experiment_id,
             "project_path": str(self.repo),
             "question": "Should profile B replace profile A?",
             "hypothesis": "Profile B improves held-out success.",
@@ -263,6 +274,8 @@ class ProfileLifecycleTest(unittest.TestCase):
             "expected_binding_version": expected,
             "qualification_id": "qualification-b",
             "rollback_target": None,
+            "experiment_id": None,
+            "evaluation_sha256": None,
             "actor": actor,
             "reason": "Held-out evidence passed the reviewed gate.",
             "evidence_refs": ["experiment-profile-b", "evaluation.json"],
@@ -384,6 +397,11 @@ class ProfileLifecycleTest(unittest.TestCase):
             winning_request, now=NOW,
         )["replayed"])
 
+        regression = self.seed_experiment(
+            experiment_id="experiment-profile-b-regression",
+            candidate_succeeds=False,
+        )
+        self.assertEqual(regression["evaluation"]["verdict"], "no_change")
         rollback = {
             "schema_version": 1,
             "decision_id": "decision-rollback-a",
@@ -392,9 +410,11 @@ class ProfileLifecycleTest(unittest.TestCase):
             "expected_binding_version": 8,
             "qualification_id": None,
             "rollback_target": {"profile_id": "profile-a", "binding_version": 7},
+            "experiment_id": "experiment-profile-b-regression",
+            "evaluation_sha256": regression["evaluation_sha256"],
             "actor": "guarded_auto",
             "reason": "Held-out regression requires the qualified predecessor.",
-            "evidence_refs": ["regression.json"],
+            "evidence_refs": ["experiment-profile-b-regression", "regression.json"],
         }
         rolled_back = self.store.change_profile_binding(rollback, now=NOW)
         self.assertEqual(rolled_back["receipt"]["to"]["binding_version"], 9)
