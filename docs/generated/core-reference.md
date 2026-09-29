@@ -12,6 +12,7 @@ Regenerate with `python3 scripts/generate-core-reference.py`; verify with
 - `squad classify [-h] [--cwd CWD] [--model MODEL] [--effort EFFORT] [--permission {read_only,workspace_write}] [--timeout TIMEOUT] [--transport {cli_exec,native_protocol}] [--catalog-file CATALOG_FILE] --returncode RETURNCODE --stdout-file STDOUT_FILE --stderr-file STDERR_FILE {codex,antigravity,grok}`
 - `squad doctor [-h] [--json] [--project-dir PROJECT_DIR] [--squad-executable SQUAD_EXECUTABLE]`
 - `squad events [-h] [--after AFTER] [--limit LIMIT] [--json] [--runtime-dir RUNTIME_DIR] run`
+- `squad fix [-h] [--base BASE] [--target TARGET] [--project-dir PROJECT_DIR] [--write-path WRITE_PATH] [--check CHECK] [--check-timeout CHECK_TIMEOUT] [--review-model REVIEW_MODEL] [--review-effort REVIEW_EFFORT] [--review-mode {standard,adversarial}] [--review-focus REVIEW_FOCUS] [--implementer-model IMPLEMENTER_MODEL] [--implementer-effort IMPLEMENTER_EFFORT] [--idempotency-key IDEMPOTENCY_KEY] [--dry-run] [--wait] [--json] [--runtime-dir RUNTIME_DIR] issue`
 - `squad handoff [-h] {claim,complete} ...`
 - `squad handoff claim [-h] --expected-version EXPECTED_VERSION --owner OWNER [--claim-file CLAIM_FILE] [--json] [--runtime-dir RUNTIME_DIR] run`
 - `squad handoff complete [-h] --claim-file CLAIM_FILE --decision-file DECISION_FILE [--json] [--runtime-dir RUNTIME_DIR] run`
@@ -34,6 +35,7 @@ Regenerate with `python3 scripts/generate-core-reference.py`; verify with
 - `squad report [-h] --project PROJECT [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad result [-h] [--json] [--runtime-dir RUNTIME_DIR] run`
 - `squad resume [-h] [--json] [--runtime-dir RUNTIME_DIR] [--recovery-file RECOVERY_FILE] run`
+- `squad review [-h] [--base BASE] [--target TARGET] [--project-dir PROJECT_DIR] [--model MODEL] [--effort EFFORT] [--mode {standard,adversarial}] [--focus FOCUS] [--check CHECK] [--check-timeout CHECK_TIMEOUT] [--idempotency-key IDEMPOTENCY_KEY] [--dry-run] [--wait] [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad setup [-h] [--host {codex,claude-code,antigravity,grok}] [--dry-run] [--json] [--project-dir PROJECT_DIR] [--squad-executable SQUAD_EXECUTABLE]`
 - `squad start [-h] --task-file TASK_FILE --idempotency-key IDEMPOTENCY_KEY [--supersedes-run SUPERSEDES_RUN] [--wait] [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad status [-h] [--json] [--runtime-dir RUNTIME_DIR] run`
@@ -68,7 +70,7 @@ runtime never infers them from chat history.
 | `profile.schema.json` | `https://devsquad.local/schemas/profile-v1.json` | `id`, `harness`, `model_family`, `model_id`, `effort`, `required_tools`, `permission_policy`, `account_pool_id`, `billing_mode`, `quality_status`, `evidence_refs` | `fc51b49cd7dd6a134eedf2c2c941301392aef29a2163ac2d307b4fb78509ec96` |
 | `profiles.schema.json` | `https://devsquad.local/schemas/profiles-v1.json` | `schema_version`, `profiles`, `bindings` | `c14823c89d1b81ee93b74f5bbc2701ae975825db795b5f0937c28fc057d84cf1` |
 | `review-result.schema.json` | `https://devsquad.local/schemas/review-result-v1.json` | `schema_version`, `candidate_sha256`, `base_oid`, `target_oid`, `review_mode`, `verdict`, `summary`, `findings` | `96b852543f92dca21dafd6c0bc954f8f56d3dbfb0981d601cc05b9c1c9ba6e6b` |
-| `task.schema.json` | `https://devsquad.local/schemas/task-v1.json` | `schema_version`, `project`, `workflow`, `goal`, `task_class`, `acceptance`, `checks`, `scope`, `lead`, `routing`, `budget`, `origin` | `467fcb30221db38c842fcc9eb4c107f3cc90f390de332c1d50576e0db37afc9f` |
+| `task.schema.json` | `https://devsquad.local/schemas/task-v1.json` | `schema_version`, `project`, `workflow`, `goal`, `task_class`, `acceptance`, `checks`, `scope`, `lead`, `routing`, `budget`, `origin` | `ec2a700b9dac653b49ffe0bfc6fa24bda92a2a144b0c94e9b66307d93c3bbc19` |
 
 ## Task-shape example
 

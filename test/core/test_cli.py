@@ -74,6 +74,125 @@ class CliTest(unittest.TestCase):
         service.start.assert_called_once_with({"schema_version": 1}, "key-1", "old-run")
         service.status.assert_not_called()
 
+    def test_review_dry_run_prepares_a_managed_task_without_starting(self):
+        identity = {
+            "harness": "codex", "harness_version": "codex fixture",
+            "model_id": "gpt-fixture", "model_family": "gpt",
+            "effort": "low",
+        }
+        task = {"managed": "review"}
+        summary = {
+            "workflow": "branch-review", "task_sha256": "a" * 64,
+            "project": str(self.root), "base_oid": "b" * 40,
+            "target_oid": "c" * 40,
+            "planned_roles": {"reviewer": {"harness": "codex"}},
+            "selection_reason": "bounded fixture", "scope": {},
+            "checks": ["candidate-diff-check"],
+        }
+        with (
+            mock.patch.object(cli, "resolve_repository", return_value=self.root) as resolve,
+            mock.patch.object(cli, "discover_codex_identity", return_value=identity) as discover,
+            mock.patch.object(cli, "build_managed_task", return_value=(task, summary)) as build,
+            mock.patch.object(cli, "Service") as service,
+        ):
+            code, payload, stderr = self.invoke([
+                "review", "--base", "main", "--target", "HEAD",
+                "--project-dir", str(self.root), "--model", "gpt-fixture",
+                "--effort", "low", "--check", "python3 -m unittest",
+                "--dry-run", "--runtime-dir", str(self.runtime), "--json",
+            ])
+        self.assertEqual((code, stderr), (0, ""))
+        data = payload["data"]
+        self.assertTrue(data["dry_run"])
+        self.assertEqual(data["state"], "not_started")
+        self.assertIsNone(data["run_id"])
+        self.assertEqual(
+            data["idempotency_key"],
+            f"normal-branch-review-{'a' * 64}",
+        )
+        self.assertIn("without --dry-run", data["next_action"])
+        resolve.assert_called_once_with(str(self.root))
+        discover.assert_called_once_with(
+            self.root, requested_model="gpt-fixture", requested_effort="low",
+        )
+        build.assert_called_once_with(
+            workflow="branch-review", project_dir=self.root,
+            base_ref="main", target_ref="HEAD",
+            goal="Review exact target HEAD against base main.",
+            codex_identity=identity, write_paths=(),
+            checks=(("python3", "-m", "unittest"),), check_timeout=600,
+            review_mode="standard", review_focus=None,
+            claude_model="sonnet", claude_effort="high",
+        )
+        service.assert_not_called()
+
+    def test_fix_starts_managed_delivery_and_reports_run_and_plan(self):
+        identity = {
+            "harness": "codex", "harness_version": "codex fixture",
+            "model_id": "gpt-review", "model_family": "gpt",
+            "effort": "high",
+        }
+        task = {"managed": "fix"}
+        summary = {
+            "workflow": "issue-delivery", "task_sha256": "d" * 64,
+            "project": str(self.root), "base_oid": "e" * 40,
+            "target_oid": "e" * 40,
+            "planned_roles": {
+                "implementer": {"harness": "claude"},
+                "reviewer": {"harness": "codex"},
+            },
+            "selection_reason": "bounded fixture",
+            "scope": {"write_paths": ["src"]},
+            "checks": ["candidate-diff-check", "user-check-1"],
+        }
+        service = mock.Mock()
+        service.start.return_value = {
+            "run_id": "run-managed", "state": "queued", "created": True,
+        }
+        with (
+            mock.patch.object(cli, "resolve_repository", return_value=self.root),
+            mock.patch.object(cli, "discover_codex_identity", return_value=identity) as discover,
+            mock.patch.object(cli, "build_managed_task", return_value=(task, summary)) as build,
+        ):
+            code, payload, stderr = self.invoke([
+                "fix", "Correct the parser edge case.",
+                "--project-dir", str(self.root), "--write-path", "src",
+                "--check", "bash test/run.sh", "--review-model", "gpt-review",
+                "--review-effort", "high", "--review-mode", "adversarial",
+                "--review-focus", "state transitions",
+                "--implementer-model", "claude-sonnet-exact",
+                "--implementer-effort", "high", "--idempotency-key", "fix-1",
+                "--runtime-dir", str(self.runtime), "--json",
+            ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        data = payload["data"]
+        self.assertFalse(data["dry_run"])
+        self.assertEqual(data["run_id"], "run-managed")
+        self.assertEqual(data["state"], "queued")
+        self.assertEqual(data["planned_roles"], summary["planned_roles"])
+        self.assertEqual(data["next_action"], "squad status run-managed --json")
+        service.start.assert_called_once_with(task, "fix-1", None)
+        discover.assert_called_once_with(
+            self.root, requested_model="gpt-review", requested_effort="high",
+        )
+        build.assert_called_once_with(
+            workflow="issue-delivery", project_dir=self.root,
+            base_ref="HEAD", target_ref="HEAD",
+            goal="Correct the parser edge case.", codex_identity=identity,
+            write_paths=("src",), checks=(("bash", "test/run.sh"),),
+            check_timeout=600, review_mode="adversarial",
+            review_focus="state transitions",
+            claude_model="claude-sonnet-exact", claude_effort="high",
+        )
+
+    def test_normal_entry_rejects_waiting_for_a_dry_run(self):
+        code, payload, _ = self.invoke([
+            "review", "--dry-run", "--wait", "--json",
+        ])
+        self.assertEqual(code, 64)
+        self.assertEqual(payload["error"]["code"], "INPUT_INVALID")
+        self.assertIn("--wait cannot be combined", payload["error"]["message"])
+
     def test_status_events_result_cancel_and_resume_operations(self):
         cases = [
             (["status", "run-1"], "status", ("run-1",), {"run_id": "run-1", "state": "failed"}),
@@ -451,6 +570,33 @@ class CliTest(unittest.TestCase):
         self.assertEqual(service.status.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
         service.cancel.assert_not_called()
+
+    def test_managed_fix_wait_resumes_saved_candidate_review_once(self):
+        service = mock.Mock()
+        service.status.side_effect = [
+            {
+                "run_id": "run-fix", "state": "queued", "version": 11,
+                "next_action": "resume_candidate_review",
+            },
+            {"run_id": "run-fix", "state": "running", "version": 13},
+            {
+                "run_id": "run-fix", "state": "awaiting_host", "version": 17,
+                "next_action": "claim_handoff",
+            },
+        ]
+        service.resume.return_value = {
+            "run_id": "run-fix", "disposition": "continued", "launched": True,
+        }
+        with mock.patch.object(cli.time, "sleep") as sleep:
+            response, code = cli._wait_for_run(
+                service,
+                {"run_id": "run-fix", "state": "queued"},
+                resume_candidate_review=True,
+            )
+        self.assertEqual(code, 2)
+        self.assertEqual(response["data"]["state"], "awaiting_host")
+        service.resume.assert_called_once_with("run-fix")
+        self.assertEqual(sleep.call_count, 2)
 
     def test_wait_keyboard_interrupt_stops_observation_without_cancelling(self):
         service = mock.Mock()

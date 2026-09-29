@@ -70,9 +70,26 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
     if value["workflow"] == "branch-review" and scope["write_paths"]: raise ContractError("branch review cannot write")
     lead = value["lead"]; _exact(lead, {"mode"}, {"mode"}, "lead")
     if not isinstance(lead["mode"], str) or lead["mode"] not in {"host", "headless"}: raise ContractError("invalid lead mode")
-    routing = value["routing"]; _exact(routing, {"profiles_file", "policy_file", "overrides"}, {"profiles_file", "policy_file"}, "routing")
-    for key in ("profiles_file", "policy_file"):
-        if not isinstance(routing[key], str) or not routing[key]: raise ContractError(f"routing {key} must be a path")
+    routing = value["routing"]
+    _exact(
+        routing,
+        {"profiles_file", "policy_file", "profiles", "policy", "overrides"},
+        set(),
+        "routing",
+    )
+    file_fields = {"profiles_file", "policy_file"}
+    embedded_fields = {"profiles", "policy"}
+    if set(routing) & file_fields == file_fields and not set(routing) & embedded_fields:
+        for key in file_fields:
+            if not isinstance(routing[key], str) or not routing[key]:
+                raise ContractError(f"routing {key} must be a path")
+    elif set(routing) & embedded_fields == embedded_fields and not set(routing) & file_fields:
+        validate_profile_registry(routing["profiles"])
+        validate_policy(routing["policy"])
+    else:
+        raise ContractError(
+            "routing requires exactly one complete file or embedded configuration"
+        )
     overrides = routing.get("overrides", {})
     if not isinstance(overrides, dict): raise ContractError("routing overrides must be an object")
     for role, override in overrides.items():

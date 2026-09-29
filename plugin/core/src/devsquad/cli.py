@@ -17,6 +17,12 @@ from .diagnostics import build_doctor_report
 from .integrations import LocalIntegrationManager, load_integrations
 from .service import Service
 from .store import ConflictError, SchemaVersionError
+from .task_entry import (
+    build_managed_task,
+    discover_codex_identity,
+    parse_checks,
+    resolve_repository,
+)
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
 CORE_ROOT = SOURCE_ROOT if (SOURCE_ROOT / "adapters").is_dir() else Path(sys.prefix) / "share" / "devsquad"
@@ -127,13 +133,14 @@ def _service(args: argparse.Namespace) -> Service:
     return Service(Path(args.runtime_dir))
 
 
-def command_start(args: argparse.Namespace) -> tuple[dict, int]:
-    task = _read_json(args.task_file, "task file")
-    service = _service(args)
-    started = service.start(task, args.idempotency_key, args.supersedes_run)
-    if not args.wait:
-        return envelope(data=started), 0
+def _wait_for_run(
+    service: Service,
+    started: dict[str, Any],
+    *,
+    resume_candidate_review: bool = False,
+) -> tuple[dict[str, Any], int]:
     run_id = started["run_id"]
+    resumed_versions: set[int] = set()
     try:
         while True:
             status = service.status(run_id)
@@ -142,6 +149,14 @@ def command_start(args: argparse.Namespace) -> tuple[dict, int]:
                 return envelope(data=status), WAIT_EXIT_CODES[state]
             if state not in WAIT_ACTIVE_STATES:
                 raise RuntimeError(f"service returned unsupported run state: {state!r}")
+            version = status.get("version")
+            if (resume_candidate_review
+                    and state == "queued"
+                    and status.get("next_action") == "resume_candidate_review"
+                    and type(version) is int
+                    and version not in resumed_versions):
+                resumed_versions.add(version)
+                service.resume(run_id)
             time.sleep(WAIT_POLL_SECONDS)
     except KeyboardInterrupt:
         cancel_command = f"squad cancel {run_id}"
@@ -157,6 +172,120 @@ def command_start(args: argparse.Namespace) -> tuple[dict, int]:
             "cancelled": False,
             "next_action": cancel_command,
         }), 130
+
+
+def command_start(args: argparse.Namespace) -> tuple[dict, int]:
+    task = _read_json(args.task_file, "task file")
+    service = _service(args)
+    started = service.start(task, args.idempotency_key, args.supersedes_run)
+    if not args.wait:
+        return envelope(data=started), 0
+    return _wait_for_run(service, started)
+
+
+def _normal_entry_result(
+    summary: dict[str, Any],
+    idempotency_key: str,
+    run: dict[str, Any] | None,
+) -> dict[str, Any]:
+    run_id = run.get("run_id") if run is not None else None
+    state = run.get("state") if run is not None else "not_started"
+    if run_id is None:
+        next_action = "rerun this command without --dry-run"
+    elif state == "succeeded":
+        next_action = f"squad result {run_id} --json"
+    else:
+        next_action = f"squad status {run_id} --json"
+    return {
+        "dry_run": run is None,
+        "run_id": run_id,
+        "state": state,
+        "service": run,
+        "idempotency_key": idempotency_key,
+        **summary,
+        "next_action": next_action,
+    }
+
+
+def _command_normal_entry(
+    args: argparse.Namespace,
+    *,
+    workflow: str,
+) -> tuple[dict, int]:
+    if args.dry_run and args.wait:
+        raise ContractError("--wait cannot be combined with --dry-run")
+    repo = resolve_repository(args.project_dir)
+    codex_identity = discover_codex_identity(
+        repo,
+        requested_model=(
+            args.model if workflow == "branch-review" else args.review_model
+        ),
+        requested_effort=(
+            args.effort if workflow == "branch-review" else args.review_effort
+        ),
+    )
+    if workflow == "branch-review":
+        mode = args.mode
+        focus = args.focus
+        goal = (
+            f"Review exact target {args.target} against base {args.base}"
+            + (f" with adversarial focus on {focus.strip()}" if focus else "")
+            + "."
+        )
+        write_paths: tuple[str, ...] = ()
+        claude_model = "sonnet"
+        claude_effort = "high"
+    else:
+        mode = args.review_mode
+        focus = args.review_focus
+        goal = args.issue
+        write_paths = tuple(args.write_path or ())
+        claude_model = args.implementer_model
+        claude_effort = args.implementer_effort
+    task, summary = build_managed_task(
+        workflow=workflow,
+        project_dir=repo,
+        base_ref=args.base,
+        target_ref=args.target,
+        goal=goal,
+        codex_identity=codex_identity,
+        write_paths=write_paths,
+        checks=parse_checks(args.check),
+        check_timeout=args.check_timeout,
+        review_mode=mode,
+        review_focus=focus,
+        claude_model=claude_model,
+        claude_effort=claude_effort,
+    )
+    idempotency_key = args.idempotency_key or (
+        f"normal-{workflow}-{summary['task_sha256']}"
+    )
+    if args.dry_run:
+        return envelope(data=_normal_entry_result(
+            summary, idempotency_key, None,
+        )), 0
+    service = _service(args)
+    started = service.start(task, idempotency_key, None)
+    run, code = (
+        _wait_for_run(
+            service,
+            started,
+            resume_candidate_review=(workflow == "issue-delivery"),
+        ) if args.wait
+        else (envelope(data=started), 0)
+    )
+    service_data = run["data"]
+    return envelope(data=_normal_entry_result(
+        summary, idempotency_key, service_data,
+    )), code
+
+
+def command_review(args: argparse.Namespace) -> tuple[dict, int]:
+    return _command_normal_entry(args, workflow="branch-review")
+
+
+def command_fix(args: argparse.Namespace) -> tuple[dict, int]:
+    return _command_normal_entry(args, workflow="issue-delivery")
 
 
 def command_capacity_observe(args: argparse.Namespace) -> tuple[dict, int]:
@@ -299,6 +428,51 @@ def parser() -> argparse.ArgumentParser:
             cmd.add_argument("--stderr-file", required=True)
         cmd.set_defaults(func=fn)
     runtime_default = os.environ.get("DEVSQUAD_RUNTIME_DIR", str(Path.home() / ".devsquad" / "runtime"))
+    review = sub.add_parser(
+        "review",
+        help="start an exact-commit Codex branch review without task JSON",
+    )
+    review.add_argument("--base", default="main")
+    review.add_argument("--target", default="HEAD")
+    review.add_argument("--project-dir", default=str(Path.cwd()))
+    review.add_argument("--model")
+    review.add_argument("--effort")
+    review.add_argument("--mode", choices=("standard", "adversarial"), default="standard")
+    review.add_argument("--focus")
+    review.add_argument("--check", action="append")
+    review.add_argument("--check-timeout", type=int, default=600)
+    review.add_argument("--idempotency-key")
+    review.add_argument("--dry-run", action="store_true")
+    review.add_argument("--wait", action="store_true")
+    review.add_argument("--json", action="store_true")
+    review.add_argument("--runtime-dir", default=runtime_default)
+    review.set_defaults(func=command_review)
+    fix = sub.add_parser(
+        "fix",
+        help="start bounded Claude implementation and independent Codex review",
+    )
+    fix.add_argument("issue")
+    fix.add_argument("--base", default="HEAD")
+    fix.add_argument("--target", default="HEAD")
+    fix.add_argument("--project-dir", default=str(Path.cwd()))
+    fix.add_argument("--write-path", action="append")
+    fix.add_argument("--check", action="append")
+    fix.add_argument("--check-timeout", type=int, default=600)
+    fix.add_argument("--review-model")
+    fix.add_argument("--review-effort")
+    fix.add_argument(
+        "--review-mode", choices=("standard", "adversarial"),
+        default="standard",
+    )
+    fix.add_argument("--review-focus")
+    fix.add_argument("--implementer-model", default="sonnet")
+    fix.add_argument("--implementer-effort", default="high")
+    fix.add_argument("--idempotency-key")
+    fix.add_argument("--dry-run", action="store_true")
+    fix.add_argument("--wait", action="store_true")
+    fix.add_argument("--json", action="store_true")
+    fix.add_argument("--runtime-dir", default=runtime_default)
+    fix.set_defaults(func=command_fix)
     start = sub.add_parser("start"); start.add_argument("--task-file", required=True); start.add_argument("--idempotency-key", required=True); start.add_argument("--supersedes-run"); start.add_argument("--wait", action="store_true"); start.add_argument("--json", action="store_true"); start.add_argument("--runtime-dir", default=runtime_default); start.set_defaults(func=command_start)
     for name, fn in (("status",command_status),("result",command_result),("cancel",command_cancel),("resume",command_resume)):
         cmd=sub.add_parser(name); cmd.add_argument("run"); cmd.add_argument("--json",action="store_true"); cmd.add_argument("--runtime-dir",default=runtime_default)

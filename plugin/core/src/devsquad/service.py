@@ -567,24 +567,40 @@ class Service:
         scope_paths = tuple(dict.fromkeys(
             task["scope"]["read_paths"] + task["scope"]["write_paths"]
         ))
-        config_paths = {
-            label: repo_relative_config(repo, task["routing"][label], label)
-            for label in ("profiles_file", "policy_file")
-        }
+        embedded_routing = "profiles" in task["routing"]
+        config_paths = (
+            {}
+            if embedded_routing
+            else {
+                label: repo_relative_config(repo, task["routing"][label], label)
+                for label in ("profiles_file", "policy_file")
+            }
+        )
         if internal_delay is None:
             assert_clean_inputs(repo, scope_paths, config_paths.values())
         configs = {}
         config_payloads = {}
-        for label, relative_path in config_paths.items():
-            path = repo / relative_path
-            data = (
-                committed_regular_file(repo, target_oid, relative_path)
-                if internal_delay is None else path.read_bytes()
-            )
-            config_payloads[label] = data
-            configs[label] = {
-                "path": str(path), "sha256": hashlib.sha256(data).hexdigest(),
-            }
+        if embedded_routing:
+            for label, routing_label in (
+                ("profiles_file", "profiles"), ("policy_file", "policy"),
+            ):
+                data = canonical_json(task["routing"][routing_label]).encode()
+                config_payloads[label] = data
+                configs[label] = {
+                    "path": f"embedded://routing/{routing_label}",
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+        else:
+            for label, relative_path in config_paths.items():
+                path = repo / relative_path
+                data = (
+                    committed_regular_file(repo, target_oid, relative_path)
+                    if internal_delay is None else path.read_bytes()
+                )
+                config_payloads[label] = data
+                configs[label] = {
+                    "path": str(path), "sha256": hashlib.sha256(data).hexdigest(),
+                }
         snapshot = {
             "task": task,
             "base_oid": base_oid,

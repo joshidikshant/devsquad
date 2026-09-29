@@ -65,6 +65,47 @@ class AdversarialValidationTest(unittest.TestCase):
             value = copy.deepcopy(self.task); mutate(value)
             self.assert_contract_error(validate_task, value)
 
+    def test_task_accepts_exact_embedded_routing_and_rejects_mixed_sources(self):
+        profiles = {
+            "schema_version": 1,
+            "profiles": [{
+                "id": "reviewer", "harness": "codex",
+                "model_family": "gpt", "model_id": "gpt-test",
+                "effort": {"value": "low", "transport": "native"},
+                "required_tools": ["read"],
+                "permission_policy": "read_only",
+                "account_pool_id": "codex-subscription",
+                "billing_mode": "subscription", "quality_status": "trial",
+                "evidence_refs": ["managed-entry"],
+            }],
+            "bindings": {},
+        }
+        policy = {
+            "schema_version": 1, "id": "managed", "version": 1,
+            "roles": {"reviewer": [{"kind": "profile", "id": "reviewer"}]},
+            "task_classes": {"fixture-bugfix-small": "trial"},
+            "require_different_model_for_review": True,
+            "account_pools": {
+                "codex-subscription": {
+                    "allowed_billing_modes": ["subscription"],
+                    "max_concurrency": 1,
+                },
+            },
+            "experiment_budget": {},
+        }
+        embedded = copy.deepcopy(self.task)
+        embedded["routing"] = {"profiles": profiles, "policy": policy}
+        validate_task(embedded)
+
+        mixed = copy.deepcopy(embedded)
+        mixed["routing"]["profiles_file"] = "profiles.json"
+        mixed["routing"]["policy_file"] = "policy.json"
+        self.assert_contract_error(validate_task, mixed)
+
+        partial = copy.deepcopy(embedded)
+        del partial["routing"]["policy"]
+        self.assert_contract_error(validate_task, partial)
+
     def test_profile_and_policy_reject_nested_type_confusion(self):
         profile = {"id":"p","harness":"codex","model_family":"gpt","model_id":"m","effort":{"value":"low","transport":"native"},"required_tools":["read"],"permission_policy":"read_only","account_pool_id":"pool","billing_mode":"subscription","quality_status":"proven","evidence_refs":[]}
         bad = copy.deepcopy(profile); bad["required_tools"] = [""]

@@ -210,6 +210,46 @@ class ServiceTest(unittest.TestCase):
         self.assertNotIn("decision_observation", snapshot)
         self.assertEqual(observations, 0)
 
+    def test_embedded_routing_is_hash_frozen_without_repository_config_files(self):
+        task = json.loads(json.dumps(self.task))
+        task["routing"] = {
+            "profiles": json.loads(self.profiles_json),
+            "policy": json.loads(self.policy_json),
+        }
+        subprocess.run(
+            ["git", "-C", str(self.repo), "rm", "-q", "profiles.json", "policy.json"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", "remove routing files"],
+            check=True,
+        )
+        started = self.service.start(
+            task,
+            "embedded-routing",
+            _internal_review_fixture={
+                "verdict": "clean", "summary": "embedded", "findings": [],
+            },
+        )
+        self.wait_state(started["run_id"], {"awaiting_host"})
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            snapshot = json.loads(store.run(started["run_id"])["mutable_snapshot"])
+        finally:
+            store.close()
+        self.assertEqual(
+            snapshot["configs"]["profiles_file"]["path"],
+            "embedded://routing/profiles",
+        )
+        self.assertEqual(
+            snapshot["configs"]["policy_file"]["path"],
+            "embedded://routing/policy",
+        )
+        self.assertEqual(
+            snapshot["routing"]["profile_registry"]["source_sha256"],
+            snapshot["configs"]["profiles_file"]["sha256"],
+        )
+
     def test_shadow_decision_is_cached_and_never_changes_selection(self):
         self.configure_decision_helper("shadow")
         fixture = self.decision_fixture()

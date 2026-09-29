@@ -423,9 +423,13 @@ class Supervisor:
         scope_paths = tuple(dict.fromkeys(
             task["scope"]["read_paths"] + task["scope"]["write_paths"]
         ))
-        config_paths = tuple(
-            repo_relative_config(source_repo, task["routing"][label], label)
-            for label in ("profiles_file", "policy_file")
+        config_paths = (
+            ()
+            if "profiles" in task["routing"]
+            else tuple(
+                repo_relative_config(source_repo, task["routing"][label], label)
+                for label in ("profiles_file", "policy_file")
+            )
         )
         review_workspace = prepare_review_workspace(
             source_repo,
