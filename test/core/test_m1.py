@@ -236,6 +236,24 @@ class NativeProtocolTest(unittest.TestCase):
         })
         self.assertEqual(state.output, ["fallback"])
 
+    def test_completed_agent_message_replaces_an_empty_stream(self):
+        state = NativeTurnState(thread_id="th1", turn_id="t1")
+        state.consume({
+            "method": "item/agentMessage/delta",
+            "params": {
+                "threadId": "th1", "turnId": "t1", "itemId": "item-1",
+                "delta": "",
+            },
+        })
+        state.consume({
+            "method": "item/completed",
+            "params": {
+                "threadId": "th1", "turnId": "t1",
+                "item": {"type": "agentMessage", "text": "structured result"},
+            },
+        })
+        self.assertEqual("".join(state.output).strip(), "structured result")
+
     def test_unrelated_turn_cannot_complete_ours_and_disconnect_is_visible(self):
         state = NativeTurnState(thread_id="th1", turn_id="ours")
         state.consume({"method":"turn/completed", "params":{"threadId":"th1", "turn":{"id":"other", "status":"completed"}}})

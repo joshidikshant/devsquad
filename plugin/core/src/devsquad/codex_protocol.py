@@ -171,7 +171,7 @@ class NativeTurnState:
                 raise ContractError("native output delta must be a string")
             if self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
                 self.output.append(delta)
-        if (method == "item/completed" and not self.output
+        if (method == "item/completed" and not "".join(self.output).strip()
                 and self.thread_id and self.turn_id
                 and message_thread == self.thread_id and message_turn == self.turn_id):
             item = params.get("item")
