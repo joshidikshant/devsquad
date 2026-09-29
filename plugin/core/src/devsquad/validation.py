@@ -139,8 +139,8 @@ def validate_profile_registry(value: dict[str, Any]) -> None:
 
 
 def validate_policy(value: dict[str, Any]) -> None:
-    fields = {"schema_version", "id", "version", "roles", "task_classes", "require_different_model_for_review", "prefer_different_harness_for_review", "account_pools", "experiment_budget"}
-    required = fields - {"prefer_different_harness_for_review"}
+    fields = {"schema_version", "id", "version", "roles", "task_classes", "require_different_model_for_review", "prefer_different_harness_for_review", "account_pools", "experiment_budget", "decision_helper"}
+    required = fields - {"prefer_different_harness_for_review", "decision_helper"}
     _exact(value, fields, required, "policy")
     if type(value["schema_version"]) is not int or value["schema_version"] != 1 or type(value["version"]) is not int or value["version"] < 1: raise ContractError("invalid policy version")
     if not isinstance(value["id"], str) or not value["id"]: raise ContractError("policy id must be non-empty")
@@ -177,6 +177,8 @@ def validate_policy(value: dict[str, Any]) -> None:
             raise ContractError("account pool unknown_capacity_policy is invalid")
     if not all(isinstance(k, str) and k and type(v) is int and v >= 0 for k, v in value["experiment_budget"].items()):
         raise ContractError("experiment_budget must contain non-negative integers")
+    from .decision import validate_decision_policy
+    validate_decision_policy(value.get("decision_helper"))
 
 
 def _validate_json_tree(value: Any, label: str) -> None:
