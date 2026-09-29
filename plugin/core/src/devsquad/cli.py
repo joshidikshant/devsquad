@@ -182,6 +182,34 @@ def command_learn_propose(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).learning_propose(args.project)), 0
 
 
+def command_profile_template_add(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).profile_template_add(
+        _read_json(args.file, "profile template file"),
+    )), 0
+
+
+def command_profile_binding_bootstrap(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).profile_binding_bootstrap(
+        _read_json(args.file, "profile binding bootstrap file"),
+    )), 0
+
+
+def command_profile_qualification_add(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).profile_qualification_add(
+        _read_json(args.file, "profile qualification file"),
+    )), 0
+
+
+def command_profile_binding_change(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).profile_binding_change(
+        _read_json(args.file, "profile binding change file"),
+    )), 0
+
+
+def command_profile_binding_show(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).profile_binding_status(args.alias)), 0
+
+
 def command_status(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).status(args.run)), 0
 def command_events(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).events(args.run, args.after, args.limit)), 0
 def command_result(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).result(args.run)), 0
@@ -305,6 +333,24 @@ def parser() -> argparse.ArgumentParser:
     propose.add_argument("--json", action="store_true")
     propose.add_argument("--runtime-dir", default=runtime_default)
     propose.set_defaults(func=command_learn_propose)
+    profile = sub.add_parser("profile")
+    profile_sub = profile.add_subparsers(dest="profile_command", required=True)
+    for name, fn in (
+        ("template-add", command_profile_template_add),
+        ("binding-bootstrap", command_profile_binding_bootstrap),
+        ("qualification-add", command_profile_qualification_add),
+        ("binding-change", command_profile_binding_change),
+    ):
+        operation = profile_sub.add_parser(name)
+        operation.add_argument("--file", required=True)
+        operation.add_argument("--json", action="store_true")
+        operation.add_argument("--runtime-dir", default=runtime_default)
+        operation.set_defaults(func=fn)
+    binding_show = profile_sub.add_parser("binding-show")
+    binding_show.add_argument("alias")
+    binding_show.add_argument("--json", action="store_true")
+    binding_show.add_argument("--runtime-dir", default=runtime_default)
+    binding_show.set_defaults(func=command_profile_binding_show)
     handoff = sub.add_parser("handoff")
     handoff_sub = handoff.add_subparsers(dest="handoff_command", required=True)
     claim = handoff_sub.add_parser("claim")

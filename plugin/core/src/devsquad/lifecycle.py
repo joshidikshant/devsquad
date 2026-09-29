@@ -337,3 +337,49 @@ def validate_binding_change(value: dict[str, Any]) -> dict[str, Any]:
 
 def validate_recorded_at(value: Any) -> str:
     return _timestamp(value, "recorded_at")
+
+
+def render_binding_decision_markdown(receipt: dict[str, Any]) -> str:
+    """Render an inspectable local promotion/rollback decision receipt."""
+    required = {
+        "schema_version", "decision_id", "action", "alias", "actor", "reason",
+        "evidence_refs", "from", "to", "qualification_id", "qualification",
+        "policy", "rollback_target", "requested_rollback_target", "effective_at",
+        "affects_new_runs_only",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != required:
+        raise ContractError("binding decision receipt is invalid")
+    if (receipt["schema_version"] != 1
+            or receipt["action"] not in {"promote", "rollback"}
+            or receipt["actor"] not in {"human", "guarded_auto"}
+            or receipt["affects_new_runs_only"] is not True):
+        raise ContractError("binding decision receipt values are invalid")
+    _timestamp(receipt["effective_at"], "effective_at")
+    lines = [
+        f"# Profile binding decision {receipt['decision_id']}",
+        "",
+        f"- Action: `{receipt['action']}`",
+        f"- Alias: `{receipt['alias']}`",
+        f"- Actor: `{receipt['actor']}`",
+        f"- Effective: `{receipt['effective_at']}`",
+        "- Scope: new runs only",
+        f"- Reason: {receipt['reason']}",
+        "",
+        "## Binding change",
+        "",
+        f"- From: `{receipt['from']['profile_id']}` at version "
+        f"{receipt['from']['binding_version']}",
+        f"- To: `{receipt['to']['profile_id']}` at version "
+        f"{receipt['to']['binding_version']}",
+        f"- Rollback: `{receipt['rollback_target']['profile_id']}` at version "
+        f"{receipt['rollback_target']['binding_version']}",
+        f"- Policy: `{receipt['policy']['id']}` version {receipt['policy']['version']}",
+        "",
+        "## Evidence",
+        "",
+    ]
+    lines.extend(
+        [f"- `{reference}`" for reference in receipt["evidence_refs"]]
+        or ["- None."]
+    )
+    return "\n".join(lines) + "\n"

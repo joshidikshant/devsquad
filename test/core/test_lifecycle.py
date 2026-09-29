@@ -1,5 +1,6 @@
 import copy
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -18,6 +19,7 @@ from devsquad.lifecycle import (
     validate_profile_template,
 )
 from devsquad.router import load_routing
+from devsquad.service import Service
 from devsquad.store import ConflictError, Store
 
 
@@ -408,6 +410,17 @@ class ProfileLifecycleTest(unittest.TestCase):
             rollback_routing["roles"]["reviewer"]["selected"]["binding"]["version"],
             9,
         )
+        service = Service(self.root)
+        service_change = service.profile_binding_change(
+            self.promotion("decision-service", expected=9),
+        )
+        self.assertEqual(service_change["receipt"]["to"]["binding_version"], 10)
+        for artifact in service_change["artifacts"].values():
+            content = Path(artifact["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(content).hexdigest(), artifact["sha256"])
+        status = service.profile_binding_status("review.deep")
+        self.assertEqual(status["binding"]["profile_id"], "profile-b")
+        self.assertEqual(len(status["decisions"]), 3)
 
     def test_insufficient_evidence_and_disabled_guarded_auto_cannot_promote(self):
         reviewed = lifecycle_template(update_mode="reviewed")

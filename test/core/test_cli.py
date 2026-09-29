@@ -194,6 +194,51 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, response)
         service.learning_propose.assert_called_once_with(str(self.root))
 
+    def test_profile_lifecycle_commands_dispatch_strict_files(self):
+        operations = [
+            (
+                "template-add", "profile_template_add", "profile-template.json",
+                {"schema_version": 1, "template_id": "template-1"},
+            ),
+            (
+                "binding-bootstrap", "profile_binding_bootstrap", "bootstrap.json",
+                {"template": {}, "profile": {}, "version": 1},
+            ),
+            (
+                "qualification-add", "profile_qualification_add", "qualification.json",
+                {"schema_version": 1, "qualification_id": "qualification-1"},
+            ),
+            (
+                "binding-change", "profile_binding_change", "change.json",
+                {"schema_version": 1, "decision_id": "decision-1"},
+            ),
+        ]
+        for command, method_name, filename, document in operations:
+            with self.subTest(command=command):
+                path = self.root / filename
+                path.write_text(json.dumps(document))
+                service = mock.Mock()
+                response = {"operation": command}
+                getattr(service, method_name).return_value = response
+                code, payload, stderr = self.invoke([
+                    "profile", command, "--file", str(path),
+                    "--runtime-dir", str(self.runtime), "--json",
+                ], service)
+                self.assertEqual((code, stderr), (0, ""))
+                self.assert_success_envelope(payload, response)
+                getattr(service, method_name).assert_called_once_with(document)
+
+        service = mock.Mock()
+        response = {"binding": {"alias": "review.deep"}, "decisions": []}
+        service.profile_binding_status.return_value = response
+        code, payload, stderr = self.invoke([
+            "profile", "binding-show", "review.deep",
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.profile_binding_status.assert_called_once_with("review.deep")
+
     def test_handoff_claim_renew_and_complete_dispatch_parsed_objects(self):
         claim_payload = {
             "schema_version": 1,

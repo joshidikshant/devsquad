@@ -892,6 +892,73 @@ class Service:
             },
         }
 
+    def profile_template_add(self, template: dict[str, Any]) -> dict[str, Any]:
+        store = self._store()
+        try:
+            return store.register_profile_template(template)
+        finally:
+            store.close()
+
+    def profile_binding_bootstrap(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict) or set(request) != {
+            "template", "profile", "version",
+        }:
+            raise ContractError("profile binding bootstrap fields are invalid")
+        store = self._store()
+        try:
+            return store.bootstrap_profile_binding(
+                request["template"], request["profile"], version=request["version"],
+            )
+        finally:
+            store.close()
+
+    def profile_qualification_add(
+        self, qualification: dict[str, Any],
+    ) -> dict[str, Any]:
+        store = self._store()
+        try:
+            return store.record_profile_qualification(qualification)
+        finally:
+            store.close()
+
+    def profile_binding_change(self, change: dict[str, Any]) -> dict[str, Any]:
+        from .lifecycle import render_binding_decision_markdown
+
+        store = self._store()
+        try:
+            result = store.change_profile_binding(change)
+        finally:
+            store.close()
+        receipt = result["receipt"]
+        json_content = (canonical_json(receipt) + "\n").encode()
+        markdown_content = render_binding_decision_markdown(receipt).encode()
+        directory = self.runtime / "learning" / "decisions"
+        directory.mkdir(parents=True, exist_ok=True)
+        return {
+            **result,
+            "artifacts": {
+                "json": self._finalize_learning_file(
+                    directory, f"{receipt['decision_id']}.json", json_content,
+                ),
+                "markdown": self._finalize_learning_file(
+                    directory, f"{receipt['decision_id']}.md", markdown_content,
+                ),
+            },
+        }
+
+    def profile_binding_status(self, alias: str) -> dict[str, Any]:
+        store = self._store()
+        try:
+            binding = store.profile_binding(alias)
+            if binding is None:
+                raise ContractError("profile binding does not exist")
+            return {
+                "binding": binding,
+                "decisions": store.profile_binding_decisions(alias),
+            }
+        finally:
+            store.close()
+
     @staticmethod
     def _status_capacity(store: Store, run: dict[str, Any]) -> dict[str, Any] | None:
         try:
