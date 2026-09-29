@@ -265,6 +265,8 @@ def validate_decision_response(
     if adapter != request["adapter"] or adapter != config["adapter"]:
         raise ContractError("decision helper observed adapter identity drifted")
     language = _identifier(response["language"], "response language")
+    if language != request["language"]:
+        raise ContractError("decision helper response language drifted")
     truncation = _exact(
         response["truncation"], {"occurred", "detail"},
         "decision helper response truncation",

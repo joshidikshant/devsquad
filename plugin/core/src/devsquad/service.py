@@ -22,6 +22,12 @@ from .contracts import (
     ContractError,
     ProfileUnsupported,
 )
+from .decision import (
+    apply_decision_response,
+    build_decision_request,
+    decision_fallback,
+    validate_decision_policy,
+)
 from .reports import (
     build_early_terminal_reports,
     build_terminal_reports,
@@ -394,6 +400,133 @@ class Service:
         )
 
     @staticmethod
+    def _decision_fixture_response(
+        request: dict[str, Any], fixture: dict[str, Any],
+    ) -> dict[str, Any]:
+        if (not isinstance(fixture, dict)
+                or set(fixture) != {"rankings", "confidence", "elapsed_ms"}
+                or not isinstance(fixture["rankings"], dict)
+                or isinstance(fixture["confidence"], bool)
+                or not isinstance(fixture["confidence"], (int, float))
+                or type(fixture["elapsed_ms"]) is not int
+                or fixture["elapsed_ms"] < 0):
+            raise ContractError("internal decision fixture is invalid")
+        if set(fixture["rankings"]) - set(request["candidates"]):
+            raise ContractError("internal decision fixture role is invalid")
+        recommendations = {}
+        for role, candidates in request["candidates"].items():
+            ranking = fixture["rankings"].get(role, candidates)
+            if not isinstance(ranking, list):
+                raise ContractError("internal decision fixture ranking is invalid")
+            denominator = sum(range(1, len(ranking) + 1))
+            recommendations[role] = {
+                "ranking": list(ranking),
+                "probabilities": {
+                    profile_id: weight / denominator
+                    for profile_id, weight in zip(
+                        ranking, range(len(ranking), 0, -1),
+                    )
+                },
+                "confidence": fixture["confidence"],
+                "abstain_reason": None,
+            }
+        return {
+            "schema_version": 1,
+            "request_sha256": hashlib.sha256(
+                canonical_json(request).encode(),
+            ).hexdigest(),
+            "adapter": request["adapter"],
+            "language": request["language"],
+            "truncation": {"occurred": False, "detail": None},
+            "recommendations": recommendations,
+            "usage": {
+                "source": "fake", "billable_requests": 1,
+                "input_tokens": 10, "output_tokens": 2, "cost_usd": 0.0,
+            },
+            "elapsed_ms": fixture["elapsed_ms"],
+        }
+
+    def _apply_optional_decision_helper(
+        self,
+        store: Store,
+        run_id: str,
+        fencing_token: int,
+        task: dict[str, Any],
+        routing: dict[str, Any],
+        policy: dict[str, Any],
+        base_oid: str,
+        target_oid: str,
+        fixture: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        config = validate_decision_policy(policy.get("decision_helper"))
+        if config["mode"] == "off":
+            return routing, None
+        evidence_payload = canonical_json({
+            "base_oid": base_oid,
+            "target_oid": target_oid,
+            "goal": task["goal"],
+            "task_class": task["task_class"],
+            "acceptance": task["acceptance"],
+            "checks": task["checks"],
+            "scope": task["scope"],
+        })
+        try:
+            request = build_decision_request(
+                task, routing, policy, evidence_payload,
+            )
+        except ContractError:
+            return (
+                decision_fallback(
+                    routing, config["mode"], "request_invalid", None,
+                ),
+                None,
+            )
+        if request is None:  # Defensive: enabled modes always build a request.
+            return routing, None
+        owner_id = f"preparation:{run_id}:{fencing_token}"
+        observation = store.claim_decision_observation(
+            run_id, config["mode"], request, owner_id,
+        )
+        response = observation["response"]
+        if observation["action"] == "claimed":
+            if fixture is None:
+                store.finish_decision_without_call(
+                    observation["cache_key"], owner_id, "unavailable",
+                    "configured decision adapter is unavailable",
+                )
+                observation = store.decision_observation(
+                    run_id, request["purpose"]["id"],
+                )
+            else:
+                store.launch_decision_call(observation["cache_key"], owner_id)
+                completed = store.complete_decision_call(
+                    observation["cache_key"], owner_id,
+                    self._decision_fixture_response(request, fixture), config,
+                )
+                response = completed["response"]
+                observation = store.decision_observation(
+                    run_id, request["purpose"]["id"],
+                )
+        if (observation is not None
+                and observation["status"] in {"succeeded", "abstained"}
+                and response is not None):
+            routed = apply_decision_response(routing, request, response, config)
+        else:
+            status = (
+                observation["status"] if observation is not None
+                else "observation_unavailable"
+            )
+            routed = decision_fallback(
+                routing, config["mode"], status,
+                hashlib.sha256(canonical_json(request).encode()).hexdigest(),
+            )
+        effect = routed["decision_helper"]
+        saved = store.record_decision_effect(
+            run_id, request["purpose"]["id"], observation["cache_key"], effect,
+        )
+        return routed, saved
+
+    @staticmethod
     def _handoff_payload(snapshot: HandoffSnapshot, *, include_packet: bool) -> dict[str, Any]:
         payload = {
             "handoff_id": snapshot.handoff_id,
@@ -424,6 +557,8 @@ class Service:
         internal_review_fixture: dict[str, Any] | None = None,
         internal_lead_fixture: dict[str, Any] | None = None,
         internal_implementation_fixture: dict[str, Any] | None = None,
+        internal_decision_fixture: dict[str, Any] | None = None,
+        preparation_fencing_token: int | None = None,
         capacity_store: Store | None = None,
     ) -> dict[str, Any]:
         repo = resolved_repo or Path(task["project"]["repo_path"]).resolve(strict=True)
@@ -484,6 +619,24 @@ class Service:
             })
             if project_id is None or run_id is None:
                 raise ContractError("public preflight requires run-owned workspace identity")
+            if preparation_fencing_token is None:
+                raise ContractError("public preflight requires a preparation fence")
+            policy_document = json.loads(config_payloads["policy_file"])
+            snapshot["routing"], decision_observation = (
+                self._apply_optional_decision_helper(
+                    capacity_store,
+                    run_id,
+                    preparation_fencing_token,
+                    task,
+                    snapshot["routing"],
+                    policy_document,
+                    base_oid,
+                    target_oid,
+                    internal_decision_fixture,
+                )
+            )
+            if decision_observation is not None:
+                snapshot["decision_observation"] = decision_observation
             if task["workflow"] == "branch-review":
                 snapshot["workspace"] = prepare_review_workspace(
                     repo,
@@ -607,6 +760,9 @@ class Service:
             internal_implementation_fixture = submitted.get(
                 "_internal_implementation_fixture"
             )
+            internal_decision_fixture = submitted.get(
+                "_internal_decision_fixture"
+            )
             store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
             validated_supersedes_run_id = supersedes_run_id
             validate_task(task, require_existing_repo=True)
@@ -632,6 +788,8 @@ class Service:
                 internal_review_fixture=internal_review_fixture,
                 internal_lead_fixture=internal_lead_fixture,
                 internal_implementation_fixture=internal_implementation_fixture,
+                internal_decision_fixture=internal_decision_fixture,
+                preparation_fencing_token=fencing_token,
                 capacity_store=store,
             )
             if (task["workflow"] == "issue-delivery"
@@ -738,6 +896,7 @@ class Service:
         _internal_review_fixture: dict[str, Any] | None = None,
         _internal_lead_fixture: dict[str, Any] | None = None,
         _internal_implementation_fixture: dict[str, Any] | None = None,
+        _internal_decision_fixture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         validate_task(task, require_existing_repo=True)
         if _internal_fake_delay is not None and _internal_review_fixture is not None:
@@ -748,6 +907,11 @@ class Service:
                 and (_internal_fake_delay is not None
                      or task["workflow"] != "issue-delivery")):
             raise ContractError("internal implementation fixture requires issue-delivery")
+        if (_internal_decision_fixture is not None
+                and _internal_fake_delay is not None):
+            raise ContractError(
+                "internal decision fixture requires public preflight",
+            )
         submitted = {"task": task, "supersedes_run_id": supersedes_run_id}
         if _internal_fake_delay is not None:
             submitted["_internal_fake_delay"] = _internal_fake_delay
@@ -759,6 +923,8 @@ class Service:
             submitted["_internal_implementation_fixture"] = (
                 _internal_implementation_fixture
             )
+        if _internal_decision_fixture is not None:
+            submitted["_internal_decision_fixture"] = _internal_decision_fixture
         store = self._store()
         try:
             claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}")
@@ -1027,7 +1193,7 @@ class Service:
                     next_action = None
             else:
                 next_action = None
-            return {
+            result = {
                 "run_id": run_id,
                 "state": run["state"],
                 "phase": run["phase"],
@@ -1040,6 +1206,10 @@ class Service:
                 "next_action": next_action,
                 "capacity": self._status_capacity(store, run),
             }
+            decision_observations = store.decision_observations_for_run(run_id)
+            if decision_observations:
+                result["decision_helper"] = decision_observations
+            return result
         finally: store.close()
 
     def events(self, run_id: str, after: int = 0, limit: int = 100) -> dict[str, Any]:
@@ -1066,7 +1236,9 @@ class Service:
         store = self._store()
         try:
             run = store.run(run_id)
-            if run["state"] == "queued" and run["phase"] == "preparing": version = store.cancel_preparing(run_id)
+            if run["state"] == "queued" and run["phase"] == "preparing":
+                store.cancel_run_decision_observations(run_id)
+                version = store.cancel_preparing(run_id)
             elif run["state"] == "queued" and run["phase"] == "launching": version = store.cancel_launching(run_id)
             elif run["state"] == "queued" and run["phase"] is None: version = store.cancel_queued(run_id)
             elif run["state"] == "cancelling" and run["phase"] == "recovery_cleanup":

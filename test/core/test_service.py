@@ -116,6 +116,67 @@ class ServiceTest(unittest.TestCase):
             time.sleep(.05)
         self.fail(f"run did not reach {states}: {self.service.status(run_id)}")
 
+    def configure_decision_helper(self, mode):
+        profiles = json.loads((self.repo / "profiles.json").read_text())
+        if not any(item["id"] == "fixture-reviewer-b" for item in profiles["profiles"]):
+            second = dict(profiles["profiles"][0])
+            second.update({
+                "id": "fixture-reviewer-b",
+                "model_id": "fixture-review-model-b",
+                "evidence_refs": ["tracked-fixture-b"],
+            })
+            profiles["profiles"].append(second)
+        policy = json.loads((self.repo / "policy.json").read_text())
+        policy["roles"]["reviewer"] = [
+            {"kind": "alias", "id": "review.deep"},
+            {"kind": "profile", "id": "fixture-reviewer-b"},
+        ]
+        policy["decision_helper"] = {
+            "schema_version": 1,
+            "mode": mode,
+            "purpose": {
+                "id": "profile-ranking", "version": 1,
+                "question_sha256": "a" * 64,
+                "rubric_sha256": "b" * 64,
+            },
+            "adapter": {
+                "id": "fixture", "model": "fixture-v1",
+                "runtime_revision": "fixture-runtime-1",
+                "calibration_version": None,
+            },
+            "language": "en",
+            "min_confidence": 0.7,
+            "gate_evidence_sha256": "c" * 64 if mode == "advisory" else None,
+            "budget": {
+                "max_calls": 1, "max_input_bytes": 4096,
+                "wall_seconds": 2, "max_cost_usd": 0.01,
+            },
+        }
+        (self.repo / "profiles.json").write_text(
+            json.dumps(profiles, sort_keys=True) + "\n",
+        )
+        (self.repo / "policy.json").write_text(
+            json.dumps(policy, sort_keys=True) + "\n",
+        )
+        subprocess.run(
+            ["git", "-C", str(self.repo), "add", "profiles.json", "policy.json"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.repo), "commit", "-qm", f"decision {mode}"],
+            check=True,
+        )
+
+    @staticmethod
+    def decision_fixture():
+        return {
+            "rankings": {
+                "reviewer": ["fixture-reviewer-b", "fixture-reviewer"],
+            },
+            "confidence": 0.9,
+            "elapsed_ms": 3,
+        }
+
     def test_start_is_idempotent_and_result_events_are_durable(self):
         first=self.service.start(self.task,"same",_internal_fake_delay=.01)
         second=self.service.start(self.task,"same",_internal_fake_delay=.01)
@@ -126,6 +187,129 @@ class ServiceTest(unittest.TestCase):
         page=self.service.events(first["run_id"],0,2)
         self.assertEqual(len(page["events"]),2); self.assertIsNotNone(page["next_cursor"])
         with self.assertRaises(ConflictError): self.service.resume(first["run_id"])
+
+    def test_decision_helper_default_off_has_no_runtime_or_call_effect(self):
+        started = self.service.start(
+            self.task, "decision-off",
+            _internal_review_fixture={
+                "verdict": "clean", "summary": "off fixture", "findings": [],
+            },
+        )
+        self.assertEqual(started["state"], "queued", started)
+        self.wait_state(started["run_id"], {"awaiting_host"})
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            snapshot = json.loads(store.run(started["run_id"])["mutable_snapshot"])
+            observations = store.connection.execute(
+                "SELECT COUNT(*) FROM run_decision_observations WHERE run_id=?",
+                (started["run_id"],),
+            ).fetchone()[0]
+        finally:
+            store.close()
+        self.assertNotIn("decision_helper", snapshot["routing"])
+        self.assertNotIn("decision_observation", snapshot)
+        self.assertEqual(observations, 0)
+
+    def test_shadow_decision_is_cached_and_never_changes_selection(self):
+        self.configure_decision_helper("shadow")
+        fixture = self.decision_fixture()
+        run_ids = []
+        for key in ("decision-shadow-one", "decision-shadow-two"):
+            started = self.service.start(
+                self.task, key,
+                _internal_review_fixture={
+                    "verdict": "clean", "summary": key, "findings": [],
+                },
+                _internal_decision_fixture=fixture,
+            )
+            self.assertEqual(started["state"], "queued", started)
+            self.wait_state(started["run_id"], {"awaiting_host"})
+            run_ids.append(started["run_id"])
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            snapshots = [
+                json.loads(store.run(run_id)["mutable_snapshot"])
+                for run_id in run_ids
+            ]
+            observations = [
+                store.decision_observation(run_id, "profile-ranking")
+                for run_id in run_ids
+            ]
+            cache_rows = store.connection.execute(
+                "SELECT COUNT(*) FROM decision_cache",
+            ).fetchone()[0]
+        finally:
+            store.close()
+        for snapshot in snapshots:
+            reviewer = snapshot["routing"]["roles"]["reviewer"]
+            self.assertEqual(reviewer["selected"]["profile_id"], "fixture-reviewer")
+            self.assertEqual(
+                snapshot["routing"]["decision_helper"]["role_status"],
+                {"reviewer": "shadow_mode"},
+            )
+        self.assertEqual(observations[0]["cache_key"], observations[1]["cache_key"])
+        self.assertEqual([item["billable_calls"] for item in observations], [1, 1])
+        self.assertEqual(cache_rows, 1)
+        self.assertNotIn(self.task["goal"], json.dumps(observations[0]["request"]))
+        status = self.service.status(run_ids[0])
+        self.assertEqual(status["decision_helper"][0]["status"], "succeeded")
+        self.assertEqual(status["decision_helper"][0]["billable_calls"], 1)
+
+    def test_advisory_reorders_only_eligible_profiles_and_freezes_effect(self):
+        self.configure_decision_helper("advisory")
+        started = self.service.start(
+            self.task, "decision-advisory",
+            _internal_review_fixture={
+                "verdict": "clean", "summary": "advisory fixture", "findings": [],
+            },
+            _internal_decision_fixture=self.decision_fixture(),
+        )
+        self.assertEqual(started["state"], "queued", started)
+        self.wait_state(started["run_id"], {"awaiting_host"})
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            snapshot = json.loads(store.run(started["run_id"])["mutable_snapshot"])
+            observation = store.decision_observation(
+                started["run_id"], "profile-ranking",
+            )
+        finally:
+            store.close()
+        reviewer = snapshot["routing"]["roles"]["reviewer"]
+        self.assertEqual(reviewer["selected"]["profile_id"], "fixture-reviewer-b")
+        self.assertEqual(
+            [item["profile_id"] for item in reviewer["fallbacks"]],
+            ["fixture-reviewer"],
+        )
+        self.assertEqual(
+            snapshot["routing"]["decision_helper"]["applied_roles"], ["reviewer"],
+        )
+        self.assertTrue(observation["applied"])
+        self.assertEqual(observation["billable_calls"], 1)
+
+    def test_missing_decision_adapter_preserves_route_and_records_zero_calls(self):
+        self.configure_decision_helper("shadow")
+        started = self.service.start(
+            self.task, "decision-unavailable",
+            _internal_review_fixture={
+                "verdict": "clean", "summary": "unavailable fixture", "findings": [],
+            },
+        )
+        self.assertEqual(started["state"], "queued", started)
+        self.wait_state(started["run_id"], {"awaiting_host"})
+        store = Store(self.runtime / "state.sqlite3", self.runtime / "artifacts")
+        try:
+            snapshot = json.loads(store.run(started["run_id"])["mutable_snapshot"])
+            observation = store.decision_observation(
+                started["run_id"], "profile-ranking",
+            )
+        finally:
+            store.close()
+        self.assertEqual(
+            snapshot["routing"]["roles"]["reviewer"]["selected"]["profile_id"],
+            "fixture-reviewer",
+        )
+        self.assertEqual(observation["status"], "unavailable")
+        self.assertEqual(observation["billable_calls"], 0)
 
     def test_capacity_observation_drives_preflight_and_status_evidence(self):
         now = datetime.now(timezone.utc)

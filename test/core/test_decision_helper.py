@@ -266,6 +266,32 @@ class DecisionHelperTest(unittest.TestCase):
             routed["decision_helper"]["role_status"]["reviewer"], "shadow_mode",
         )
 
+    def test_frozen_baseline_uses_only_the_synthetic_labeled_corpus(self):
+        experiment_dir = ROOT / "docs/plans/engineering-team/experiments"
+        baseline = json.loads(
+            (experiment_dir / "decision-helper-baseline-v1.json").read_text(),
+        )
+        self.assertEqual(set(baseline), {
+            "schema_version", "experiment_id", "status", "purpose", "corpus",
+            "split", "modes", "resource_ceiling", "acceptance", "adoption",
+        })
+        corpus_path = experiment_dir / baseline["corpus"]["path"]
+        self.assertEqual(
+            hashlib.sha256(corpus_path.read_bytes()).hexdigest(),
+            baseline["corpus"]["sha256"],
+        )
+        corpus = json.loads(corpus_path.read_text())
+        case_ids = [case["id"] for case in corpus["cases"]]
+        self.assertEqual(case_ids, baseline["corpus"]["case_ids"])
+        self.assertEqual(
+            set(baseline["split"]["mechanics"] + baseline["split"]["held_out"]),
+            set(case_ids),
+        )
+        self.assertFalse(baseline["corpus"]["contains_private_content"])
+        self.assertEqual(baseline["resource_ceiling"]["network_calls_in_baseline"], 0)
+        self.assertFalse(baseline["adoption"]["advisory_authorized_by_baseline"])
+        self.assertEqual(baseline["adoption"]["runtime_default"], "off")
+
 
 if __name__ == "__main__":
     unittest.main()

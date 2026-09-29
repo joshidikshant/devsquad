@@ -1361,6 +1361,8 @@ class Store:
         now: datetime | None = None,
     ) -> dict[str, Any]:
         """Bind the frozen routing effect to this run without changing cache data."""
+        if not isinstance(effect, dict):
+            raise ContractError("run decision effect must be an object")
         effect_json = canonical_json(effect)
         applied = bool(effect.get("applied_roles"))
         recorded_at = _authoritative_now(now).isoformat()
@@ -1407,6 +1409,71 @@ class Store:
         return self._decision_observation_payload(
             row, action="read", replayed=True,
         )
+
+    def decision_observations_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        purposes = self.connection.execute(
+            "SELECT purpose_id FROM run_decision_observations "
+            "WHERE run_id=? ORDER BY purpose_id",
+            (run_id,),
+        ).fetchall()
+        return [
+            self._decision_observation_payload(
+                self._decision_observation_row(run_id, row["purpose_id"]),
+                action="read", replayed=True,
+            )
+            for row in purposes
+        ]
+
+    def cancel_run_decision_observations(
+        self, run_id: str, *, now: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fence every pending helper call when its owning run is cancelled."""
+        cancelled_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            rows = self.connection.execute(
+                "SELECT DISTINCT c.cache_key,c.status,c.billable_calls "
+                "FROM run_decision_observations o JOIN decision_cache c "
+                "ON c.cache_key=o.cache_key WHERE o.run_id=? "
+                "AND c.status IN ('reserved','running')",
+                (run_id,),
+            ).fetchall()
+            results = []
+            for row in rows:
+                status = (
+                    "cancelled" if row["status"] == "reserved"
+                    else "indeterminate"
+                )
+                reason = (
+                    "owning run cancelled before decision launch"
+                    if status == "cancelled"
+                    else "owning run cancelled after decision launch; outcome is unknown"
+                )
+                usage = {
+                    "source": "unavailable",
+                    "billable_requests": row["billable_calls"],
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "cost_usd": None,
+                }
+                self.connection.execute(
+                    "UPDATE decision_cache SET status=?,usage_json=?,error=?,"
+                    "updated_at=? WHERE cache_key=? AND status=?",
+                    (
+                        status, canonical_json(usage), reason, cancelled_at,
+                        row["cache_key"], row["status"],
+                    ),
+                )
+                results.append({
+                    "cache_key": row["cache_key"],
+                    "status": status,
+                    "billable_calls": row["billable_calls"],
+                })
+            self.connection.execute("COMMIT")
+            return results
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def record_outcome(
         self,

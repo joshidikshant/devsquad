@@ -154,9 +154,9 @@ class DecisionStoreTest(unittest.TestCase):
         claimed = self.store.claim_decision_observation(
             run_id, "shadow", self.request, "decision-owner", now=NOW,
         )
-        cancelled = self.store.cancel_decision_observation(
-            claimed["cache_key"], "decision-owner", now=NOW,
-        )
+        cancelled = self.store.cancel_run_decision_observations(
+            run_id, now=NOW,
+        )[0]
         self.assertEqual((cancelled["status"], cancelled["billable_calls"]), ("cancelled", 0))
         replay = self.store.claim_decision_observation(
             run_id, "shadow", self.request, "decision-owner-new", now=NOW,
