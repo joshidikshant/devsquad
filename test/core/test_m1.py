@@ -99,6 +99,8 @@ class M1ContractsTest(unittest.TestCase):
             self.assertEqual(spec.argv[-2:], ("--listen", "stdio://"))
             self.assertIn('model_reasoning_effort="low"', spec.argv)
             self.assertEqual(spec.environment["DEVSQUAD_WORKER"], "1")
+            current = prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli 0.155.0-alpha.9.2")
+            self.assertEqual(current.transport, "native_protocol")
             with self.assertRaises(ContractError):
                 prepare_native_codex(manifest, cwd=temp.name, model="gpt-test", effort="low", permission="read_only", timeout_seconds=9, harness_version_value="codex-cli future")
 
