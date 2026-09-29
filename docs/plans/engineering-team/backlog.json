@@ -23,7 +23,7 @@
   },
   "review_work_packages": [
     {"id": "R1", "title": "Candidate integrity through trusted checks", "status": "complete", "milestones": ["M3", "M5"], "depends_on": [], "items": ["F1"], "evidence": "evidence/R1-candidate-integrity-2026-09-29.json", "checkpoint": "Source repair verified by public regressions, mutation matrix, 330-test core gate with 2 optional-SDK skips and independent patch review. Installed refresh remains R8."},
-    {"id": "R2", "title": "Observed Claude execution identity", "status": "pending", "milestones": ["M5"], "depends_on": [], "items": ["F2"]},
+    {"id": "R2", "title": "Observed Claude execution identity", "status": "in_progress", "milestones": ["M5"], "depends_on": [], "items": ["F2"], "evidence": "evidence/R2-identity-red-baseline-2026-09-29.json", "checkpoint": "16 offline worker regressions saved; focused run reports 39 assertion/subtest failures and 4 errors against unchanged R1 production source. No R2 repair or green gate yet. Next: parser/worker, strict import/actual-model independence, then durable failure and replay coverage."},
     {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "pending", "milestones": ["M6"], "depends_on": [], "items": ["F3"]},
     {"id": "R4", "title": "Normal routing, catalog lifecycle and quota", "status": "pending", "milestones": ["M6", "M7"], "depends_on": ["R1", "R2", "R3"], "items": ["F4", "G2"]},
     {"id": "R5", "title": "Public saved-run outcomes and bounded experiments", "status": "pending", "milestones": ["M6"], "depends_on": ["R3", "R4"], "items": ["G1"]},

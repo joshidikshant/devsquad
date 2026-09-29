@@ -7,6 +7,13 @@ and verified offline; execute R2/R6 in
 [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The genuine Claude-to-Codex
 live gate additionally remains blocked on normal Claude login.
 
+R2 now has a preserved red baseline: 16 fake-CLI worker tests ran with 39
+assertion/subtest failures and 4 errors against unchanged production source
+at `6848f11`. See [baseline evidence](evidence/R2-identity-red-baseline-2026-09-29.json).
+Parser repair, strict imported evidence, public independent-review acceptance
+and durable failure/replay regressions remain unfinished. This checkpoint
+does not establish a green core suite or a corrected Claude live receipt.
+
 | Requirement | Planned evidence | Status |
 |---|---|---|
 | Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | argv conformance verified at `d96e9e4`; observed identity reopened under R2 |

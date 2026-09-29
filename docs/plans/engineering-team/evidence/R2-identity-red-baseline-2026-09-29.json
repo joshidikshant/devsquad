@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "work_package": "R2",
+  "recorded_on": "2026-09-29",
+  "status": "red_baseline_only",
+  "production_revision": "6848f1156bee10e1ef2617402dfc7eaebdc58076",
+  "production_changed": false,
+  "provider_calls": 0,
+  "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=plugin/core/src python3 -m unittest discover -s test/core -p test_claude_identity.py -v",
+  "result": {
+    "exit_code": 1,
+    "test_methods_run": 16,
+    "assertion_or_subtest_failures": 39,
+    "errors": 4,
+    "elapsed_seconds": 3.162,
+    "error_cause": "Non-object JSON reaches provider_document.get and raises AttributeError instead of ContractError"
+  },
+  "sha256": {
+    "test/core/test_claude_identity.py": "c18f2f91ff547f2e3c90902bb3516550e20c39e8c9a01f7c8b8ec3ad8f2a2d99",
+    "plugin/core/src/devsquad/claude_delivery_worker.py": "c89bca4fa04e01541d1877c8ee8511df724e46dc00b6e172add32d03094de18c",
+    "plugin/core/src/devsquad/workflows.py": "449237aa230e6a778be42f21f931106beeb15326f1a4fd5054b99fce5e47b7dc"
+  },
+  "scope": "Direct worker conformance using only a temporary fake CLI; not public delivery, installed runtime, or live-provider proof",
+  "handoff_checks": {
+    "bash_test_run": "227 assertions across 11 files passed with process inspection permitted; initial sandbox-stalled run stopped with exit 143 and is not a pass",
+    "generated_reference": "current",
+    "json_validation": "passed",
+    "diff_check": "passed",
+    "full_core_suite": "not rerun for this planning checkpoint; new focused R2 regressions are known to fail"
+  },
+  "remaining": [
+    "Repair native parser and distinguish requested settings from reported identity",
+    "Add strict evidence-import and actual-model independent-review public regressions",
+    "Retain safe failed native evidence in durable receipts and test recovery/replay",
+    "Run the repaired focused and full offline gates plus bounded independent patch review",
+    "Obtain a corrected live Claude-to-different-model-Codex receipt after normal Claude login"
+  ],
+  "completion_claim": "R2 remains in progress. The earlier 330-test R1 green gate predates this failing test file; it is not a current-tree pass."
+}

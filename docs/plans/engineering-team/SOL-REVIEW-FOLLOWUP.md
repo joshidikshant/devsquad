@@ -26,6 +26,33 @@ coverage and 330-test core gate (two optional-SDK skips). See
 [R1 evidence](evidence/R1-candidate-integrity-2026-09-29.json). Start at **R2**
 after checking current Git state. R2–R8 and installed refresh remain open.
 
+### Ready-to-execute handoff for Sol
+
+Production baseline is now `6848f1156bee10e1ef2617402dfc7eaebdc58076` (R1).
+R2 has a saved **red test checkpoint**, not an implemented repair:
+`test/core/test_claude_identity.py` contains 16 offline fake-CLI tests. The
+latest focused run completed in 3.162 seconds with **39 assertion/subtest
+failures and 4 errors**. The errors expose non-object JSON reaching an unsafe
+`.get()` call. See [R2 baseline evidence](evidence/R2-identity-red-baseline-2026-09-29.json).
+No production source changed for this planning handoff. The prior 330-test
+green gate belongs to R1; the current tree includes known failing R2 tests.
+
+| Next slice | Deliverable | Gate before claiming completion |
+|---|---|---|
+| R2a | Native identity parser and worker evidence | Existing 16 tests green; explicit provenance and unknown settings |
+| R2b | Strict import plus actual-model independence | Tampered evidence and same effective model rejected through public host/headless paths |
+| R2c | Durable identity failures and replay compatibility | Invalid identity retained in failed receipts; historical reads work without authorizing new acceptance |
+| R3 | Independent trial evidence | No reused observation can inflate evaluation or held-out sample size |
+| R4 → R5 → R6 | Routing, learning and normal terminal integration | Public-run evidence through the full chain, then fresh-install usability proof |
+| R7 / R8 | Council and installed/live closure | Each separately required acceptance gate; external blockers remain explicit |
+
+Use the same spec-based loop for every slice: name the contract and public
+entry point; reproduce the missing behavior; implement the smallest coherent
+change; run focused tests; review the patch; record evidence and the exact
+next action; checkpoint. Run the full integration gates at package boundaries,
+not after every small edit. One integration owner controls shared files; use
+bounded leaf reviews only when they can run alongside useful local work.
+
 ## Feedback on what has been built
 
 Preserve the substantial working implementation: the durable runner and
@@ -135,6 +162,55 @@ Do not replace subscription-compatible safe mode with `--bare`.
 model, absent identity, multiple models, unavailable effort and tampered
 evidence all have explicit tested results. The genuine two-harness live gate
 remains open until the corrected adapter obtains a real receipt.
+
+#### R2 implementation feedback and missing tests
+
+- **R2a — parser/worker:** define a shared strict identity contract rather than
+  letting the worker and importer invent separate interpretations. Require a
+  valid success envelope, bounded nonblank session identity and well-formed
+  native usage. Reject non-object, duplicate-key and non-finite JSON without
+  leaking an `AttributeError`. Keep the frozen requested profile unchanged.
+  A sole concrete `modelUsage` key may establish the reported model; preserve
+  all entries and reject ambiguous writer attribution. Tested family aliases
+  (`sonnet`, `opus`, `haiku`) may resolve only to a reported concrete model of
+  that family, without a hardcoded current version. Pricing `canonicalModel`
+  must not replace native usage identity; a differing pricing-only value is
+  allowed and is not a serving-identity conflict. An optional top-level
+  `model` is not identity authority either, but a contradictory serving-model
+  claim fails closed. Keep effective effort/backing revision
+  null when unreported, and make the scope of verification explicit. The new
+  test file covers this layer only; update older success fixtures to include
+  valid native evidence instead of weakening the parser.
+- **R2b — import/acceptance:** validate the native evidence against the frozen
+  adapter, selected profile (including a legitimate fallback), session and
+  claimed observation. A dictionary or `verification="verified"` label is not
+  proof. Add regressions for forged model/effort/session/provenance and missing
+  native evidence. Enforce independence using verified reported identities,
+  not just requested aliases or family labels. Exercise same effective model
+  behind different profile names, unknown/ambiguous identity and a valid
+  different-model case through both host and headless delivery. Candidate
+  finalization/import and later disposition must not bypass these gates.
+- **R2c — failures/recovery:** persist bounded, redacted identity diagnostics,
+  valid reported model/usage data and artifact references for rejected attempts
+  in the durable receipt; exception text alone is insufficient. Test failure,
+  fallback, cancellation and recovery/replay with no duplicate writer or lost
+  attempt. Historical terminal receipts remain readable and exact terminal
+  replays remain idempotent, but old unverified evidence cannot authorize a
+  new acceptance. Version evidence/contracts explicitly if needed. Preserve
+  R1's non-overridable check-integrity gates throughout.
+
+Reproduce the saved baseline with:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=plugin/core/src \
+  python3 -m unittest discover -s test/core -p test_claude_identity.py -v
+```
+
+This command is expected to fail until R2 is implemented. Do not skip or mark
+the regressions expected-failure merely to recover a green suite. Before R2
+offline closure, run its added public tests, complete core discovery, the Bash
+suite and generated-reference check, then obtain one bounded independent
+patch review. Only after that consider the separately blocked live receipt.
 
 ### R3 — Make experiment and held-out evidence independent
 
@@ -311,8 +387,11 @@ permission to claim routing improvement.
 
 ## First action for Sol
 
-R1's source repair is verified; continue at R2 with failing native-identity
-and import-tampering regressions. Preserve R1's check-output contract and
-mutation evidence. Continue R2–R6 without waiting on the Claude login or Jev key. Retain R7
-and R8 in the full scope and continue their independent work as dependencies
-become ready.
+Read the recovery files, verify current Git state, and start with the saved
+16-test R2 red baseline above. Implement R2a, then add the missing R2b/R2c
+public regressions and repairs. Preserve R1's check-output contract and
+mutation evidence. Continue R2–R6 without waiting on the Claude login or Jev
+key. Retain R7 and R8 in the full scope and continue their independent work
+as dependencies become ready. Report each slice as red baseline, verified
+offline, installed proof, or externally blocked; do not collapse those states
+into a single completion claim.

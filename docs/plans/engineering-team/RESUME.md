@@ -6,6 +6,22 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Review correction and next action
 
+Latest handoff is a **plan plus preserved failing R2 regressions**, not an R2
+repair. Production remains at R1 commit `6848f11`.
+`test/core/test_claude_identity.py` now contains 16 fake-CLI tests; the focused
+baseline ran in 3.162 seconds with 39 assertion/subtest failures and 4 errors
+(non-object JSON raises `AttributeError`). No live provider call or new
+production change occurred. The current test tree is knowingly red; the
+330-test green result below predates these new regressions. See
+[R2 baseline evidence](evidence/R2-identity-red-baseline-2026-09-29.json).
+This handoff's Bash gate passed all 227 assertions across 11 files with
+process inspection permitted; the first sandbox-stalled run was stopped and
+is not a pass. Generated-reference, JSON and whitespace checks passed. No
+complete core rerun was needed for this plan-only checkpoint; R2 remains red.
+Sol's next slice is R2a parser/worker, then R2b strict import/actual-model
+independence and R2c failed-receipt/replay coverage, as detailed in the
+[updated execution plan](SOL-REVIEW-FOLLOWUP.md#ready-to-execute-handoff-for-sol).
+
 R1's source repair is verified after `399d93d`: the public regression first
 reproduced four unsafe mutation paths (review/delivery × host/headless). The
 repair adds check-boundary fingerprints, explicit permitted output paths,
@@ -314,8 +330,10 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Execute R2's offline Claude model-identity regressions and strict import gate,
-   then R3 and R4–R6 in dependency order. Preserve the verified R1 repair,
+2. Implement R2 against the saved 16-test failing Claude-identity baseline;
+   add strict import, actual-model independence and durable failure/replay
+   public regressions. Then execute R3 and R4–R6 in dependency order. Preserve
+   the verified R1 repair,
    explicit check `output_paths` contract and historical receipts. Do not
    rewrite the architecture or reset completed work.
 3. Keep Claude and Grok live probes paused until normal login is restored.
