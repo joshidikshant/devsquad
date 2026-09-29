@@ -1,10 +1,10 @@
 # M7 implementation status
 
-M7 is **in progress with its independent packaging work complete**. The
-standalone runtime is installed and usable from terminal, Codex and
-Antigravity. Universal surface completion remains blocked by normal Claude and
-Grok authentication, and the installed different-model delivery is the same
-external gate retained by M5.
+M7 has **completed all independently executable packaging and normal-entry
+work**. The standalone runtime is installed and usable from terminal, Codex
+and Antigravity. M7 remains blocked on normal Claude and Grok authentication;
+the installed different-model delivery is the same external gate retained by
+M5.
 
 | Requirement | Evidence | Status |
 |---|---|---|
@@ -20,13 +20,13 @@ external gate retained by M5.
 | Grok Build operation | Registration matching; real operation requires renewed authentication | blocked externally |
 | Installed two-model delivery | Genuine Claude implementation followed by different-model Codex review/check/disposition | blocked with M5 |
 | Documentation/CI | Runtime guide, generated command reference and macOS/Python/optional-MCP workflow | clean-home install/setup/doctor passed |
-| Normal task entry | `squad review --base ...` and `squad fix "..."` without hand-written task JSON | not implemented; active M7 work |
+| Normal task entry | Installed `squad review --base ...` and `squad fix "..."` dry-runs plus an offline end-to-end delivery | verified |
 
 ## Current installation
 
 The stable launcher is `/Users/Dikshant/.local/bin/squad`. The active immutable
 release is
-`0.1.0-py31214-4c5f034c67bf-mcp-a26bc88afbef`, using Python 3.12.14 and
+`0.1.0-py31214-129b9107ed59-mcp-a26bc88afbef`, using Python 3.12.14 and
 `mcp==2.2.0`. A repeated install reports `changed=false`, `pip check` passes,
 and `squad setup` reports every host unchanged.
 
@@ -37,12 +37,16 @@ Codex capability drift was revalidated rather than inferred. Bundled
 
 ## Test gate
 
-- 300 Python core tests passed with `ResourceWarning` promoted to error; two
+- 311 Python core tests passed with `ResourceWarning` promoted to error; two
   optional-SDK tests skipped in the dependency-free interpreter.
 - 227/227 Bash assertions passed across 11 files.
 - Eight focused installer tests passed.
 - Twenty-two focused tests passed in the installed official MCP environment.
 - The installed runtime passed `pip check`; setup and doctor report ready.
+- The installed `review` and `fix` dry-runs resolved exact Git commits and the
+  requested verified Codex profile without a model generation. The offline fix
+  simulation created one isolated writer, froze its candidate, ran independent
+  review and checks, preserved the source checkout and reached host handoff.
 
 The recurring interpreter-finalization `ResourceWarning` was printed as an
 unraisable cleanup diagnostic during full discovery, but the warning-as-error
@@ -57,6 +61,8 @@ action `claim_handoff`. Terminal cancellation then moved the same run and its
 open handoff to `cancelled`, version 20. Raw provider output remains private;
 hashes and redacted usage are in
 [the portable M7 evidence](evidence/M7-installed-runtime-2026-09-29.json).
+Normal-entry installation and test details are in
+[the normal-entry evidence](evidence/M7-normal-entry-2026-09-29.json).
 
 Antigravity headless mode requires an explicit project grant for unattended
 inspection. The verified minimum is `mcp(devsquad/squad_status)`; no global or
@@ -65,12 +71,12 @@ read-only sandbox, no conversation resume and only the DevSquad MCP server.
 
 ## Exact remaining work
 
-1. Implement and test the required `squad review` and `squad fix` task-entry
-   layer over the existing strict saved-run contracts. Keep `squad council`
-   attached to the separately gated C1 implementation.
-2. After normal Claude login, execute the saved M4 handoff and the M5 genuine
+1. After normal Claude login, execute the saved M4 handoff and the M5 genuine
    Claude implementation to different-model Codex delivery.
-3. After Grok login renewal, record one supported Grok Build operation against
+2. After Grok login renewal, record one supported Grok Build operation against
    the same installed runtime.
-4. Re-run the final gates and mark M7 complete only when every required surface
+3. Re-run the final gates and mark M7 complete only when every required surface
    receipt and installed delivery is present.
+
+`squad council` remains attached to the separately gated C1 implementation and
+does not reopen M7.

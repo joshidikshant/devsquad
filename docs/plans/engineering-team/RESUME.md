@@ -173,24 +173,30 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
   keeps runtime adoption off. The gate is 291 core tests with 2 optional-SDK
   skips and 220 Bash assertions. M6-D2 remains blocked only on
   `TYPESAFE_API_KEY`; Laya remains conditional on its declared trigger.
-- M7 packaging and the currently available live surfaces are verified through
-  `ccba125`. The immutable standalone installer works without Claude, performs
+- M7 packaging, normal task entry and the currently available live surfaces are
+  verified through `85aa378`. The immutable standalone installer works without
+  Claude, performs
   offline exact-lock MCP installation with `pip check`, emits clean JSON,
   migrates only a recognized legacy launcher, retains old releases and is
   idempotent. The active installed release is
-  `0.1.0-py31214-4c5f034c67bf-mcp-a26bc88afbef`; setup reports all four host
+  `0.1.0-py31214-129b9107ed59-mcp-a26bc88afbef`; setup reports all four host
   registrations unchanged and doctor is ready. Bundled Codex
   0.155.0-alpha.9.2 passed native initialize plus a complete seven-model
   catalog and is preferred over PATH Codex 0.135.0. A terminal-created run was
   observed through real Gemini/Antigravity and Codex MCP calls, then cancelled
-  from terminal. The gate is 300 core tests with 2 optional-SDK skips, 227 Bash
-  assertions, 8 focused installer tests and 22 installed-SDK tests. See
+  from terminal. `85aa378` adds installed `squad review` and `squad fix`
+  commands that resolve exact commits, discover the Codex catalog without a
+  generation, embed hash-frozen routing and need no hand-written JSON. The
+  offline fix gate creates one isolated writer, freezes the candidate, runs
+  independent review and checks, preserves the source checkout and reaches
+  host handoff; `--wait` advances the saved candidate-review phase once. The
+  gate is 311 core tests with 2 optional-SDK skips, 227 Bash assertions, 8
+  focused installer tests and 22 installed-SDK tests. See
   [M7-STATUS.md](M7-STATUS.md) and the
-  [portable redacted evidence](evidence/M7-installed-runtime-2026-09-29.json).
-  The clean-home install/setup/doctor walkthrough passed and exposed the
-  remaining independent M7 defect: normal `squad review` and `squad fix`
-  commands are absent. Claude, Grok and the installed two-model delivery remain
-  external blockers after that task-entry layer is complete.
+  [installed-runtime evidence](evidence/M7-installed-runtime-2026-09-29.json)
+  plus [normal-entry evidence](evidence/M7-normal-entry-2026-09-29.json).
+  M7 has no remaining independent work; normal Claude login, renewed Grok
+  authentication and the installed two-model delivery are external blockers.
 - The user's Jev/Laya request is evaluated in
   [DECISION-CLASSIFIERS.md](DECISION-CLASSIFIERS.md). This source-backed plan
   amendment adds M6-D1–D3: default-off contracts/baseline, a one-request capped
@@ -217,10 +223,11 @@ Verified at the implementation/evidence checkpoints above:
 
 | Check | Result |
 |---|---|
-| Python core discovery | 300 tests passed through M7 Codex binary resolution, with 2 optional-SDK skips and ResourceWarning promoted to error |
+| Python core discovery | 311 tests passed through M7 normal entry, with 2 optional-SDK skips and ResourceWarning promoted to error |
 | Bash 3.2 regression suite | 11 test files, 227 assertions passed |
 | Optional MCP boundary | `mcp==2.2.0` installed/constructed on local Python; Python 3.11 lock resolution; 22 official-SDK focused tests passed |
-| M7 installed runtime | Current immutable release has no source/plugin/installed drift; `pip check`, idempotent reinstall, four-host unchanged setup and doctor passed |
+| M7 installed runtime | Current immutable release has no source/plugin/installed drift; `pip check`, idempotent reinstall, four-host unchanged setup, doctor and installed review/fix dry-runs passed |
+| M7 normal task entry | Exact-commit review and bounded fix need no hand-written JSON; an offline delivery passed writer, candidate, review, check, source-preservation and handoff gates |
 | M7 live surface proof | Terminal start/cancel plus real Gemini/Antigravity and ephemeral Codex `squad_status` calls observed the same run/version |
 | M4 local host setup | Stable isolated runtime is registered in all four real local configs; doctor reports ready and a second setup pass was unchanged |
 | M4 cross-surface proof | Real Codex read the terminal-started run through MCP; official SDK clients proved identical ledger, fenced claims, completion and disconnect survival; actual Claude handoff remains blocked on login |
@@ -250,24 +257,22 @@ The authoritative requirement matrices are [M1-STATUS.md](M1-STATUS.md),
 [M5-STATUS.md](M5-STATUS.md), [M6-STATUS.md](M6-STATUS.md) and
 [M7-STATUS.md](M7-STATUS.md). [backlog.json](backlog.json) marks M1–M3
 complete, M4/M5 blocked on Claude, M6 blocked on the missing Jev key, and M7
-in progress. Unauthenticated or unsupported provider paths are not advertised
-as verified.
+blocked only on Claude/Grok live receipts. Unauthenticated or unsupported
+provider paths are not advertised as verified.
 
 ## Exact next work
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Implement the missing M7 `squad review` and `squad fix` normal entry layer
-   over the strict saved-run contracts, using bounded preparation and no hand-
-   written task JSON. Keep `squad council` scoped to the separate C1 extension.
-   Do not rebuild the completed M5/M6 offline implementations.
-3. Keep Claude and Grok live probes paused until normal login is restored.
+2. Keep Claude and Grok live probes paused until normal login is restored.
    Afterward, run the M4 Claude handoff, the M5 installed Claude-to-Codex
    delivery and one bounded Grok operation, retaining only redacted evidence.
-4. Keep M6 decision guidance off by default. Once `TYPESAFE_API_KEY` is
+3. Keep M6 decision guidance off by default. Once `TYPESAFE_API_KEY` is
    supplied, run the prepared one-request synthetic Jev pilot immediately with
    no retry and the $0.01 ceiling. Install/run Laya only if the predeclared Jev
    cost/access/quality trigger fires.
+4. Keep `squad council` scoped to the separately gated C1 extension; it does
+   not reopen M7 and remains pending after the current M5–M7 goal.
 
 The local official reference clone `/tmp/devsquad-codex-plugin-review-20260906` has native client patterns, including the `initialize` → `initialized` handshake. Installed protocol schemas were generated under `/tmp/devsquad-codex-protocol-20260906`. These temporary references may need to be regenerated after a restart; they are not the project source of truth.
 

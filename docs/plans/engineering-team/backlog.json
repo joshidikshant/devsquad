@@ -387,7 +387,7 @@
       "id": "M7",
       "title": "Installation, migration and all-surface proof",
       "depends_on": ["M6"],
-      "status": "in_progress",
+      "status": "blocked",
       "acceptance_section": "M7 — Package, migrate and prove every requested surface",
       "evidence": [
         {
@@ -407,9 +407,18 @@
           "artifact": "evidence/M7-installed-runtime-2026-09-29.json",
           "recorded_at": "2026-09-29T10:52:08Z",
           "availability": "portable_redacted"
+        },
+        {
+          "kind": "normal_entry_checkpoint",
+          "revision": "85aa378",
+          "command_or_action": "311 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 227 Bash assertions, offline end-to-end managed delivery and installed no-generation review/fix dry-runs",
+          "outcome": "Normal review and bounded fix now require no hand-written task/routing JSON. Exact commits, embedded hash-frozen routing, runtime-discovered Codex selection, one Claude writer, independent Codex review, checks, saved-run continuation and compact next-action output are verified; the updated immutable release passes pip check, idempotent reinstall, four-host setup and doctor.",
+          "artifact": "evidence/M7-normal-entry-2026-09-29.json",
+          "recorded_at": "2026-09-29T11:17:22Z",
+          "availability": "portable_redacted"
         }
       ],
-      "blocker": "The clean-home install/setup/doctor walkthrough passed, but the required normal squad review/fix entry layer is still independent implementation work. Universal surface completion then requires normal Claude login for the M4/M5 handoff and delivery receipts plus renewed Grok authentication for its live smoke."
+      "blocker": "All independently executable M7 work is complete. Universal surface completion requires normal Claude login for the M4/M5 handoff and installed delivery receipts plus renewed Grok authentication for its live smoke."
     }
   ],
   "extensions": [

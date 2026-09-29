@@ -64,8 +64,27 @@ smoke test.
 
 The generated [command and schema reference](generated/core-reference.md)
 lists every command form, packaged schema digest and a strict task-shape
-example. A real task must name an existing Git repository, committed refs and
-committed routing files containing locally verified profiles.
+example. Normal review and fix entry resolves committed refs, discovers the
+installed Codex catalog without a generation, freezes bounded subscription
+profiles and embeds the validated routing snapshot. It does not require task,
+profile or policy JSON:
+
+```bash
+squad review --base main --wait --json
+squad fix "the bounded issue to resolve" \
+  --write-path src --check "bash test/run.sh" --wait --json
+```
+
+Use `--dry-run` first to inspect exact commit IDs, role/profile selections,
+scope and checks without creating a run or invoking a model. `squad fix`
+defaults to repository-wide write scope when `--write-path` is omitted; narrow
+it whenever the issue permits. `--wait` automatically advances the saved
+candidate from implementation into independent review, then returns at the
+host-lead handoff. Omitting `--wait` returns the run ID immediately.
+
+The lower-level automation path remains available. A hand-written task must
+name an existing Git repository and committed refs. It may use either committed
+routing files or an exact embedded registry/policy pair.
 
 ```bash
 squad start --task-file task.json --idempotency-key issue-123 --json
@@ -153,6 +172,8 @@ Implemented surfaces and evidence:
 
 The current evidence source is
 [`M7-installed-runtime-2026-09-29.json`](plans/engineering-team/evidence/M7-installed-runtime-2026-09-29.json).
+The installed normal-entry evidence is
+[`M7-normal-entry-2026-09-29.json`](plans/engineering-team/evidence/M7-normal-entry-2026-09-29.json).
 Claude, Grok and the installed two-model delivery remain open, so universal
 surface support is not yet claimed.
 
