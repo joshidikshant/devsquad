@@ -3,7 +3,7 @@
   "name": "codex",
   "transport": "native_protocol",
   "fallback_transport": "cli_exec",
-  "binary_candidates": ["codex"],
+  "binary_candidates": ["codex", "/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex"],
   "model_provider": "openai",
   "verified_harness_versions": ["codex-cli 0.153.4", "codex-cli 0.155.0-alpha.9.2"],
   "capabilities": {"efforts_by_model": {}, "native_model_list": true, "resume": true},

@@ -6,6 +6,7 @@ import stat
 import tempfile
 import subprocess
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -27,9 +28,33 @@ class M1ContractsTest(unittest.TestCase):
     def fake_path(self, name: str) -> tuple[tempfile.TemporaryDirectory, Path]:
         temp = tempfile.TemporaryDirectory()
         path = Path(temp.name) / name
-        path.write_text("#!/bin/sh\nexit 0\n")
+        if name == "codex":
+            path.write_text(
+                "#!/bin/sh\n"
+                "if [ \"${1:-}\" = --version ]; then\n"
+                "  echo 'codex-cli 0.153.4'\n"
+                "fi\n"
+                "exit 0\n"
+            )
+        else:
+            path.write_text("#!/bin/sh\nexit 0\n")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
         return temp, path
+
+    def test_verified_binary_candidate_wins_over_an_older_path_binary(self):
+        temp, older = self.fake_path("codex")
+        self.addCleanup(temp.cleanup)
+        older.write_text("#!/bin/sh\necho 'codex-cli 0.135.0'\n")
+        verified = Path(temp.name) / "bundled-codex"
+        verified.write_text("#!/bin/sh\necho 'codex-cli 0.155.0-alpha.9.2'\n")
+        verified.chmod(verified.stat().st_mode | stat.S_IXUSR)
+        manifest = replace(
+            self.manifest("codex"),
+            binary_candidates=("codex", str(verified)),
+        )
+
+        with patch.dict(os.environ, {"PATH": str(older.parent)}):
+            self.assertEqual(manifest.resolve_binary(), str(verified))
 
     def test_prepare_preserves_spaces_and_tsx_prompt(self):
         temp, binary = self.fake_path("agy")

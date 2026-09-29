@@ -64,7 +64,25 @@ class AdapterManifest:
         )
 
     def resolve_binary(self) -> str | None:
-        return next((p for name in self.binary_candidates if (p := shutil.which(name))), None)
+        available = tuple(
+            dict.fromkeys(
+                path
+                for name in self.binary_candidates
+                if (path := shutil.which(name)) is not None
+            )
+        )
+        if self.verified_versions:
+            verified = next(
+                (
+                    path
+                    for path in available
+                    if harness_version(path) in self.verified_versions
+                ),
+                None,
+            )
+            if verified is not None:
+                return verified
+        return available[0] if available else None
 
     def with_model_efforts(self, mapping: dict[str, tuple[str, ...]]) -> "AdapterManifest":
         return AdapterManifest(
