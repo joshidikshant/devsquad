@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "milestone": "M7",
+  "status": "blocked_external",
+  "implementation_revision": "b1d52adae6bf11c547acb34f3b78c3d2853211be",
+  "recorded_at": "2026-09-29T12:13:54Z",
+  "purpose": "Prove the installed normal-entry Codex review path, including trusted checks in the detached worker environment and an artifact-bound host disposition.",
+  "repairs": [
+    {
+      "revision": "1553768",
+      "outcome": "A terminal turn-items fallback recovers completed Codex output when delta delivery is incomplete."
+    },
+    {
+      "revision": "09e435c",
+      "outcome": "Empty and malformed output failures retain redacted structural protocol diagnostics without model text."
+    },
+    {
+      "revision": "9d70888",
+      "outcome": "The last completed agent message is authoritative, preventing draft and final structured messages from being concatenated."
+    },
+    {
+      "revision": "b1d52ad",
+      "outcome": "Every trusted check receives a fresh temporary HOME for compatibility and credential isolation; the home is removed after the check."
+    }
+  ],
+  "offline_gate": {
+    "python_command": "PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src python3 -m unittest discover -s test/core",
+    "python_result": "317 tests passed with 2 optional-SDK skips; one interpreter-finalization SQLite ResourceWarning was printed while the process still completed successfully",
+    "focused_result": "26 review-runtime tests passed, including distinct isolated HOME directories, inherited-marker isolation and cleanup",
+    "bash_command": "bash test/run.sh",
+    "bash_result": "11 test files and 227 assertions passed",
+    "generated_reference": "current"
+  },
+  "installed_runtime": {
+    "launcher": "/Users/Dikshant/.local/bin/squad",
+    "immutable_release": "/Users/Dikshant/.devsquad/releases/0.1.0-py31214-9e5cdea2aa99-mcp-a26bc88afbef",
+    "release_manifest_sha256": "a277b2e5f0a7b76610c9da20fe00ac05503c3d7d88d879818a7484bcd01039b9",
+    "source_digest": "9e5cdea2aa99be819f722f82f6e75dcf4f0ef9cf2936df017ec3c7e66bd562a1",
+    "mcp_environment_digest": "a26bc88afbef7b5a1ed23014ebece205902a8c43c047fec7afb893da945e66b2",
+    "python": "3.12.14",
+    "mcp_sdk": "2.2.0",
+    "pip_check": "passed",
+    "second_install": "changed=false with source/plugin/installed drift all false",
+    "setup": "all four hosts unchanged and matching",
+    "doctor": "ready"
+  },
+  "live_managed_review": {
+    "run_id": "c611ad4c-5473-4f05-a870-a136f24464d3",
+    "exact_range": {
+      "base_oid": "9d70888f8e3a3510e41cb83127670d984946649b",
+      "target_oid": "b1d52adae6bf11c547acb34f3b78c3d2853211be",
+      "candidate_sha256": "a48ea624535452112cb1a71cd6c9d8452578752601fe1b9911485c6b3e18edb9"
+    },
+    "observed_identity": {
+      "harness": "codex",
+      "harness_version": "codex-cli 0.155.0-alpha.9.2",
+      "model_provider": "openai",
+      "model_id": "gpt-5.5",
+      "effort": "low",
+      "permission_policy": "read_only",
+      "verification": "verified"
+    },
+    "review": {
+      "verdict": "clean",
+      "finding_count": 0,
+      "artifact_id": "ce9edb9d-3596-46cb-b282-eaba707b0552",
+      "sha256": "5171aacdf618edb0b972be5ea752639548abc298584a478c19f635bfddc25795"
+    },
+    "checks": [
+      {
+        "id": "candidate-diff-check",
+        "status": "passed",
+        "returncode": 0,
+        "duration_ms": 12
+      },
+      {
+        "id": "detected-tests",
+        "command": "bash test/run.sh",
+        "status": "passed",
+        "returncode": 0,
+        "duration_ms": 17162,
+        "result": "11 test files and 227 assertions passed under the isolated trusted-check HOME"
+      }
+    ],
+    "checks_artifact": {
+      "artifact_id": "f7a49e89-5c5a-48ea-8de7-8ac6545cd71c",
+      "sha256": "8155b124099979e60f3a02cd3e56eb4d31c099157e8388a71272d7045ba69ae8"
+    },
+    "evaluation_artifact": {
+      "artifact_id": "87c5669c-7f32-4422-8108-9dc65ca1aacd",
+      "sha256": "47433aa1c55053d36fe2fca0a49e93fbb7e7780c2cbc8dd33b7ba41729a51602",
+      "accept_allowed": true,
+      "required_checks_passed": true
+    },
+    "attempt_artifact": {
+      "artifact_id": "82277739-0922-4cde-8cfe-6585aa7f96b6",
+      "sha256": "888961f482d368ee125b40f7841a8af2673d72b07099682a5be2d45838a50b6d"
+    },
+    "native_usage": {
+      "input_tokens": 119440,
+      "output_tokens": 2786,
+      "total_tokens": 122226,
+      "source": "native_reported"
+    },
+    "handoff": {
+      "packet_sha256": "0810249a84da5d0537f40e84ee532fd812bfeda231c870c3becb764d41d18d9b",
+      "disposition": "accept",
+      "submission_id": "m7-review-b1d52ad-accept",
+      "submission_hash": "cc3dde0d760d4e1ab140ea1722ab3a9baf3c22c3e822d2fa15858c5ba4a78185"
+    },
+    "terminal": {
+      "state": "succeeded",
+      "version": 22,
+      "receipt_sha256": "0103db19a528cff916ebef80c6ec94b682ed4801fc22db020cdbc21796040f70"
+    }
+  },
+  "pre_fix_live_evidence": {
+    "run_id": "228db373-ff4f-4a1d-a692-7dff255036b5",
+    "receipt_sha256": "2431590ad0bbe4b4bff840f6f673f73671164236cb3933513838e0f65465bce6",
+    "outcome": "The review itself was clean, but the detected Bash suite failed because the detached trusted-check environment omitted HOME. The host rejected that evidence before b1d52ad."
+  },
+  "remaining_live_gates": {
+    "claude_code": "Normal Claude login is still required for the M4 handoff and genuine M5 Claude implementation followed by different-model Codex review/check/disposition.",
+    "grok_build": "Registration matches, but a supported live operation requires renewed authentication.",
+    "jev": "M6-D2 remains blocked on TYPESAFE_API_KEY; Laya runs only if the declared Jev fallback trigger fires."
+  },
+  "redaction": "Raw provider messages, private diagnostics and credentials remain outside tracked evidence."
+}

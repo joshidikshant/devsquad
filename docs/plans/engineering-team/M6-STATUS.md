@@ -1,6 +1,6 @@
 # M6 implementation status
 
-M6 is **in progress**. Shared capacity, the append-only outcome ledger,
+M6 is **blocked with all independent implementation complete**. Shared capacity, the append-only outcome ledger,
 comparison reports, replay-safe one-variable experiment evaluation, proposal
 generation, the complete offline profile lifecycle and the default-off typed
 decision helper are verified. Only the externally blocked Jev measurement and
@@ -137,5 +137,6 @@ with 2 optional-SDK skips** and **220/220 Bash assertions**.
 
 Keep the one-request Jev M6-D2 gate blocked until `TYPESAFE_API_KEY` is
 supplied. Do not install or run Laya unless the predeclared Jev access,
-cost/usage or measured-quality trigger fires. Continue independent delivery at
-M7 packaging, installation, update safety and real-surface usability.
+cost/usage or measured-quality trigger fires. M7's independently executable
+packaging, installation, update-safety and Codex review work is complete; its
+remaining live gates do not substitute for the Jev measurement.

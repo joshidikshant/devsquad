@@ -416,6 +416,15 @@
           "artifact": "evidence/M7-normal-entry-2026-09-29.json",
           "recorded_at": "2026-09-29T11:17:22Z",
           "availability": "portable_redacted"
+        },
+        {
+          "kind": "live_normal_review_checkpoint",
+          "revision": "b1d52ad",
+          "command_or_action": "317 core tests with ResourceWarning promoted to error (suite OK, 2 optional-SDK skips), 227 Bash assertions, immutable MCP reinstall and one installed exact-commit gpt-5.5/low review with host disposition",
+          "outcome": "Codex terminal output selection and redacted diagnostics are compatible with 0.155, each trusted check receives a fresh isolated HOME, the exact candidate received a verified clean read-only review, both frozen checks passed and the artifact-bound handoff terminalized succeeded. Claude/Grok live gates remain external.",
+          "artifact": "evidence/M7-live-codex-review-2026-09-29.json",
+          "recorded_at": "2026-09-29T12:13:54Z",
+          "availability": "portable_redacted"
         }
       ],
       "blocker": "All independently executable M7 work is complete. Universal surface completion requires normal Claude login for the M4/M5 handoff and installed delivery receipts plus renewed Grok authentication for its live smoke."
