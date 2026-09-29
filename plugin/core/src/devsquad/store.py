@@ -1415,6 +1415,8 @@ class Store:
         violation = profile_template_violation(profile, normalized_template)
         if violation is not None:
             raise ContractError(f"baseline profile violates template: {violation}")
+        if profile["quality_status"] != "proven":
+            raise ContractError("baseline profile must already be proven")
         recorded_at = _authoritative_now(now).isoformat()
         alias = normalized_template["alias"]
         self.connection.execute("BEGIN IMMEDIATE")
@@ -1841,6 +1843,209 @@ class Store:
                     request["actor"], current["version"], new_version,
                     current["profile_id"], target_profile["id"],
                     target_qualification_id, request_sha256, receipt_json,
+                    receipt_sha256, recorded_at,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "receipt": receipt,
+                "receipt_sha256": receipt_sha256,
+                "recorded_at": recorded_at,
+                "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def fallback_unavailable_profile_binding(
+        self, change: dict[str, Any], *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Roll back an unavailable incumbent to the latest safe predecessor."""
+        from .lifecycle import (
+            guarded_change_violation,
+            profile_template_violation,
+            validate_catalog_fallback,
+        )
+
+        request = validate_catalog_fallback(change)
+        request_json = canonical_json(request)
+        request_sha256 = hashlib.sha256(request_json.encode()).hexdigest()
+        recorded_at = _authoritative_now(now).isoformat()
+        catalog_change = request["catalog_change"]
+        catalog_change_sha256 = hashlib.sha256(
+            canonical_json(catalog_change).encode(),
+        ).hexdigest()
+        unavailable = set(catalog_change["unavailable_profile_ids"])
+        removed_models = set(catalog_change["removed_model_ids"])
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.connection.execute(
+                "SELECT request_sha256,receipt_json,receipt_sha256,recorded_at "
+                "FROM binding_decisions WHERE decision_id=?",
+                (request["decision_id"],),
+            ).fetchone()
+            if existing is not None:
+                if existing["request_sha256"] != request_sha256:
+                    raise ConflictError(
+                        "decision id was already used with a different request",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "receipt": json.loads(existing["receipt_json"]),
+                    "receipt_sha256": existing["receipt_sha256"],
+                    "recorded_at": existing["recorded_at"],
+                    "replayed": True,
+                }
+            current = self.connection.execute(
+                "SELECT b.template_id,b.profile_id,b.qualification_id,b.version,"
+                "p.profile_json,p.profile_sha256,t.payload_json AS template_json,"
+                "t.payload_sha256 AS template_sha256 FROM profile_bindings b "
+                "JOIN concrete_profiles p ON p.profile_id=b.profile_id "
+                "JOIN profile_templates t ON t.template_id=b.template_id "
+                "WHERE b.alias=?",
+                (request["alias"],),
+            ).fetchone()
+            if current is None:
+                raise ContractError("profile binding does not exist")
+            if current["version"] != request["expected_binding_version"]:
+                raise ConflictError("profile binding version changed")
+            current_profile = json.loads(current["profile_json"])
+            current_template = json.loads(current["template_json"])
+            if (current_profile["id"] not in unavailable
+                    or current_profile["harness"] != catalog_change["harness"]
+                    or current_profile["model_id"] not in removed_models):
+                raise ContractError(
+                    "catalog evidence does not prove the incumbent unavailable",
+                )
+            if (request["actor"] == "guarded_auto"
+                    and current_template["update_mode"] != "guarded_auto"):
+                raise ContractError(
+                    "guarded automatic promotion is not enabled",
+                )
+
+            target = None
+            target_profile = None
+            qualification_payload = None
+            for candidate in self.connection.execute(
+                    "SELECT v.version,v.template_id,v.profile_id,v.qualification_id,"
+                    "p.profile_json,p.profile_sha256,t.payload_json AS template_json,"
+                    "t.payload_sha256 AS template_sha256,q.verdict AS qualification_verdict,"
+                    "q.payload_json AS qualification_json,"
+                    "q.gate_failures_json AS qualification_failures "
+                    "FROM profile_binding_versions v "
+                    "JOIN concrete_profiles p ON p.profile_id=v.profile_id "
+                    "JOIN profile_templates t ON t.template_id=v.template_id "
+                    "LEFT JOIN qualification_runs q "
+                    "ON q.qualification_id=v.qualification_id "
+                    "WHERE v.alias=? AND v.version<? ORDER BY v.version DESC",
+                    (request["alias"], current["version"]),
+            ).fetchall():
+                profile = json.loads(candidate["profile_json"])
+                if candidate["template_id"] != current["template_id"]:
+                    continue
+                if (profile["id"] in unavailable
+                        or (profile["harness"] == catalog_change["harness"]
+                            and profile["model_id"] in removed_models)):
+                    continue
+                if profile["quality_status"] != "proven":
+                    continue
+                if profile_template_violation(profile, current_template) is not None:
+                    continue
+                if candidate["qualification_id"] is not None:
+                    if (candidate["qualification_verdict"] != "qualified"
+                            or json.loads(candidate["qualification_failures"])):
+                        continue
+                    candidate_qualification = json.loads(
+                        candidate["qualification_json"],
+                    )
+                else:
+                    candidate_qualification = None
+                if (request["actor"] == "guarded_auto"
+                        and guarded_change_violation(
+                            current_profile, profile,
+                        ) is not None):
+                    continue
+                target = candidate
+                target_profile = profile
+                qualification_payload = candidate_qualification
+                break
+            if target is None or target_profile is None:
+                raise ContractError(
+                    "no available qualified predecessor for catalog fallback",
+                )
+
+            new_version = current["version"] + 1
+            receipt = {
+                "schema_version": 1,
+                "decision_id": request["decision_id"],
+                "action": "rollback",
+                "alias": request["alias"],
+                "actor": request["actor"],
+                "reason": request["reason"],
+                "evidence_refs": request["evidence_refs"],
+                "from": {
+                    "binding_version": current["version"],
+                    "profile_id": current["profile_id"],
+                    "profile_sha256": current["profile_sha256"],
+                    "template_id": current["template_id"],
+                    "template_sha256": current["template_sha256"],
+                },
+                "to": {
+                    "binding_version": new_version,
+                    "profile_id": target_profile["id"],
+                    "profile_sha256": target["profile_sha256"],
+                    "template_id": target["template_id"],
+                    "template_sha256": target["template_sha256"],
+                },
+                "qualification_id": target["qualification_id"],
+                "qualification": qualification_payload,
+                "policy": current_template["policy"],
+                "rollback_target": {
+                    "profile_id": current["profile_id"],
+                    "binding_version": current["version"],
+                },
+                "requested_rollback_target": None,
+                "rollback_evaluation": {
+                    "kind": "catalog_unavailable",
+                    "catalog_change_sha256": catalog_change_sha256,
+                    "catalog_change": catalog_change,
+                },
+                "effective_at": recorded_at,
+                "affects_new_runs_only": True,
+            }
+            receipt_json = canonical_json(receipt)
+            receipt_sha256 = hashlib.sha256(receipt_json.encode()).hexdigest()
+            self.connection.execute(
+                "UPDATE profile_bindings SET template_id=?,profile_id=?,"
+                "qualification_id=?,version=?,updated_at=? WHERE alias=? AND version=?",
+                (
+                    target["template_id"], target_profile["id"],
+                    target["qualification_id"], new_version, recorded_at,
+                    request["alias"], current["version"],
+                ),
+            )
+            if self.connection.execute("SELECT changes()").fetchone()[0] != 1:
+                raise ConflictError("profile binding version changed")
+            self.connection.execute(
+                "INSERT INTO profile_binding_versions(alias,version,template_id,"
+                "profile_id,qualification_id,decision_id,recorded_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    request["alias"], new_version, target["template_id"],
+                    target_profile["id"], target["qualification_id"],
+                    request["decision_id"], recorded_at,
+                ),
+            )
+            self.connection.execute(
+                "INSERT INTO binding_decisions(decision_id,alias,action,actor,"
+                "from_version,to_version,from_profile_id,to_profile_id,"
+                "qualification_id,request_sha256,receipt_json,receipt_sha256,"
+                "recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    request["decision_id"], request["alias"], "rollback",
+                    request["actor"], current["version"], new_version,
+                    current["profile_id"], target_profile["id"],
+                    target["qualification_id"], request_sha256, receipt_json,
                     receipt_sha256, recorded_at,
                 ),
             )

@@ -922,13 +922,27 @@ class Service:
             store.close()
 
     def profile_binding_change(self, change: dict[str, Any]) -> dict[str, Any]:
-        from .lifecycle import render_binding_decision_markdown
-
         store = self._store()
         try:
             result = store.change_profile_binding(change)
         finally:
             store.close()
+        return self._profile_binding_decision_artifacts(result)
+
+    def profile_binding_fallback(self, change: dict[str, Any]) -> dict[str, Any]:
+        """Apply a catalog-proven fallback to a prior qualified binding."""
+        store = self._store()
+        try:
+            result = store.fallback_unavailable_profile_binding(change)
+        finally:
+            store.close()
+        return self._profile_binding_decision_artifacts(result)
+
+    def _profile_binding_decision_artifacts(
+        self, result: dict[str, Any],
+    ) -> dict[str, Any]:
+        from .lifecycle import render_binding_decision_markdown
+
         receipt = result["receipt"]
         json_content = (canonical_json(receipt) + "\n").encode()
         markdown_content = render_binding_decision_markdown(receipt).encode()

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ContractError
+from devsquad.catalog import update_last_good
 from devsquad.lifecycle import (
     guarded_change_violation,
     profile_template_violation,
@@ -471,6 +472,126 @@ class ProfileLifecycleTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "not enabled"):
             self.store.change_profile_binding(
                 self.promotion("decision-auto", actor="guarded_auto"), now=NOW,
+            )
+
+    def test_catalog_unavailable_incumbent_uses_only_qualified_predecessor(self):
+        template = lifecycle_template()
+        self.store.bootstrap_profile_binding(
+            template, self.incumbent, version=7, now=NOW,
+        )
+        evaluation = self.seed_experiment()
+        self.store.record_profile_qualification(
+            self.qualification(evaluation), now=NOW,
+        )
+        self.store.change_profile_binding(
+            self.promotion("decision-promote-catalog"), now=NOW,
+        )
+        registry = {
+            "schema_version": 1,
+            "profiles": [self.incumbent],
+            "bindings": {
+                "review.deep": {"profile_id": "profile-a", "version": 7},
+            },
+        }
+        profiles_payload = json.dumps(registry, sort_keys=True) + "\n"
+        policy_payload = json.dumps(routing_policy(), sort_keys=True) + "\n"
+        frozen_before = self.store.effective_profile_registry(
+            profiles_payload, policy_payload,
+        )
+        self.assertEqual(
+            load_routing(
+                review_task(self.repo), frozen_before["profiles_payload"],
+                policy_payload,
+            )["roles"]["reviewer"]["selected"]["profile_id"],
+            "profile-b",
+        )
+
+        catalog_path = self.root / "catalog-fallback.json"
+        update_last_good(
+            catalog_path, harness="fixture", version="1", complete=True,
+            models=[{"id": "model-a"}, {"id": "model-b"}],
+            profiles=[self.incumbent, self.candidate],
+        )
+        catalog_change = update_last_good(
+            catalog_path, harness="fixture", version="1", complete=True,
+            models=[{"id": "model-a"}],
+            profiles=[self.incumbent, self.candidate],
+        )["catalog_change"]
+        request = {
+            "schema_version": 1,
+            "decision_id": "decision-catalog-fallback",
+            "action": "rollback",
+            "alias": "review.deep",
+            "expected_binding_version": 8,
+            "catalog_change": catalog_change,
+            "actor": "guarded_auto",
+            "reason": "The complete catalog removed the active model.",
+            "evidence_refs": ["catalog-fallback.json"],
+        }
+        service = Service(self.root)
+        fallback = service.profile_binding_fallback(request)
+        receipt = fallback["receipt"]
+        self.assertEqual(receipt["from"]["profile_id"], "profile-b")
+        self.assertEqual(receipt["to"]["profile_id"], "profile-a")
+        self.assertEqual(receipt["to"]["binding_version"], 9)
+        self.assertEqual(
+            receipt["rollback_evaluation"]["kind"], "catalog_unavailable",
+        )
+        self.assertTrue(receipt["affects_new_runs_only"])
+        self.assertTrue(service.profile_binding_fallback(request)["replayed"])
+        for artifact in fallback["artifacts"].values():
+            content = Path(artifact["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(content).hexdigest(), artifact["sha256"])
+
+        current = self.store.effective_profile_registry(
+            profiles_payload, policy_payload,
+        )
+        self.assertEqual(
+            load_routing(
+                review_task(self.repo), current["profiles_payload"],
+                policy_payload,
+            )["roles"]["reviewer"]["selected"]["profile_id"],
+            "profile-a",
+        )
+        self.assertEqual(
+            load_routing(
+                review_task(self.repo), frozen_before["profiles_payload"],
+                policy_payload,
+            )["roles"]["reviewer"]["selected"]["profile_id"],
+            "profile-b",
+        )
+
+        self.store.change_profile_binding(
+            self.promotion("decision-repromote-catalog", expected=9), now=NOW,
+        )
+        all_removed_path = self.root / "catalog-all-removed.json"
+        update_last_good(
+            all_removed_path, harness="fixture", version="1", complete=True,
+            models=[{"id": "model-a"}, {"id": "model-b"}],
+            profiles=[self.incumbent, self.candidate],
+        )
+        all_removed = update_last_good(
+            all_removed_path, harness="fixture", version="1", complete=True,
+            models=[], profiles=[self.incumbent, self.candidate],
+        )["catalog_change"]
+        blocked = {
+            **request,
+            "decision_id": "decision-catalog-blocked",
+            "expected_binding_version": 10,
+            "catalog_change": all_removed,
+        }
+        with self.assertRaisesRegex(ContractError, "no available qualified predecessor"):
+            self.store.fallback_unavailable_profile_binding(blocked, now=NOW)
+        self.assertEqual(
+            self.store.profile_binding("review.deep")["profile_id"], "profile-b",
+        )
+
+    def test_bootstrap_requires_a_proven_baseline(self):
+        trial = copy.deepcopy(self.incumbent)
+        trial["quality_status"] = "trial"
+        with self.assertRaisesRegex(ContractError, "already be proven"):
+            self.store.bootstrap_profile_binding(
+                lifecycle_template(), trial, version=1, now=NOW,
             )
 
     def test_schema_twelve_contains_lifecycle_ledger(self):

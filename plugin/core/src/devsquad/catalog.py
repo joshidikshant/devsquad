@@ -14,6 +14,59 @@ from .store import canonical_json
 from .validation import validate_profile
 
 
+CATALOG_CHANGE_FIELDS = {
+    "schema_version", "harness", "previous_sha256", "current_sha256",
+    "added_model_ids", "removed_model_ids", "changed_model_ids",
+    "same_id_revision_unknown", "affected_profile_ids",
+    "unavailable_profile_ids", "profile_scope", "unqualified_candidate_ids",
+    "binding_changes_applied",
+}
+
+
+def validate_catalog_change(value: dict[str, Any]) -> dict[str, Any]:
+    """Validate complete-catalog drift evidence before lifecycle mutation."""
+    if not isinstance(value, dict) or set(value) != CATALOG_CHANGE_FIELDS:
+        raise ContractError("catalog change fields are invalid")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        raise ContractError("catalog change schema_version is invalid")
+    if not isinstance(value["harness"], str) or not value["harness"]:
+        raise ContractError("catalog change harness is invalid")
+    for field in ("previous_sha256", "current_sha256"):
+        digest = value[field]
+        if (digest is None and field == "previous_sha256"):
+            continue
+        if (not isinstance(digest, str) or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)):
+            raise ContractError(f"catalog change {field} is invalid")
+    list_fields = CATALOG_CHANGE_FIELDS - {
+        "schema_version", "harness", "previous_sha256", "current_sha256",
+        "profile_scope", "binding_changes_applied",
+    }
+    normalized = dict(value)
+    for field in list_fields:
+        items = value[field]
+        if (not isinstance(items, list)
+                or any(not isinstance(item, str) or not item for item in items)
+                or len(items) != len(set(items))):
+            raise ContractError(f"catalog change {field} is invalid")
+        normalized[field] = sorted(items)
+    if value["profile_scope"] not in {"provided", "unavailable"}:
+        raise ContractError("catalog change profile_scope is invalid")
+    if value["binding_changes_applied"] is not False:
+        raise ContractError("catalog discovery cannot apply binding changes")
+    if set(normalized["same_id_revision_unknown"]) - set(normalized["changed_model_ids"]):
+        raise ContractError("catalog revision uncertainty is not changed-model scoped")
+    if normalized["unqualified_candidate_ids"] != normalized["added_model_ids"]:
+        raise ContractError("catalog additions must remain unqualified candidates")
+    if set(normalized["unavailable_profile_ids"]) - set(normalized["affected_profile_ids"]):
+        raise ContractError("catalog unavailable profiles must be affected")
+    if (value["profile_scope"] == "unavailable"
+            and (normalized["affected_profile_ids"]
+                 or normalized["unavailable_profile_ids"])):
+        raise ContractError("catalog change cannot infer profiles without scope")
+    return json.loads(canonical_json(normalized))
+
+
 def model_fingerprint(harness: str, version: str | None, model: dict[str, Any]) -> str:
     stable = {"harness": harness, "version": version, "model": model}
     return hashlib.sha256(json.dumps(stable, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -109,7 +162,7 @@ def analyze_catalog_drift(
         hashlib.sha256(canonical_json(previous).encode()).hexdigest()
         if previous is not None else None
     )
-    return {
+    return validate_catalog_change({
         "schema_version": 1,
         "harness": current["harness"],
         "previous_sha256": previous_sha256,
@@ -125,7 +178,7 @@ def analyze_catalog_drift(
         "profile_scope": "provided" if profiles is not None else "unavailable",
         "unqualified_candidate_ids": added,
         "binding_changes_applied": False,
-    }
+    })
 
 
 def update_last_good(path: Path, *, harness: str, version: str | None, models: Iterable[dict[str, Any]] | None, complete: bool, error: str | None = None, profiles: Iterable[dict[str, Any]] | None = None) -> dict[str, Any]:

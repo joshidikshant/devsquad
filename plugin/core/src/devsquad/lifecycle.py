@@ -28,6 +28,11 @@ BINDING_CHANGE_FIELDS = {
     "expected_binding_version", "qualification_id", "rollback_target",
     "experiment_id", "evaluation_sha256", "actor", "reason", "evidence_refs",
 }
+CATALOG_FALLBACK_FIELDS = {
+    "schema_version", "decision_id", "action", "alias",
+    "expected_binding_version", "catalog_change", "actor", "reason",
+    "evidence_refs",
+}
 SHA256_LENGTH = 64
 
 
@@ -336,6 +341,41 @@ def validate_binding_change(value: dict[str, Any]) -> dict[str, Any]:
         ),
         "rollback_target": (
             dict(rollback_target) if rollback_target is not None else None
+        ),
+    }))
+
+
+def validate_catalog_fallback(value: dict[str, Any]) -> dict[str, Any]:
+    """Validate a CAS rollback driven by complete model-removal evidence."""
+    from .catalog import validate_catalog_change
+
+    _exact(value, CATALOG_FALLBACK_FIELDS, "catalog fallback")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        raise ContractError("catalog fallback schema_version is invalid")
+    decision_id = _identifier(value["decision_id"], "decision_id")
+    alias = _identifier(value["alias"], "catalog fallback alias")
+    if value["action"] != "rollback":
+        raise ContractError("catalog fallback action must be rollback")
+    if (type(value["expected_binding_version"]) is not int
+            or value["expected_binding_version"] < 1):
+        raise ContractError("catalog fallback expected version is invalid")
+    if value["actor"] not in {"human", "guarded_auto"}:
+        raise ContractError("catalog fallback actor is invalid")
+    reason = _identifier(value["reason"], "catalog fallback reason")
+    catalog_change = validate_catalog_change(value["catalog_change"])
+    if catalog_change["profile_scope"] != "provided":
+        raise ContractError("catalog fallback requires profile-scoped evidence")
+    if not catalog_change["removed_model_ids"]:
+        raise ContractError("catalog fallback requires a removed model")
+    return json.loads(canonical_json({
+        **value,
+        "decision_id": decision_id,
+        "alias": alias,
+        "reason": reason,
+        "catalog_change": catalog_change,
+        "evidence_refs": _strings(
+            value["evidence_refs"], "catalog fallback evidence_refs",
+            required=True,
         ),
     }))
 

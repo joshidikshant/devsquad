@@ -212,6 +212,10 @@ class CliTest(unittest.TestCase):
                 "binding-change", "profile_binding_change", "change.json",
                 {"schema_version": 1, "decision_id": "decision-1"},
             ),
+            (
+                "binding-fallback", "profile_binding_fallback", "fallback.json",
+                {"schema_version": 1, "decision_id": "decision-fallback"},
+            ),
         ]
         for command, method_name, filename, document in operations:
             with self.subTest(command=command):

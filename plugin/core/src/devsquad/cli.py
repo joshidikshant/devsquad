@@ -206,6 +206,12 @@ def command_profile_binding_change(args: argparse.Namespace) -> tuple[dict, int]
     )), 0
 
 
+def command_profile_binding_fallback(args: argparse.Namespace) -> tuple[dict, int]:
+    return envelope(data=_service(args).profile_binding_fallback(
+        _read_json(args.file, "profile binding fallback file"),
+    )), 0
+
+
 def command_profile_binding_show(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).profile_binding_status(args.alias)), 0
 
@@ -340,6 +346,7 @@ def parser() -> argparse.ArgumentParser:
         ("binding-bootstrap", command_profile_binding_bootstrap),
         ("qualification-add", command_profile_qualification_add),
         ("binding-change", command_profile_binding_change),
+        ("binding-fallback", command_profile_binding_fallback),
     ):
         operation = profile_sub.add_parser(name)
         operation.add_argument("--file", required=True)
