@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 11
+SUPPORTED_SCHEMA_VERSION = 12
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -1307,6 +1307,538 @@ class Store:
         except Exception:
             self.connection.execute("ROLLBACK")
             raise
+
+    @staticmethod
+    def _profile_record(profile: dict[str, Any]) -> tuple[str, str]:
+        from .lifecycle import profile_fingerprint
+
+        payload = canonical_json(profile)
+        return payload, profile_fingerprint(profile)
+
+    def _insert_concrete_profile(
+        self, profile: dict[str, Any], recorded_at: str,
+    ) -> tuple[str, str]:
+        payload, digest = self._profile_record(profile)
+        existing = self.connection.execute(
+            "SELECT profile_json,profile_sha256 FROM concrete_profiles "
+            "WHERE profile_id=?",
+            (profile["id"],),
+        ).fetchone()
+        if existing is not None:
+            if (existing["profile_json"] != payload
+                    or existing["profile_sha256"] != digest):
+                raise ConflictError(
+                    "profile id was already used with different concrete settings",
+                )
+            return payload, digest
+        self.connection.execute(
+            "INSERT INTO concrete_profiles(profile_id,profile_json,profile_sha256,"
+            "recorded_at) VALUES(?,?,?,?)",
+            (profile["id"], payload, digest, recorded_at),
+        )
+        return payload, digest
+
+    def _insert_profile_template(
+        self, template: dict[str, Any], recorded_at: str,
+    ) -> tuple[str, str]:
+        payload = canonical_json(template)
+        digest = hashlib.sha256(payload.encode()).hexdigest()
+        existing = self.connection.execute(
+            "SELECT payload_json,payload_sha256 FROM profile_templates "
+            "WHERE template_id=?",
+            (template["template_id"],),
+        ).fetchone()
+        if existing is not None:
+            if (existing["payload_json"] != payload
+                    or existing["payload_sha256"] != digest):
+                raise ConflictError(
+                    "template id was already used with a different policy",
+                )
+            return payload, digest
+        self.connection.execute(
+            "INSERT INTO profile_templates(template_id,alias,update_mode,policy_id,"
+            "policy_version,payload_json,payload_sha256,recorded_at) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (
+                template["template_id"], template["alias"],
+                template["update_mode"], template["policy"]["id"],
+                template["policy"]["version"], payload, digest, recorded_at,
+            ),
+        )
+        return payload, digest
+
+    def register_profile_template(
+        self, template: dict[str, Any], *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Register an immutable reviewed lifecycle template."""
+        from .lifecycle import validate_profile_template
+
+        normalized = validate_profile_template(template)
+        recorded_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            before = self.connection.execute(
+                "SELECT 1 FROM profile_templates WHERE template_id=?",
+                (normalized["template_id"],),
+            ).fetchone()
+            _, digest = self._insert_profile_template(normalized, recorded_at)
+            self.connection.execute("COMMIT")
+            return {
+                "template": normalized,
+                "template_sha256": digest,
+                "recorded_at": recorded_at,
+                "replayed": before is not None,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def bootstrap_profile_binding(
+        self,
+        template: dict[str, Any],
+        profile: dict[str, Any],
+        *,
+        version: int,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Import one reviewed baseline binding without fabricating qualification."""
+        from .lifecycle import (
+            profile_template_violation,
+            validate_profile_template,
+        )
+
+        normalized_template = validate_profile_template(template)
+        profile_payload, profile_digest = self._profile_record(profile)
+        profile = json.loads(profile_payload)
+        if type(version) is not int or version < 1:
+            raise ContractError("baseline binding version must be positive")
+        violation = profile_template_violation(profile, normalized_template)
+        if violation is not None:
+            raise ContractError(f"baseline profile violates template: {violation}")
+        recorded_at = _authoritative_now(now).isoformat()
+        alias = normalized_template["alias"]
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            self._insert_profile_template(normalized_template, recorded_at)
+            self._insert_concrete_profile(profile, recorded_at)
+            existing = self.connection.execute(
+                "SELECT template_id,profile_id,qualification_id,version,updated_at "
+                "FROM profile_bindings WHERE alias=?",
+                (alias,),
+            ).fetchone()
+            if existing is not None:
+                if (existing["template_id"] != normalized_template["template_id"]
+                        or existing["profile_id"] != profile["id"]
+                        or existing["qualification_id"] is not None
+                        or existing["version"] != version):
+                    raise ConflictError(
+                        "baseline alias is already bound differently",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "binding": dict(existing),
+                    "profile_sha256": profile_digest,
+                    "replayed": True,
+                }
+            self.connection.execute(
+                "INSERT INTO profile_bindings(alias,template_id,profile_id,"
+                "qualification_id,version,updated_at) VALUES(?,?,?,NULL,?,?)",
+                (
+                    alias, normalized_template["template_id"], profile["id"],
+                    version, recorded_at,
+                ),
+            )
+            self.connection.execute(
+                "INSERT INTO profile_binding_versions(alias,version,template_id,"
+                "profile_id,qualification_id,decision_id,recorded_at) "
+                "VALUES(?,?,?,?,NULL,NULL,?)",
+                (
+                    alias, version, normalized_template["template_id"],
+                    profile["id"], recorded_at,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "binding": {
+                    "alias": alias,
+                    "template_id": normalized_template["template_id"],
+                    "profile_id": profile["id"],
+                    "qualification_id": None,
+                    "version": version,
+                    "updated_at": recorded_at,
+                },
+                "profile_sha256": profile_digest,
+                "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def record_profile_qualification(
+        self, qualification: dict[str, Any], *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Persist bounded qualification evidence after checking saved evaluation."""
+        from .lifecycle import (
+            qualification_gate_failures,
+            validate_profile_template,
+            validate_qualification,
+        )
+
+        record = validate_qualification(qualification)
+        payload = canonical_json(record)
+        digest = hashlib.sha256(payload.encode()).hexdigest()
+        recorded_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.connection.execute(
+                "SELECT payload_json,payload_sha256,gate_failures_json,recorded_at "
+                "FROM qualification_runs WHERE qualification_id=?",
+                (record["qualification_id"],),
+            ).fetchone()
+            if existing is not None:
+                if existing["payload_json"] != payload:
+                    raise ConflictError(
+                        "qualification id was already used with different evidence",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "qualification": record,
+                    "qualification_sha256": existing["payload_sha256"],
+                    "gate_failures": json.loads(existing["gate_failures_json"]),
+                    "recorded_at": existing["recorded_at"],
+                    "replayed": True,
+                }
+            template_row = self.connection.execute(
+                "SELECT payload_json FROM profile_templates WHERE template_id=?",
+                (record["template_id"],),
+            ).fetchone()
+            if template_row is None:
+                raise ContractError("qualification template is not registered")
+            template = validate_profile_template(
+                json.loads(template_row["payload_json"]),
+            )
+            failures = qualification_gate_failures(record, template)
+            experiment = None
+            if record["experiment_id"] is not None:
+                experiment = self.connection.execute(
+                    "SELECT spec_json,evaluation_json,evaluation_sha256,verdict "
+                    "FROM experiments WHERE experiment_id=?",
+                    (record["experiment_id"],),
+                ).fetchone()
+                if (experiment is None
+                        or experiment["evaluation_sha256"]
+                        != record["evaluation_sha256"]):
+                    raise ContractError(
+                        "qualification experiment evidence is unavailable",
+                    )
+                spec = json.loads(experiment["spec_json"])
+                evaluation = json.loads(experiment["evaluation_json"])
+                if (spec["variable"]["alias"] != record["alias"]
+                        or spec["variable"]["candidate_profile_id"]
+                        != record["candidate_profile"]["id"]):
+                    raise ContractError(
+                        "qualification candidate does not match the experiment",
+                    )
+                metrics = evaluation["metrics"]
+                escaped = sum(
+                    metrics[split]["candidate_escaped_defects"]
+                    for split in ("evaluation", "held_out")
+                )
+                if (record["measured"]["evaluation_pairs"]
+                        != metrics["evaluation"]["available_pairs"]
+                        or record["measured"]["held_out_pairs"]
+                        != metrics["held_out"]["available_pairs"]
+                        or record["measured"]["critical_defects"] != escaped):
+                    raise ContractError(
+                        "qualification measurements do not match saved evaluation",
+                    )
+                if experiment["verdict"] != "promotion_proposal":
+                    failures.append("experiment_did_not_propose_promotion")
+            failures = sorted(set(failures))
+            if record["verdict"] == "qualified" and failures:
+                raise ContractError(
+                    "qualification gate did not pass: " + ", ".join(failures),
+                )
+            self._insert_concrete_profile(
+                record["candidate_profile"], recorded_at,
+            )
+            self.connection.execute(
+                "INSERT INTO qualification_runs(qualification_id,alias,template_id,"
+                "profile_id,experiment_id,evaluation_sha256,verdict,payload_json,"
+                "payload_sha256,gate_failures_json,recorded_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    record["qualification_id"], record["alias"],
+                    record["template_id"], record["candidate_profile"]["id"],
+                    record["experiment_id"], record["evaluation_sha256"],
+                    record["verdict"], payload, digest,
+                    canonical_json(failures), recorded_at,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "qualification": record,
+                "qualification_sha256": digest,
+                "gate_failures": failures,
+                "recorded_at": recorded_at,
+                "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def profile_binding(self, alias: str) -> dict[str, Any] | None:
+        if not isinstance(alias, str) or not alias:
+            raise ContractError("profile binding alias is invalid")
+        row = self.connection.execute(
+            "SELECT b.alias,b.template_id,b.profile_id,b.qualification_id,b.version,"
+            "b.updated_at,p.profile_json,p.profile_sha256,t.payload_json AS template_json,"
+            "t.payload_sha256 AS template_sha256 FROM profile_bindings b "
+            "JOIN concrete_profiles p ON p.profile_id=b.profile_id "
+            "JOIN profile_templates t ON t.template_id=b.template_id "
+            "WHERE b.alias=?",
+            (alias,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "alias": row["alias"],
+            "template_id": row["template_id"],
+            "profile_id": row["profile_id"],
+            "qualification_id": row["qualification_id"],
+            "version": row["version"],
+            "updated_at": row["updated_at"],
+            "profile": json.loads(row["profile_json"]),
+            "profile_sha256": row["profile_sha256"],
+            "template": json.loads(row["template_json"]),
+            "template_sha256": row["template_sha256"],
+        }
+
+    def change_profile_binding(
+        self, change: dict[str, Any], *, now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """CAS-promote or roll back one alias and persist its decision receipt."""
+        from .lifecycle import (
+            guarded_change_violation,
+            validate_binding_change,
+        )
+
+        request = validate_binding_change(change)
+        request_json = canonical_json(request)
+        request_sha256 = hashlib.sha256(request_json.encode()).hexdigest()
+        recorded_at = _authoritative_now(now).isoformat()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.connection.execute(
+                "SELECT request_sha256,receipt_json,receipt_sha256,recorded_at "
+                "FROM binding_decisions WHERE decision_id=?",
+                (request["decision_id"],),
+            ).fetchone()
+            if existing is not None:
+                if existing["request_sha256"] != request_sha256:
+                    raise ConflictError(
+                        "decision id was already used with a different request",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "receipt": json.loads(existing["receipt_json"]),
+                    "receipt_sha256": existing["receipt_sha256"],
+                    "recorded_at": existing["recorded_at"],
+                    "replayed": True,
+                }
+            current = self.connection.execute(
+                "SELECT b.template_id,b.profile_id,b.qualification_id,b.version,"
+                "p.profile_json,p.profile_sha256,t.payload_json,t.payload_sha256 "
+                "FROM profile_bindings b "
+                "JOIN concrete_profiles p ON p.profile_id=b.profile_id "
+                "JOIN profile_templates t ON t.template_id=b.template_id "
+                "WHERE b.alias=?",
+                (request["alias"],),
+            ).fetchone()
+            if current is None:
+                raise ContractError("profile binding does not exist")
+            if current["version"] != request["expected_binding_version"]:
+                raise ConflictError("profile binding version changed")
+            current_template = json.loads(current["payload_json"])
+            current_profile = json.loads(current["profile_json"])
+            if (request["actor"] == "guarded_auto"
+                    and current_template["update_mode"] != "guarded_auto"):
+                raise ContractError(
+                    "guarded automatic promotion is not enabled",
+                )
+            qualification_payload = None
+            if request["action"] == "promote":
+                qualification = self.connection.execute(
+                    "SELECT q.alias,q.template_id,q.profile_id,q.verdict,"
+                    "q.payload_json,q.payload_sha256,q.gate_failures_json,"
+                    "p.profile_json,p.profile_sha256,t.payload_json AS template_json,"
+                    "t.payload_sha256 AS template_sha256 FROM qualification_runs q "
+                    "JOIN concrete_profiles p ON p.profile_id=q.profile_id "
+                    "JOIN profile_templates t ON t.template_id=q.template_id "
+                    "WHERE q.qualification_id=?",
+                    (request["qualification_id"],),
+                ).fetchone()
+                if (qualification is None or qualification["alias"] != request["alias"]
+                        or qualification["verdict"] != "qualified"
+                        or json.loads(qualification["gate_failures_json"])):
+                    raise ContractError(
+                        "binding promotion requires a qualified candidate",
+                    )
+                target_template = json.loads(qualification["template_json"])
+                target_profile = json.loads(qualification["profile_json"])
+                target_template_id = qualification["template_id"]
+                target_profile_sha256 = qualification["profile_sha256"]
+                target_template_sha256 = qualification["template_sha256"]
+                target_qualification_id = request["qualification_id"]
+                qualification_payload = json.loads(qualification["payload_json"])
+                if (request["actor"] == "guarded_auto"
+                        and target_template_id != current["template_id"]):
+                    raise ContractError(
+                        "guarded automation cannot change lifecycle policy",
+                    )
+                guarded_violation = (
+                    guarded_change_violation(current_profile, target_profile)
+                    if request["actor"] == "guarded_auto" else None
+                )
+                if guarded_violation is not None:
+                    raise ContractError(guarded_violation)
+            else:
+                rollback = request["rollback_target"]
+                target = self.connection.execute(
+                    "SELECT v.template_id,v.profile_id,v.qualification_id,"
+                    "p.profile_json,p.profile_sha256,t.payload_json AS template_json,"
+                    "t.payload_sha256 AS template_sha256 FROM profile_binding_versions v "
+                    "JOIN concrete_profiles p ON p.profile_id=v.profile_id "
+                    "JOIN profile_templates t ON t.template_id=v.template_id "
+                    "WHERE v.alias=? AND v.version=?",
+                    (request["alias"], rollback["binding_version"]),
+                ).fetchone()
+                if (target is None or target["profile_id"] != rollback["profile_id"]
+                        or rollback["binding_version"] >= current["version"]):
+                    raise ContractError("rollback target is not a prior binding")
+                target_profile = json.loads(target["profile_json"])
+                if target_profile["quality_status"] == "suspended":
+                    raise ContractError("rollback target is suspended")
+                target_template = json.loads(target["template_json"])
+                target_template_id = target["template_id"]
+                target_profile_sha256 = target["profile_sha256"]
+                target_template_sha256 = target["template_sha256"]
+                target_qualification_id = target["qualification_id"]
+                if target_qualification_id is not None:
+                    qualified = self.connection.execute(
+                        "SELECT verdict,payload_json FROM qualification_runs "
+                        "WHERE qualification_id=?",
+                        (target_qualification_id,),
+                    ).fetchone()
+                    if qualified is None or qualified["verdict"] != "qualified":
+                        raise ContractError("rollback target is no longer qualified")
+                    qualification_payload = json.loads(qualified["payload_json"])
+                if (request["actor"] == "guarded_auto"
+                        and target_template_id != current["template_id"]):
+                    raise ContractError(
+                        "guarded automation cannot change lifecycle policy",
+                    )
+            if target_profile["id"] == current["profile_id"]:
+                raise ConflictError("binding already targets the requested profile")
+            new_version = current["version"] + 1
+            receipt = {
+                "schema_version": 1,
+                "decision_id": request["decision_id"],
+                "action": request["action"],
+                "alias": request["alias"],
+                "actor": request["actor"],
+                "reason": request["reason"],
+                "evidence_refs": request["evidence_refs"],
+                "from": {
+                    "binding_version": current["version"],
+                    "profile_id": current["profile_id"],
+                    "profile_sha256": current["profile_sha256"],
+                    "template_id": current["template_id"],
+                    "template_sha256": current["payload_sha256"],
+                },
+                "to": {
+                    "binding_version": new_version,
+                    "profile_id": target_profile["id"],
+                    "profile_sha256": target_profile_sha256,
+                    "template_id": target_template_id,
+                    "template_sha256": target_template_sha256,
+                },
+                "qualification_id": target_qualification_id,
+                "qualification": qualification_payload,
+                "policy": target_template["policy"],
+                "rollback_target": {
+                    "profile_id": current["profile_id"],
+                    "binding_version": current["version"],
+                },
+                "requested_rollback_target": (
+                    request["rollback_target"]
+                    if request["action"] == "rollback" else None
+                ),
+                "effective_at": recorded_at,
+                "affects_new_runs_only": True,
+            }
+            receipt_json = canonical_json(receipt)
+            receipt_sha256 = hashlib.sha256(receipt_json.encode()).hexdigest()
+            self.connection.execute(
+                "UPDATE profile_bindings SET template_id=?,profile_id=?,"
+                "qualification_id=?,version=?,updated_at=? WHERE alias=? AND version=?",
+                (
+                    target_template_id, target_profile["id"],
+                    target_qualification_id, new_version, recorded_at,
+                    request["alias"], current["version"],
+                ),
+            )
+            if self.connection.execute("SELECT changes()").fetchone()[0] != 1:
+                raise ConflictError("profile binding version changed")
+            self.connection.execute(
+                "INSERT INTO profile_binding_versions(alias,version,template_id,"
+                "profile_id,qualification_id,decision_id,recorded_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    request["alias"], new_version, target_template_id,
+                    target_profile["id"], target_qualification_id,
+                    request["decision_id"], recorded_at,
+                ),
+            )
+            self.connection.execute(
+                "INSERT INTO binding_decisions(decision_id,alias,action,actor,"
+                "from_version,to_version,from_profile_id,to_profile_id,"
+                "qualification_id,request_sha256,receipt_json,receipt_sha256,"
+                "recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    request["decision_id"], request["alias"], request["action"],
+                    request["actor"], current["version"], new_version,
+                    current["profile_id"], target_profile["id"],
+                    target_qualification_id, request_sha256, receipt_json,
+                    receipt_sha256, recorded_at,
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return {
+                "receipt": receipt,
+                "receipt_sha256": receipt_sha256,
+                "recorded_at": recorded_at,
+                "replayed": False,
+            }
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def profile_binding_decisions(self, alias: str) -> list[dict[str, Any]]:
+        if not isinstance(alias, str) or not alias:
+            raise ContractError("profile binding alias is invalid")
+        return [
+            {
+                "receipt": json.loads(row["receipt_json"]),
+                "receipt_sha256": row["receipt_sha256"],
+                "recorded_at": row["recorded_at"],
+            }
+            for row in self.connection.execute(
+                "SELECT receipt_json,receipt_sha256,recorded_at "
+                "FROM binding_decisions WHERE alias=? ORDER BY to_version",
+                (alias,),
+            )
+        ]
 
     def worker_invocations(self, run_id: str) -> int:
         """Count attempts whose durable runner actually crossed the launch fence."""
