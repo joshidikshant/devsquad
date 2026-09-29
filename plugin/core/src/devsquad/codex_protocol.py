@@ -183,6 +183,25 @@ class NativeTurnState:
                     raise ContractError("native completed agent message must contain text")
                 self.output.append(content)
         if method == "turn/completed" and self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
+            if not "".join(self.output).strip():
+                items = turn.get("items")
+                if items is not None:
+                    if not isinstance(items, list):
+                        raise ContractError("native terminal turn items must be an array")
+                    completed_output = None
+                    for item in items:
+                        if not isinstance(item, dict):
+                            raise ContractError("native terminal turn item must be an object")
+                        if item.get("type") in {"agentMessage", "agent_message"}:
+                            content = item.get("text", item.get("content"))
+                            if not isinstance(content, str):
+                                raise ContractError(
+                                    "native terminal agent message must contain text"
+                                )
+                            if content.strip():
+                                completed_output = content
+                    if completed_output is not None:
+                        self.output.append(completed_output)
             self.terminal = True
             self.terminal_status = turn.get("status")
             turn_error = turn.get("error")

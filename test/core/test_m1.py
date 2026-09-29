@@ -254,6 +254,55 @@ class NativeProtocolTest(unittest.TestCase):
         })
         self.assertEqual("".join(state.output).strip(), "structured result")
 
+    def test_terminal_turn_items_are_output_fallback_without_duplication(self):
+        state = NativeTurnState(thread_id="th1", turn_id="t1")
+        state.consume({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "th1",
+                "turn": {
+                    "id": "t1", "status": "completed",
+                    "items": [
+                        {"id": "reasoning", "type": "reasoning", "summary": []},
+                        {"id": "first", "type": "agentMessage", "text": ""},
+                        {"id": "final", "type": "agentMessage", "text": "structured result"},
+                    ],
+                },
+            },
+        })
+        self.assertEqual(state.output, ["structured result"])
+        self.assertTrue(state.terminal)
+
+        streamed = NativeTurnState(thread_id="th1", turn_id="t1")
+        streamed.consume({
+            "method": "item/agentMessage/delta",
+            "params": {"threadId": "th1", "turnId": "t1", "delta": "streamed"},
+        })
+        streamed.consume({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "th1",
+                "turn": {
+                    "id": "t1", "status": "completed",
+                    "items": [
+                        {"id": "final", "type": "agentMessage", "text": "duplicate"},
+                    ],
+                },
+            },
+        })
+        self.assertEqual(streamed.output, ["streamed"])
+
+    def test_terminal_turn_rejects_malformed_items(self):
+        state = NativeTurnState(thread_id="th1", turn_id="t1")
+        with self.assertRaisesRegex(ContractError, "items must be an array"):
+            state.consume({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "th1",
+                    "turn": {"id": "t1", "status": "completed", "items": {}},
+                },
+            })
+
     def test_unrelated_turn_cannot_complete_ours_and_disconnect_is_visible(self):
         state = NativeTurnState(thread_id="th1", turn_id="ours")
         state.consume({"method":"turn/completed", "params":{"threadId":"th1", "turn":{"id":"other", "status":"completed"}}})
