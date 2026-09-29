@@ -303,6 +303,43 @@ class NativeProtocolTest(unittest.TestCase):
                 },
             })
 
+    def test_output_diagnostics_are_structural_and_redacted(self):
+        state = NativeTurnState(thread_id="th1", turn_id="t1")
+        secret = "do-not-retain-this-model-text"
+        for message in [
+            {
+                "method": "item/agentMessage/delta",
+                "params": {"threadId": "other", "turnId": "t1", "delta": secret},
+            },
+            {
+                "method": "item/completed",
+                "params": {
+                    "threadId": "th1", "turnId": "t1",
+                    "item": {"type": "agentMessage", "text": secret},
+                },
+            },
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "th1",
+                    "turn": {
+                        "id": "t1", "status": "completed",
+                        "items": [{"type": "agentMessage", "text": secret}],
+                    },
+                },
+            },
+        ]:
+            state.consume(message)
+        diagnostics = state.output_diagnostics()
+        self.assertEqual(diagnostics["event_count"], 3)
+        self.assertEqual(diagnostics["matching_completed_messages"], 1)
+        self.assertEqual(
+            diagnostics["matching_completed_message_bytes"], len(secret.encode()),
+        )
+        self.assertEqual(diagnostics["matching_terminal_agent_messages"], 1)
+        self.assertEqual(diagnostics["uncorrelated_output_events"], 1)
+        self.assertNotIn(secret, json.dumps(diagnostics, sort_keys=True))
+
     def test_unrelated_turn_cannot_complete_ours_and_disconnect_is_visible(self):
         state = NativeTurnState(thread_id="th1", turn_id="ours")
         state.consume({"method":"turn/completed", "params":{"threadId":"th1", "turn":{"id":"other", "status":"completed"}}})

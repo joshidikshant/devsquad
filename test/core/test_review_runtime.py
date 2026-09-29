@@ -647,7 +647,7 @@ class DurableBranchReviewTest(unittest.TestCase):
             "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
             "CODEX_HOME": str(fake_home),
         }
-        for mode in ("malformed", "denied", "disconnect", "identity-drift"):
+        for mode in ("empty", "malformed", "denied", "disconnect", "identity-drift"):
             with self.subTest(mode=mode):
                 profile["model_id"] = f"gpt-fake-{mode}"
                 (self.repo / "devsquad/profiles.json").write_text(
@@ -691,6 +691,15 @@ class DurableBranchReviewTest(unittest.TestCase):
                     Path(artifacts["receipt.json"]["path"]).read_bytes(),
                     Path(artifacts["result-receipt.json"]["path"]).read_bytes(),
                 )
+                if mode == "empty":
+                    stderr_artifact = next(
+                        artifact for name, artifact in artifacts.items()
+                        if name.endswith(".stderr")
+                    )
+                    stderr_text = Path(stderr_artifact["path"]).read_text()
+                    self.assertIn("completed without output", stderr_text)
+                    self.assertIn("protocol_summary=", stderr_text)
+                    self.assertIn('"matching_deltas":2', stderr_text)
                 manifest = json.loads(
                     Path(artifacts["artifact-manifest.json"]["path"]).read_text()
                 )

@@ -226,9 +226,13 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "native Codex lead did not complete successfully: "
                 f"{state.terminal_status}; {detail}"
             )
-        choice = decode_headless_lead_choice(
-            "".join(state.output).strip(), handoff["packet"],
-        )
+        lead_payload = "".join(state.output).strip()
+        if not lead_payload:
+            raise ContractError(
+                "native Codex lead completed without output; protocol_summary="
+                + canonical_json(state.output_diagnostics())
+            )
+        choice = decode_headless_lead_choice(lead_payload, handoff["packet"])
         usage = _usage(protocol_events, thread_id, turn_id)
     finally:
         if process is not None:

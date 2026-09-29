@@ -454,9 +454,13 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "native Codex review did not complete successfully: "
                 f"{state.terminal_status}; {detail}"
             )
-        review = decode_review_document(
-            "".join(state.output).strip(), snapshot["task"], workspace,
-        )
+        review_payload = "".join(state.output).strip()
+        if not review_payload:
+            raise ContractError(
+                "native Codex review completed without output; protocol_summary="
+                + canonical_json(state.output_diagnostics())
+            )
+        review = decode_review_document(review_payload, snapshot["task"], workspace)
         usage = _usage(protocol_events, thread_id, turn_id)
     finally:
         if process is not None:

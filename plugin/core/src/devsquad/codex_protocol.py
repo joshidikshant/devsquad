@@ -129,6 +129,95 @@ class NativeTurnState:
     terminal_status: str | None = None
     error: dict[str, Any] | None = None
 
+    def output_diagnostics(self) -> dict[str, Any]:
+        """Return bounded structural evidence without retaining model text."""
+        method_counts: dict[str, int] = {}
+        matching_deltas = 0
+        matching_delta_bytes = 0
+        matching_completed_messages = 0
+        matching_completed_message_bytes = 0
+        matching_terminal_turns = 0
+        matching_terminal_agent_messages = 0
+        matching_terminal_agent_message_bytes = 0
+        terminal_item_types: set[str] = set()
+        uncorrelated_output_events = 0
+        for event in self.events:
+            method = event.get("method")
+            if not isinstance(method, str):
+                method = "<missing>"
+            method_counts[method] = method_counts.get(method, 0) + 1
+            params = event.get("params")
+            if not isinstance(params, dict):
+                continue
+            event_turn = params.get("turn")
+            turn = event_turn if isinstance(event_turn, dict) else {}
+            message_thread = params.get("threadId")
+            message_turn = turn.get("id") or params.get("turnId")
+            correlated = (
+                message_thread == self.thread_id and message_turn == self.turn_id
+            )
+            if method in {"item/agentMessage/delta", "turn/output/delta"}:
+                if not correlated:
+                    uncorrelated_output_events += 1
+                    continue
+                delta = params.get("delta")
+                if isinstance(delta, str):
+                    matching_deltas += 1
+                    matching_delta_bytes += len(delta.encode("utf-8"))
+            elif method == "item/completed":
+                item = params.get("item")
+                if not isinstance(item, dict) or item.get("type") not in {
+                    "agentMessage", "agent_message",
+                }:
+                    continue
+                if not correlated:
+                    uncorrelated_output_events += 1
+                    continue
+                content = item.get("text", item.get("content"))
+                if isinstance(content, str):
+                    matching_completed_messages += 1
+                    matching_completed_message_bytes += len(content.encode("utf-8"))
+            elif method == "turn/completed" and correlated:
+                matching_terminal_turns += 1
+                items = turn.get("items")
+                if not isinstance(items, list):
+                    continue
+                for item in items:
+                    if not isinstance(item, dict):
+                        terminal_item_types.add("<invalid>")
+                        continue
+                    item_type = item.get("type")
+                    terminal_item_types.add(
+                        item_type if isinstance(item_type, str) else "<missing>"
+                    )
+                    if item_type not in {"agentMessage", "agent_message"}:
+                        continue
+                    content = item.get("text", item.get("content"))
+                    if isinstance(content, str):
+                        matching_terminal_agent_messages += 1
+                        matching_terminal_agent_message_bytes += len(
+                            content.encode("utf-8")
+                        )
+        return {
+            "collected_output_bytes": sum(
+                len(part.encode("utf-8")) for part in self.output
+            ),
+            "collected_output_parts": len(self.output),
+            "event_count": len(self.events),
+            "matching_completed_message_bytes": matching_completed_message_bytes,
+            "matching_completed_messages": matching_completed_messages,
+            "matching_delta_bytes": matching_delta_bytes,
+            "matching_deltas": matching_deltas,
+            "matching_terminal_agent_message_bytes": (
+                matching_terminal_agent_message_bytes
+            ),
+            "matching_terminal_agent_messages": matching_terminal_agent_messages,
+            "matching_terminal_turns": matching_terminal_turns,
+            "method_counts": dict(sorted(method_counts.items())),
+            "terminal_item_types": sorted(terminal_item_types),
+            "uncorrelated_output_events": uncorrelated_output_events,
+        }
+
     def consume(self, message: dict[str, Any]) -> None:
         if not isinstance(message, dict):
             raise ContractError("native message must be an object")

@@ -105,7 +105,8 @@ for line in sys.stdin:
                 "findings": [],
             }
         output = (
-            "{}" if model.endswith("malformed")
+            "" if model.endswith("empty")
+            else "{}" if model.endswith("malformed")
             else json.dumps(review, sort_keys=True, separators=(",", ":"))
         )
         print(json.dumps({
