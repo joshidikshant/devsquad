@@ -50,11 +50,13 @@ the service checks its fencing token and run version.
 | Antigravity | `agy mcp add` | Antigravity user config | `agy mcp list` |
 | Grok Build | `grok mcp add --scope user` | user | `grok mcp list --json` |
 
-Install the optional, exactly pinned MCP extra into the same stable environment
-that owns the `squad` executable, then preview or apply registration:
+Install the optional, exactly pinned MCP extra into the same immutable release
+that owns the `squad` executable. The installer is offline-only and requires a
+wheelhouse containing every locked dependency; then preview or apply
+registration:
 
 ```text
-python3 -m pip install './plugin/core[mcp]'
+./scripts/install-core.sh --with-mcp --mcp-wheelhouse /absolute/path/to/wheels
 squad setup --dry-run --json
 squad setup --json
 squad doctor --json
@@ -89,3 +91,5 @@ installed app is not ready, while unavailable apps are not treated as required.
 These commands prove local CLI registration and SDK conformance. Actual
 in-app operation still requires the cross-surface receipts in M4/M7; config
 syntax or a matching `mcp list` result is not presented as that live proof.
+The full install, operate and recovery procedure is in
+[the runtime guide](../../RUNTIME-GUIDE.md).

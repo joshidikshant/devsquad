@@ -1,0 +1,66 @@
+name: Offline compatibility
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  legacy-bash:
+    name: Legacy Bash 3.2 (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify system Bash floor
+        run: test "$(/bin/bash -c 'printf "%s.%s" "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"')" = "3.2"
+      - name: Run legacy and packaging contracts
+        run: /bin/bash test/run.sh
+
+  core:
+    name: Core Python ${{ matrix.python }} (macOS)
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install build-only test tooling
+        run: python -m pip install "setuptools>=68" wheel
+      - name: Verify generated command and schema reference
+        run: python scripts/generate-core-reference.py --check
+      - name: Run dependency-free core, package and native-protocol fixtures
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: plugin/core/src
+          PYTHONWARNINGS: error::ResourceWarning
+        run: python -m unittest discover -s test/core -q
+
+  optional-mcp:
+    name: Optional MCP 2.2.0 (provider-offline)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install exact optional transport lock
+        run: python -m pip install -r plugin/core/requirements-mcp.lock
+      - name: Run MCP SDK and stdio compatibility fixtures
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: plugin/core/src
+          PYTHONWARNINGS: error::ResourceWarning
+        run: python test/core/test_mcp.py -q
+
+# Test bodies make no provider or application network calls. Dependency setup
+# resolves pinned public packages; live provider/app smoke runs remain explicit,
+# bounded receipts outside CI.

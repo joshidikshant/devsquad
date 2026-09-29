@@ -126,16 +126,26 @@ Enforced by `test/test_wrapper_contract.sh` (offline, fake CLI binaries):
 
 ## Deployment modes (the drift trap)
 
-- **User mode**: `install.sh` registers global hooks pointing at the
-  marketplace clone (`~/.claude/plugins/marketplaces/devsquad-marketplace/plugin`).
-  Refresh with `claude plugin marketplace update devsquad-marketplace` +
-  `claude plugin update devsquad@devsquad-marketplace` after each release.
-- **Dev mode** (this machine): global hooks point at the source checkout, so
-  hooks run at HEAD. Agents/commands/skills STILL load from the installed
-  plugin — after pushing, update the plugin or subagents run stale code.
-- Never let hook commands reference a versioned cache dir
-  (`plugins/cache/.../<version>/`): that froze production at 0.3.0 for
-  five months while fixes accumulated unreleased.
+- **Standalone mode**: `scripts/install-core.sh` creates an immutable release
+  below `~/.devsquad/releases/`, atomically selects it through
+  `~/.devsquad/current` and keeps `~/.local/bin/squad` stable. It needs no
+  Claude installation. `--status --json` compares source, plugin and actual
+  installed payload digests.
+- **Claude plugin mode**: `install.sh` installs the standalone runtime first
+  and, when Claude is available, installs or updates the marketplace plugin.
+  `plugin/hooks/hooks.json` is the hook registration source. The installer no
+  longer writes a duplicate set into global Claude settings.
+- **Dev mode**: run legacy hooks from this source checkout only when explicitly
+  testing changes at HEAD. Agents/commands/skills may still come from an
+  installed plugin, so doctor and install-status output must be checked before
+  attributing behavior to the source tree.
+- Never point a stable launcher or manual hook at a versioned Claude cache
+  directory (`plugins/cache/.../<version>/`). Content-addressed standalone
+  releases are retained for active runs; the selector, not a running process,
+  moves during updates.
+
+See [the runtime guide](RUNTIME-GUIDE.md) for install, operation, recovery and
+the honestly blocked live-surface matrix.
 
 ## State (per project, `.devsquad/`, self-gitignored)
 
