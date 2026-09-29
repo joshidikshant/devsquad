@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 from devsquad.capacity import derive_pool_capacity
 from devsquad.contracts import ContractError
 from devsquad.reports import TERMINAL_REPORT_NAMES, build_handoff_reports
+from devsquad.review_worker import _run_check
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store, request_hash
 from devsquad_test_fixtures import branch_review_routing_documents
@@ -135,6 +136,44 @@ class DurableBranchReviewTest(unittest.TestCase):
         waiting = self.wait_state(started["run_id"], {"awaiting_host", "failed"})
         self.assertEqual(waiting["state"], "awaiting_host")
         return started["run_id"], waiting
+
+    def test_each_trusted_check_gets_a_fresh_isolated_home(self):
+        inherited_home = self.root / "inherited-home"
+        inherited_home.mkdir()
+        (inherited_home / "credential-marker").write_text("private\n")
+        script = (
+            "from pathlib import Path; import os,sys; "
+            "home=Path(os.environ['HOME']); inherited=Path(sys.argv[1]); "
+            "assert home.is_dir(); assert home != inherited; "
+            "assert not (home/'credential-marker').exists(); "
+            "assert not (home/'prior-check-marker').exists(); "
+            "(home/sys.argv[2]).write_text('created\\n'); print(home)"
+        )
+        results = []
+        with patch.dict(os.environ, {"HOME": str(inherited_home)}):
+            for check_id, marker in (
+                ("first-home-check", "prior-check-marker"),
+                ("second-home-check", "second-check-marker"),
+            ):
+                results.append(_run_check(
+                    {
+                        "id": check_id,
+                        "argv": [sys.executable, "-c", script, str(inherited_home), marker],
+                        "cwd": ".",
+                        "timeout_seconds": 10,
+                        "required_to_pass": True,
+                    },
+                    self.repo.resolve(),
+                    "candidate-sha256",
+                    self.target,
+                ))
+
+        self.assertEqual([result["status"] for result in results], ["passed", "passed"])
+        homes = [result["stdout"]["preview"].strip() for result in results]
+        self.assertNotEqual(homes[0], homes[1])
+        self.assertTrue(all(home != str(inherited_home) for home in homes))
+        self.assertTrue(all(not Path(home).exists() for home in homes))
+        self.assertEqual((inherited_home / "credential-marker").read_text(), "private\n")
 
     def configure_fixture_headless(self):
         profiles = json.loads((self.repo / "devsquad/profiles.json").read_text())

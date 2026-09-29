@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Any
 
@@ -65,38 +66,41 @@ def _run_check(
     started = time.monotonic()
     stdout_result, stderr_result = _empty_stream(), _empty_stream()
     cwd = _safe_check_cwd(check_workspace, check["cwd"])
-    try:
-        process = subprocess.Popen(
-            check["argv"],
-            cwd=cwd,
-            env=os.environ.copy(),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=False,
-            close_fds=True,
-        )
-    except OSError:
-        status, returncode, error_code = "launch_failed", None, "CLI_ERROR"
-    else:
-        assert process.stdout is not None and process.stderr is not None
-        stdout = BoundedDrain(process.stdout, MAX_PREVIEW_CHARS)
-        stderr = BoundedDrain(process.stderr, MAX_PREVIEW_CHARS)
-        stdout.start()
-        stderr.start()
+    with tempfile.TemporaryDirectory(prefix="devsquad-check-home-") as check_home:
+        environment = os.environ.copy()
+        environment["HOME"] = check_home
         try:
-            returncode = process.wait(timeout=check["timeout_seconds"])
-            status = "passed" if returncode == 0 else "failed"
-            error_code = None
-        except subprocess.TimeoutExpired:
-            status, returncode, error_code = "timed_out", None, "TIMEOUT"
-            process.terminate()
+            process = subprocess.Popen(
+                check["argv"],
+                cwd=cwd,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=False,
+                close_fds=True,
+            )
+        except OSError:
+            status, returncode, error_code = "launch_failed", None, "CLI_ERROR"
+        else:
+            assert process.stdout is not None and process.stderr is not None
+            stdout = BoundedDrain(process.stdout, MAX_PREVIEW_CHARS)
+            stderr = BoundedDrain(process.stderr, MAX_PREVIEW_CHARS)
+            stdout.start()
+            stderr.start()
             try:
-                process.wait(timeout=1)
+                returncode = process.wait(timeout=check["timeout_seconds"])
+                status = "passed" if returncode == 0 else "failed"
+                error_code = None
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=2)
-        stdout_result, stderr_result = _stream_result(stdout), _stream_result(stderr)
+                status, returncode, error_code = "timed_out", None, "TIMEOUT"
+                process.terminate()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
+            stdout_result, stderr_result = _stream_result(stdout), _stream_result(stderr)
     return {
         "schema_version": 1,
         "candidate_sha256": candidate_sha256,
