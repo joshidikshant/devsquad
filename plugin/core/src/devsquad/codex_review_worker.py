@@ -454,13 +454,23 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "native Codex review did not complete successfully: "
                 f"{state.terminal_status}; {detail}"
             )
-        review_payload = "".join(state.output).strip()
+        review_payload = state.final_output().strip()
+        if len(review_payload.encode("utf-8")) > MAX_REVIEW_BYTES:
+            raise ContractError("native Codex review output exceeds its byte limit")
         if not review_payload:
             raise ContractError(
                 "native Codex review completed without output; protocol_summary="
                 + canonical_json(state.output_diagnostics())
             )
-        review = decode_review_document(review_payload, snapshot["task"], workspace)
+        try:
+            review = decode_review_document(
+                review_payload, snapshot["task"], workspace,
+            )
+        except ContractError as exc:
+            raise ContractError(
+                f"{exc}; protocol_summary="
+                + canonical_json(state.output_diagnostics())
+            ) from exc
         usage = _usage(protocol_events, thread_id, turn_id)
     finally:
         if process is not None:

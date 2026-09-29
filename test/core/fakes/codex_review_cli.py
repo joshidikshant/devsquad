@@ -122,6 +122,28 @@ for line in sys.stdin:
                 "turn": {"id": turn_id, "status": "inProgress"},
             },
         }), flush=True)
+        if model == "gpt-fake-review":
+            print(json.dumps({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": thread_id,
+                    "turnId": turn_id,
+                    "itemId": "fixture-draft",
+                    "delta": '{"draft":true}',
+                },
+            }), flush=True)
+            print(json.dumps({
+                "method": "item/completed",
+                "params": {
+                    "threadId": thread_id,
+                    "turnId": turn_id,
+                    "item": {
+                        "id": "fixture-draft",
+                        "type": "agentMessage",
+                        "text": '{"draft":true}',
+                    },
+                },
+            }), flush=True)
         midpoint = len(output) // 2
         for part in (output[:midpoint], output[midpoint:]):
             print(json.dumps({
@@ -132,6 +154,18 @@ for line in sys.stdin:
                     "delta": part,
                 },
             }), flush=True)
+        print(json.dumps({
+            "method": "item/completed",
+            "params": {
+                "threadId": thread_id,
+                "turnId": turn_id,
+                "item": {
+                    "id": "fixture-final",
+                    "type": "agentMessage",
+                    "text": output,
+                },
+            },
+        }), flush=True)
         print(json.dumps({
             "method": "thread/tokenUsage/updated",
             "params": {

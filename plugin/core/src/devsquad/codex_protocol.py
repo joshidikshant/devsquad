@@ -125,9 +125,16 @@ class NativeTurnState:
     terminal: bool = False
     interrupted_acknowledged: bool = False
     output: list[str] = field(default_factory=list)
+    completed_output: str | None = None
     events: list[dict[str, Any]] = field(default_factory=list)
     terminal_status: str | None = None
     error: dict[str, Any] | None = None
+
+    def final_output(self) -> str:
+        """Prefer the last authoritative completed agent message over deltas."""
+        if self.completed_output is not None:
+            return self.completed_output
+        return "".join(self.output)
 
     def output_diagnostics(self) -> dict[str, Any]:
         """Return bounded structural evidence without retaining model text."""
@@ -203,6 +210,10 @@ class NativeTurnState:
                 len(part.encode("utf-8")) for part in self.output
             ),
             "collected_output_parts": len(self.output),
+            "completed_output_bytes": (
+                len(self.completed_output.encode("utf-8"))
+                if self.completed_output is not None else None
+            ),
             "event_count": len(self.events),
             "matching_completed_message_bytes": matching_completed_message_bytes,
             "matching_completed_messages": matching_completed_messages,
@@ -260,8 +271,7 @@ class NativeTurnState:
                 raise ContractError("native output delta must be a string")
             if self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
                 self.output.append(delta)
-        if (method == "item/completed" and not "".join(self.output).strip()
-                and self.thread_id and self.turn_id
+        if (method == "item/completed" and self.thread_id and self.turn_id
                 and message_thread == self.thread_id and message_turn == self.turn_id):
             item = params.get("item")
             if not isinstance(item, dict):
@@ -270,27 +280,27 @@ class NativeTurnState:
                 content = item.get("text", item.get("content"))
                 if not isinstance(content, str):
                     raise ContractError("native completed agent message must contain text")
-                self.output.append(content)
+                if content.strip():
+                    self.completed_output = content
         if method == "turn/completed" and self.thread_id and self.turn_id and message_thread == self.thread_id and message_turn == self.turn_id:
-            if not "".join(self.output).strip():
-                items = turn.get("items")
-                if items is not None:
-                    if not isinstance(items, list):
-                        raise ContractError("native terminal turn items must be an array")
-                    completed_output = None
-                    for item in items:
-                        if not isinstance(item, dict):
-                            raise ContractError("native terminal turn item must be an object")
-                        if item.get("type") in {"agentMessage", "agent_message"}:
-                            content = item.get("text", item.get("content"))
-                            if not isinstance(content, str):
-                                raise ContractError(
-                                    "native terminal agent message must contain text"
-                                )
-                            if content.strip():
-                                completed_output = content
-                    if completed_output is not None:
-                        self.output.append(completed_output)
+            items = turn.get("items")
+            if items is not None:
+                if not isinstance(items, list):
+                    raise ContractError("native terminal turn items must be an array")
+                completed_output = None
+                for item in items:
+                    if not isinstance(item, dict):
+                        raise ContractError("native terminal turn item must be an object")
+                    if item.get("type") in {"agentMessage", "agent_message"}:
+                        content = item.get("text", item.get("content"))
+                        if not isinstance(content, str):
+                            raise ContractError(
+                                "native terminal agent message must contain text"
+                            )
+                        if content.strip():
+                            completed_output = content
+                if completed_output is not None:
+                    self.completed_output = completed_output
             self.terminal = True
             self.terminal_status = turn.get("status")
             turn_error = turn.get("error")

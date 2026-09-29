@@ -226,13 +226,21 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "native Codex lead did not complete successfully: "
                 f"{state.terminal_status}; {detail}"
             )
-        lead_payload = "".join(state.output).strip()
+        lead_payload = state.final_output().strip()
+        if len(lead_payload.encode("utf-8")) > MAX_LEAD_BYTES:
+            raise ContractError("native Codex lead output exceeds its byte limit")
         if not lead_payload:
             raise ContractError(
                 "native Codex lead completed without output; protocol_summary="
                 + canonical_json(state.output_diagnostics())
             )
-        choice = decode_headless_lead_choice(lead_payload, handoff["packet"])
+        try:
+            choice = decode_headless_lead_choice(lead_payload, handoff["packet"])
+        except ContractError as exc:
+            raise ContractError(
+                f"{exc}; protocol_summary="
+                + canonical_json(state.output_diagnostics())
+            ) from exc
         usage = _usage(protocol_events, thread_id, turn_id)
     finally:
         if process is not None:

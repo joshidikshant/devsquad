@@ -195,7 +195,7 @@ def main() -> int:
                     if remaining <= 0:
                         raise TimeoutError("native turn did not reach correlated terminal state")
                     state.consume(peer.receive(remaining))
-                output = "".join(state.output).strip()
+                output = state.final_output().strip()
                 if state.terminal_status != "completed" or output != "DEVSQUAD_M1_NATIVE_OK":
                     raise RuntimeError(f"native verdict was not successful: status={state.terminal_status!r}, output={output!r}")
                 receipt.update({"status": "passed", "harness_version": version, "model": selected["id"], "effort": effort, "permission": "read_only", "terminal_status": state.terminal_status})

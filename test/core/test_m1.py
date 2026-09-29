@@ -226,7 +226,7 @@ class NativeProtocolTest(unittest.TestCase):
                 "item": {"type": "agentMessage", "text": "fallback"},
             },
         })
-        self.assertEqual(state.output, ["fallback"])
+        self.assertEqual(state.final_output(), "fallback")
         state.consume({
             "method": "item/completed",
             "params": {
@@ -234,7 +234,7 @@ class NativeProtocolTest(unittest.TestCase):
                 "item": {"type": "agentMessage", "text": "duplicate"},
             },
         })
-        self.assertEqual(state.output, ["fallback"])
+        self.assertEqual(state.final_output(), "duplicate")
 
     def test_completed_agent_message_replaces_an_empty_stream(self):
         state = NativeTurnState(thread_id="th1", turn_id="t1")
@@ -252,7 +252,34 @@ class NativeProtocolTest(unittest.TestCase):
                 "item": {"type": "agentMessage", "text": "structured result"},
             },
         })
-        self.assertEqual("".join(state.output).strip(), "structured result")
+        self.assertEqual(state.final_output().strip(), "structured result")
+
+    def test_last_completed_agent_message_wins_over_multiple_delta_streams(self):
+        state = NativeTurnState(thread_id="th1", turn_id="t1")
+        for item_id, content in (("first", '{"draft":true}'), ("final", '{"ok":true}')):
+            state.consume({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "th1", "turnId": "t1",
+                    "itemId": item_id, "delta": content,
+                },
+            })
+            state.consume({
+                "method": "item/completed",
+                "params": {
+                    "threadId": "th1", "turnId": "t1",
+                    "item": {"id": item_id, "type": "agentMessage", "text": content},
+                },
+            })
+        state.consume({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "th1",
+                "turn": {"id": "t1", "status": "completed", "items": []},
+            },
+        })
+        self.assertEqual("".join(state.output), '{"draft":true}{"ok":true}')
+        self.assertEqual(state.final_output(), '{"ok":true}')
 
     def test_terminal_turn_items_are_output_fallback_without_duplication(self):
         state = NativeTurnState(thread_id="th1", turn_id="t1")
@@ -270,7 +297,7 @@ class NativeProtocolTest(unittest.TestCase):
                 },
             },
         })
-        self.assertEqual(state.output, ["structured result"])
+        self.assertEqual(state.final_output(), "structured result")
         self.assertTrue(state.terminal)
 
         streamed = NativeTurnState(thread_id="th1", turn_id="t1")
@@ -285,12 +312,12 @@ class NativeProtocolTest(unittest.TestCase):
                 "turn": {
                     "id": "t1", "status": "completed",
                     "items": [
-                        {"id": "final", "type": "agentMessage", "text": "duplicate"},
+                        {"id": "final", "type": "agentMessage", "text": "streamed"},
                     ],
                 },
             },
         })
-        self.assertEqual(streamed.output, ["streamed"])
+        self.assertEqual(streamed.final_output(), "streamed")
 
     def test_terminal_turn_rejects_malformed_items(self):
         state = NativeTurnState(thread_id="th1", turn_id="t1")
