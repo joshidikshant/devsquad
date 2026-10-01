@@ -6,6 +6,20 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Latest continuation — upgrade review passed, full-gate clock fixture repair
 
+The actual local installation is now safely refreshed to
+`0.1.0-py31214-674889018f98-mcp-a26bc88afbef` using the existing Python 3.12.14
+and locked offline MCP 2.2.0 wheelhouse. Reinstall is unchanged, all payload
+drift flags are false, `pip check` passes, all four registrations match without
+changes, and **22 installed-SDK tests pass in 5.585s with no skips**. The
+schema-13 ledger had no active runs; a private SQLite backup and the old release
+are retained. First new-release access migrated to schema 15 and read an old
+succeeded result unchanged. See [installed workflow evidence](evidence/R8-installed-workflows-2026-10-01.json).
+Next: genuine bounded G4 repair through installed `squad fix`, Claude writer,
+independent Codex review and mandatory core checks; then actual Claude MCP
+handoff plus Grok/Gemini status probes against that same updated installation.
+Do not repeat the unchanged full gate or upgrade review. No model probe is
+currently live; record its run ID before a handoff/interruption.
+
 At `6874de7`, the bounded native upgrade follow-up is clean. Both required
 checks passed with verified unchanged candidate integrity; the accepted run
 `3c89bb19-64ec-4600-9080-436df89edcfb` terminalized succeeded, version 22.

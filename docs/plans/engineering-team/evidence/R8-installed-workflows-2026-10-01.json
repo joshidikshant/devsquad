@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "status": "installed_regressions_pass_live_workflows_pending",
+  "source_checkpoint": "c7ccc02",
+  "installation": {
+    "previous_release": "0.1.0-py31214-9e5cdea2aa99-mcp-a26bc88afbef",
+    "release": "0.1.0-py31214-674889018f98-mcp-a26bc88afbef",
+    "source_digest": "674889018f980ce648c6ac349d46253a723698206f8c6994454aa947e6efd4ab",
+    "source_plugin_installed_drift": false,
+    "python": "3.12.14", "mcp": "2.2.0", "network_downloads": false,
+    "first_install_changed": true, "reinstall_changed": false,
+    "pip_check": "pass", "previous_release_retained": true,
+    "ledger_backup": "/Users/Dikshant/.devsquad/backups/runtime-before-schema15-20261001.sqlite3",
+    "schema_before": 13, "schema_after_first_access": 15,
+    "nonterminal_runs_before": 0,
+    "old_result_readback": {"run_id": "c611ad4c-5473-4f05-a870-a136f24464d3", "state": "succeeded", "version": 22},
+    "setup": {"hosts": ["antigravity", "claude-code", "codex", "grok"], "matching": 4, "changed": 0},
+    "sdk_tests": {"tests": 22, "seconds": 5.585, "skips": 0, "result": "pass"}
+  },
+  "delivery": {"status": "pending", "scope": "G4 exact-target check discovery and inclusion of Python core regressions"},
+  "claude_handoff": {"status": "pending"},
+  "grok_operation": {"status": "pending"},
+  "gemini_antigravity": {"status": "pending", "ide_ui": "computer_use_permission_denied_do_not_bypass"},
+  "limitations": ["R4 catalog/quota, R5 public trials/outcomes, remaining R6 UX and R7 Council are separate open scope", "Jev runtime remains off and its one-request allowance is spent", "No paid API fallback, purchases, resets, global AI settings, push or external messages"]
+}
