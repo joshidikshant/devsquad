@@ -24,9 +24,20 @@ number of saved subscription windows has been measured.
 The initial evaluation inspected public documentation, benchmark reports and
 pinned Laya source. It did **not** install weights or run Laya inference. The
 tracked [Jev pilot specification](experiments/jev-pilot-v1.json) and validated
-[probe](../../../test/core/probes/jev_decision_eval.py) are now ready, but no
-TypeSafe request has run because this environment has no `TYPESAFE_API_KEY` and
-the console is at its login screen. The live result remains pending.
+[probe](../../../test/core/probes/jev_decision_eval.py) subsequently completed
+their one-request live smoke on October 1. See the
+[redacted receipt summary](evidence/M6-D2-jev-pilot-2026-10-01.json): exact pinned
+model, 5,373 reported input tokens, estimated $0.00022567, 8/8 task-family and
+skill labels, but 6/8 execution-tier labels. The two tier disagreements remain
+failures against the frozen expectations; the classifier is still off.
+
+This closes M6-D2's synthetic mechanics/access measurement only. It does not
+prove production quality, calibration, speedup or adoption. The cost/access
+Laya trigger did not fire; this smoke has no frozen numeric production accuracy
+threshold from which to claim a quality-triggered switch. Broader evaluation
+needs predeclared data, held-out gates and separately authorized resources.
+The existing one-request allowance is spent: do not rerun the live command
+below without new authorization.
 
 ## What was verified
 

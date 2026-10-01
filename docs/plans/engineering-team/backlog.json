@@ -353,7 +353,7 @@
           "id": "M6-D2",
           "title": "Capped Jev synthetic pilot for task/profile and skill hints",
           "depends_on": ["M6-D1"],
-          "status": "blocked",
+          "status": "complete",
           "specification": "DECISION-CLASSIFIERS.md",
           "evidence": [
             {
@@ -363,9 +363,19 @@
               "command_or_action": "14 offline Jev probe tests, explicit --env-file dry run, private local .env and Git-ignore checks; 227 Bash assertions in 11 files, generated-reference, JSON and whitespace checks passed",
               "outcome": "Explicit private env-file loading is verified without shell evaluation, key disclosure or a live API call. Local key field remains blank; authentication and the capped live pilot are still pending.",
               "availability": "tracked_tests_and_blank_example"
+            },
+            {
+              "kind": "live_synthetic_smoke",
+              "revision": "0d37764",
+              "recorded_at": "2026-10-01T20:35:46.511565+00:00",
+              "artifact": "evidence/M6-D2-jev-pilot-2026-10-01.json",
+              "command_or_action": "One pinned Jev 1.13 API request after official pricing/API recheck; no retries; private env-file and redacted receipt outside Git",
+              "outcome": "Typed authenticated smoke completed: 5373 input tokens, 1762 output tokens, 187 ms and estimated $0.00022567. Task-family and skill labels matched 8/8 each; execution-tier matched 6/8. This closes the single-request smoke only, not production quality or routing adoption. Runtime remains off and the one-request allowance is spent.",
+              "availability": "portable_redacted_with_private_receipt_hash"
             }
           ],
-          "blocker": "Private Git-ignored .env template and explicit probe loading are prepared, but TYPESAFE_API_KEY still needs local entry. No live TypeSafe authentication or pilot has run; recheck current pricing before the authorized one-request, no-retry, $0.01-capped synthetic pilot."
+          "checkpoint": "One-request smoke complete; preserved two tier disagreements, exact model/usage/cost evidence and private receipt hash. No automatic routing change or additional hosted request authorized.",
+          "blocker": null
         },
         {
           "id": "M6-D3",
@@ -433,7 +443,7 @@
           "availability": "tracked_fixture_and_tests"
         }
       ],
-      "blocker": "Independent R3-R5 evidence, routing, learning and observation integration remains. Only the separate single-request Jev measurement requires TYPESAFE_API_KEY; Laya remains conditional."
+      "blocker": "Independent R3-R5 evidence, routing, learning and observation integration remains. The single-request Jev smoke is complete but does not prove production quality; runtime guidance remains off and Laya remains conditional."
     },
     {
       "id": "M7",

@@ -5,8 +5,9 @@ The component tests below remain useful historical evidence, but the
 September 29 review found reused held-out evidence (F3), normal routing that
 bypasses lifecycle bindings (F4), and missing public outcome/experiment,
 catalog and quota connections (G1/G2). Execute R3–R5 in
-[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The Jev key blocks only its
-separate measurement; it does not block this engineering work.
+[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The separate one-request Jev
+smoke completed on October 1; it does not close this engineering work or enable
+runtime routing. Its preserved two execution-tier disagreements remain visible.
 
 R3a now rejects reused outcomes and adds v2 concrete-profile/paired-input
 contracts, a stable corpus identity distinct from runtime context, strict
@@ -33,7 +34,7 @@ do not treat legacy helper fixtures as public proof.
 | Model lifecycle | Templates, qualification budgets, reviewed/guarded-auto promotion, compare-and-swap bindings, new-run-only effects and rollback receipts | components through `ca4ee73`; qualification integrity and normal alias routing reopened under R3/R4 |
 | Catalog drift and unavailable incumbent | Complete catalog drift scopes revalidation; added models stay unqualified; removed incumbents roll back only to a prior proven/qualified binding or block | component tests at `398ae6a` / `ca4ee73`; production discovery connection pending R4 |
 | Decision helper M6-D1 | Default-off typed contract, fake adapter, cache/accounting and authority/integrity tests | verified at `87fa9cf` |
-| Jev M6-D2 | One capped synthetic request with exact model/usage/latency/cost receipt | blocked on `TYPESAFE_API_KEY` |
+| Jev M6-D2 | One capped synthetic request with exact model/usage/latency/cost receipt | smoke complete October 1; 8/8 family and skill labels, 6/8 tiers; runtime remains off |
 | Laya M6-D3 | Triggered pinned local comparison and measured keep-off/adopt decision | pending; run only if the declared Jev trigger fires |
 
 ## Capacity checkpoint
@@ -148,7 +149,9 @@ with 2 optional-SDK skips** and **220/220 Bash assertions**.
 
 ## Exact next slice
 
-Begin R3's failing repeated-outcome regression, then wire R4/R5 through public
-saved runs. Keep the one-request Jev M6-D2 gate blocked until
-`TYPESAFE_API_KEY` is supplied. Do not install or run Laya unless its declared
-trigger fires. A synthetic pilot does not prove production routing quality.
+Finish R3b.1 from the current partial saved-run reader, then shared eligibility
+and historical compatibility before wiring R4/R5 through public saved runs.
+Jev M6-D2's one-request allowance is spent; preserve its
+[receipt summary](evidence/M6-D2-jev-pilot-2026-10-01.json) and do not repeat it.
+Keep runtime classification off. Do not install or run Laya unless its declared
+trigger is established. A synthetic pilot does not prove production routing quality.

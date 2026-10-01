@@ -40,8 +40,10 @@ The September 26 [Jev/Laya evaluation and decision-helper amendment](DECISION-CL
 adds optional M6 experiments for routing hints, skill selection and context
 ranking, with further bounded uses prioritized. It changes no runtime defaults
 and does not delay M5. The only current hosted authorization is the explicitly
-capped one-request, $0.01 synthetic Jev pilot; no purchase, retry or private
-task upload is authorized.
+capped one-request, $0.01 synthetic Jev pilot; it completed on October 1 and
+that allowance is now spent. See the [receipt summary](evidence/M6-D2-jev-pilot-2026-10-01.json).
+No repeat request, purchase, retry or private task upload is authorized; runtime
+classification remains off.
 
 ## Copyable execution brief
 

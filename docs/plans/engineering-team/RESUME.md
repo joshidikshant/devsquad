@@ -44,8 +44,8 @@ signed in as well; its installed non-generating diagnostics do not establish
 authentication, so its bounded live operation remains unverified. No model
 request was made for those checks.
 
-Local Jev `.env` setup is prepared: the root file has a blank
-`TYPESAFE_API_KEY`, private mode 600 and Git ignore protection; the tracked
+Local Jev `.env` setup is complete: the user filled `TYPESAFE_API_KEY` locally,
+and the file retains private mode 600 and Git ignore protection; the tracked
 `.env.example` is blank. The probe now accepts explicit `--env-file .env`,
 never executes shell text, preserves exported-key precedence and reports
 only key presence during dry runs. All 14 focused probe tests pass, including
@@ -53,10 +53,24 @@ one mocked request and no-network dry runs. The 227-assertion Bash suite,
 generated reference, JSON and whitespace checks pass; `.env` is untracked and
 ignored while the blank example is trackable. No full core rerun was needed
 for this isolated probe/setup change; R3b.1's full core gate remains pending.
-The key must be filled locally;
-no TypeSafe authentication/API request has run and the classifier remains off.
-This setup does not close M6-D2 or change R3b.1's next action above. Recheck
-current provider pricing before any separately selected live pilot.
+The October 1 live M6-D2 pilot has now completed exactly one request and no
+retries after current official pricing/API revalidation. Jev reported the
+pinned `jev-1.13.0`, 5,373 input and 1,762 output tokens, and 187 ms for this
+single sample. Estimated input charge is $0.00022567, below the $0.01 ceiling;
+the invoice was not inspected. Task-family and skill labels each matched 8/8;
+execution-tier matched 6/8. T07/T08 were lower than their frozen expected tiers,
+including a wrong T07 label with 0.92 confidence. Do not change gold labels or
+treat confidence as proven correctness.
+
+M6-D2 closes only the bounded synthetic smoke. Runtime classification remains
+off; no measured routing benefit or quality/adoption gate is claimed. The
+cost/access Laya trigger did not fire, and this smoke had no numeric production
+quality threshold. No Laya setup or further hosted request is authorized by
+this result. **Do not repeat the pilot:** its one-request allowance is spent.
+The private receipt is outside Git; its hash and portable summary are in
+[Jev pilot evidence](evidence/M6-D2-jev-pilot-2026-10-01.json). R3b.1's exact
+next action above is unchanged; later shadow/adoption comparisons require a
+predeclared corpus, held-out gates and separately approved budget.
 
 The earlier requested action was a review and execution plan for SOL. The October 1
 planning pass inspected `b766f9e` / source `672e383` and updated
@@ -342,8 +356,9 @@ the review correction above governs current completion and next work.
   Malformed, unknown-ID, NaN, pin, permission/quality, drift, cancellation and
   crash/resume cases fail closed. The frozen synthetic baseline explicitly
   keeps runtime adoption off. The gate is 291 core tests with 2 optional-SDK
-  skips and 220 Bash assertions. M6-D2 remains blocked only on
-  `TYPESAFE_API_KEY`; Laya remains conditional on its declared trigger.
+  skips and 220 Bash assertions. M6-D2 was then blocked on the key; the October 1
+  one-request smoke above resolves that measurement only. Laya remains
+  conditional on its declared trigger and runtime guidance remains off.
 - M7 packaging, normal task entry and the currently available live surfaces are
   verified through `b1d52ad`. The immutable standalone installer works without
   Claude, performs offline exact-lock MCP installation with `pip check`, emits
@@ -382,14 +397,13 @@ the review correction above governs current completion and next work.
   Jev pilot, and local Laya fallback plus measured adoption. It prioritizes routing
   hints, skill/tool shortlists and context ranking, followed by failure triage,
   review attention and outcome labels. No weights/inference/API spending or
-  runtime routing changes occurred. The user has authorized one Jev request
+  runtime routing changes occurred during that original planning pass. The user authorized one Jev request
   using only the synthetic fixture, no retries and at most $0.01. The tracked
   fixture/probe checkpoint is committed at `70e59cb` and five focused offline
   tests are ready; the complete offline
   gate is 231 core tests discovered (suite OK, 2 optional SDK skips) and 220
-  Bash assertions. The live call is
-  blocked because the TypeSafe console is at login and no `TYPESAFE_API_KEY`
-  exists. Classifier suggestions never become permission/acceptance authority.
+  Bash assertions. The live call was blocked until the October 1 key setup;
+  it has now run once as recorded above. Classifier suggestions never become permission/acceptance authority.
   Do not wait for this probe to execute the review repairs starting at R1.
 
 ## Completed and preserved
@@ -454,13 +468,16 @@ provider paths must not be advertised as verified.
    compatibility, then execute R4–R6 in dependency order. Preserve R1/R2,
    explicit check `output_paths` contract and historical receipts. Do not
    rewrite the architecture or reset completed work.
-3. Keep Claude and Grok live probes paused until normal login is restored.
-   Afterward, run the M4 Claude handoff, the M5 installed Claude-to-Codex
-   delivery and one bounded Grok operation, retaining only redacted evidence.
-4. Keep M6 decision guidance off by default. Once `TYPESAFE_API_KEY` is
-   supplied, run the prepared one-request synthetic Jev pilot immediately with
-   no retry and the $0.01 ceiling. Install/run Laya only if the predeclared Jev
-   cost/access/quality trigger fires.
+3. Claude login is now confirmed; the user reports Grok signed in. After the
+   repaired installation is safely refreshed under R8, run the M4 real Claude
+   handoff, the M5 installed Claude-to-Codex delivery and one bounded Grok
+   operation, retaining only redacted evidence. Authentication is not itself
+   a supported-operation receipt.
+4. Keep M6 decision guidance off. The one-request Jev pilot is complete and
+   must not be repeated under its spent authorization. Preserve its tier
+   disagreements and frozen labels; a broader shadow/adoption comparison needs
+   predeclared gates and a separate budget. Install/run Laya only if the
+   declared cost/access/quality trigger is established.
 5. Complete the separately gated C1 extension under R7 and audit installed/live
    closure under R8. C1 is required in the full assignment even though it does
    not reopen M7. Record each blocked subgate without pausing unrelated work.
