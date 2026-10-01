@@ -14,6 +14,17 @@
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
   "next_milestone": "M5",
+  "next_work_package": "R3b.1",
+  "planning_checkpoint": {
+    "recorded_on": "2026-10-01",
+    "inspected_checkpoint": "b766f9e",
+    "implementation_revision": "672e383",
+    "artifact": "SOL-REVIEW-FOLLOWUP.md",
+    "scope": "Source review and planning only; no runtime edits, installation or provider requests",
+    "next_action": "R3b.1 authoritative saved-run reader, then R3b.2 current-evidence eligibility and explicit evaluation/review revisions, then R3c public and historical compatibility proof",
+    "additional_acceptance": "Reuse R3a assignment authority in R5; cover all terminal outcome origins; prove old-package active-run schema-upgrade safety through compatible coexistence or explicit deferral before real R8 installation",
+    "verification": "Source/test hashes match R3a evidence; JSON, generated reference and diff checks pass. Restricted Bash run was interrupted after process-inspection-related cancellation failures; permitted rerun passed 227 assertions in 11 files. No full Python rerun for documentation-only changes."
+  },
   "review_checkpoint": {
     "reviewed_revision": "f4fa6577e2e891151231c9c7d3180be6e9e23faa",
     "recorded_on": "2026-09-29",

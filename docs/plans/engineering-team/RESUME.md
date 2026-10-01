@@ -6,6 +6,27 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Review correction and next action
 
+Latest requested action was a review and execution plan for SOL. The October 1
+planning pass inspected `b766f9e` / source `672e383` and updated
+[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), without runtime changes,
+installation or provider calls. Start with **R3b.1** (saved-run reader), then
+**R3b.2** (shared eligibility and explicit evaluation/review revisions), then
+R3c's realistic public and historical-compatibility proof. The plan now maps
+each lifecycle consumer to its acceptance gate, clarifies R5 trial entrypoints
+and terminal projection coverage, and requires an active-run schema-upgrade
+safety test (coexistence or explicit deferral) before R8 refreshes the
+installation. These are next-work requirements, not newly completed gates.
+The verified source baseline below is unchanged; do not rerun it merely
+because the planning files changed.
+
+Planning verification: all eight R3a source/test SHA256 values still match the
+saved evidence; backlog JSON, generated-reference and whitespace checks pass.
+The initial Bash run was interrupted after sandbox-denied process inspection
+caused three portable-timeout/cleanup assertions to fail; it is not a pass.
+Its verified test tree was stopped (exit 137). The single rerun with required
+process access passed all **227 assertions in 11 files**. No test remains live.
+The full Python gate was not repeated for documentation-only changes.
+
 R3a is source/offline verified at `672e383`: global outcome-reuse rejection,
 versioned profile/input/assignment contracts, separate corpus-versus-pair
 fingerprints, schema-14 prelaunch assignment persistence under the preparation

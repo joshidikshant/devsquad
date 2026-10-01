@@ -7,8 +7,8 @@ review findings below, finish the missing runtime connections, and prove the
 requested product through the public service and installed normal commands.
 This is a continuation of [SOL-HANDOFF.md](SOL-HANDOFF.md), not a redesign.
 The full delivery remains M1–M7 plus C1; the immediate engineering priority is
-the shared acceptance repair followed by M5–M7. C1 is optional to invoke but
-required to implement under the original assignment.
+saved-run evidence and public runtime integration in R3–R6. C1 is optional to
+invoke but required to implement under the original assignment.
 
 Review baseline: `f4fa6577e2e891151231c9c7d3180be6e9e23faa`. Compare Git state
 before acting and retain later work. The review made no source changes.
@@ -20,14 +20,14 @@ Read `AGENTS.md`, `CONTRIBUTING.md`, [RESUME.md](RESUME.md), this document and
 for each work package. Do not reload the historical chat or restart M1/M2.
 This review supersedes the earlier claim that only credentials remain.
 
-Current execution checkpoint: **R1 and R2 source/offline repairs verified**.
-The implementation baseline is `ef988897e2dda495482dd26e7c583bc428086ba0`;
-preserve any later commits. R2's final complete run passed 367 tests with two
-optional-SDK skips in 215.886 seconds. The SQLite finalizer warning remains
-open under R5; this is not a warning-free or installed/live pass. See
-[R1 evidence](evidence/R1-candidate-integrity-2026-09-29.json) and
-[R2 evidence](evidence/R2-observed-identity-2026-10-01.json). Start at **R3**.
-R3–R8, C1 and affected installed/live proofs remain open.
+Current inspected checkpoint: **`b766f9e` on `codex/engineering-team`**, with a
+clean tree before this planning update. The latest implementation is
+`672e383`; preserve it and all later work. **R1, R2 and R3a are source/offline
+verified; start at R3b, not R1.** R3 as a whole, R4–R8, C1 and affected
+installed/live proofs remain open. See
+[R1 evidence](evidence/R1-candidate-integrity-2026-09-29.json),
+[R2 evidence](evidence/R2-observed-identity-2026-10-01.json) and the R3a record
+below. The installed release named above predates these repairs.
 
 R3a source/offline checkpoint at `672e383`: outcome uniqueness, the v2 provenance
 contract, separate corpus/pair hashes, schema-14 fenced prelaunch assignments
@@ -38,6 +38,12 @@ review/follow-up. The SQLite warning remains R5. See
 The saved-run v2 outcome reader and
 shared lifecycle eligibility are still R3b; do not describe this partial
 checkpoint as trustworthy end-to-end qualification or a public trial runner.
+
+This October 1 follow-up is a **source review and planning handoff**, not
+another implementation or live verification. The recorded 402-test result
+belongs to `672e383`, not a new run for this document. Two optional-SDK skips
+and the SQLite finalizer warning remain explicit. No installation, login,
+provider request or model-setting change is part of this planning pass.
 
 ### Ready-to-execute handoff for Sol
 
@@ -60,7 +66,7 @@ recorded above. No installation or provider call was needed for that slice.
 | Next slice | Deliverable | Gate before claiming completion |
 |---|---|---|
 | R1 / R2 | Preserve verified source repairs | Recheck affected regressions when shared code changes; installed/live proof remains R8 |
-| R3a | Strict experiment provenance contract | Reused outcomes/runs/splits and mismatched paired inputs rejected |
+| R3a — verified | Preserve provenance contracts and fenced assignments | Existing contract/store tests cover this foundation; normalized unit witnesses do not prove actual saved-run evidence |
 | R3b | Durable validation and current-evidence eligibility | Replay, qualification, promotion, rollback and catalog fallback cannot reuse stale/unverified evidence |
 | R3c | Public regression and migration evidence | Valid independent pairs work; legacy receipts remain readable; late corrections block new unsafe decisions |
 | R4 → R5 → R6 | Routing, learning and normal terminal integration | Public-run evidence through the full chain, then fresh-install usability proof |
@@ -79,7 +85,7 @@ Preserve the substantial working implementation: the durable runner and
 ledger, process ownership and recovery, isolated worktrees, fenced host
 handoffs, Codex protocol repairs, immutable installer and MCP integrations.
 The successful installed Codex review receipt is real and remains valid for
-that exact run. Its SHA256 was rechecked:
+that exact run. Its SHA256 was rechecked in the September 29 review:
 `0103db19a528cff916ebef80c6ec94b682ed4801fc22db020cdbc21796040f70`.
 
 The main problem is the strength of completion claims. Several components
@@ -112,6 +118,11 @@ Source locations refer to the baseline above and will move as repairs land.
 | G3 | Required usability / M7 | Normal tasks always use `lead.mode=host`; terminal completion requires manual claim/decision JSON. `status`/`result` require an ID. Doctor checks binaries/registrations, not provider authentication. All CLI responses are JSON even without `--json`. | R6 |
 | G4 | Verification coverage / M5, M7 | Default check detection on DevSquad selects only `bash test/run.sh`; the Python core suite is omitted, including when the requested fix changes Python core code. Detection also inspects the current checkout rather than the selected target tree. | R6 |
 | G5 | Remaining full-delivery scope / C1 | `squad council` is absent. Its implementation and acceptance are included in the full assignment. | R7 |
+
+The table records the original review baseline. G1's missing internal writer
+is now partly addressed by R3a: `Store.complete_preparation` freezes schema-14
+assignments before attempts. The missing **public controller** and automatic
+terminal-outcome projection remain R5; reuse the new writer, do not rebuild it.
 
 The optional decision helper currently executes only a fake adapter;
 non-fixture requests record `unavailable`. This is consistent with the narrow
@@ -306,6 +317,89 @@ attempt profile indices. Do not trust caller-supplied `experimental` labels
 as proof. Failed and missing evidence must remain visible and ineligible for
 unearned success credit. Keep schema/contract changes and migrations together.
 
+#### October 1 feedback: exact R3b/R3c implementation boundary
+
+The following gaps were rechecked in source at `672e383` / checkpoint
+`b766f9e`. They are unfinished integration identified by this review, not new
+claims of live exploitation or a reason to repeat the completed R3a suite.
+Paths below are under `plugin/core/src/devsquad/` unless stated otherwise.
+
+| Current path | Concrete remaining gap | Required change |
+|---|---|---|
+| `store.py:1763`, `evaluate_learning_experiment` | Loads only outcome payloads; passes neither saved project identity nor normalized provenance required by v2 | Construct chains from immutable assignments and actual saved attempts; never accept a caller's witness as authority |
+| `store.py:1780` and `store.py:2073` | Evaluation and qualification replay return before current-evidence checks | Separate immutable historical receipt from present eligibility; replay must not restore eligibility lost to corrections |
+| `store.py:2114`, `record_profile_qualification` | Matches candidate by profile ID and alias, without binding the full tested profile/execution evidence | Check exact candidate fingerprint and the declared role/task context against validated saved evidence |
+| `store.py:2248`, `store.py:2309`, `store.py:2532` | Promotion, regression rollback and catalog fallback rely on saved verdicts/qualification labels | Use the same current-evidence gate for every new decision, within the mutation transaction |
+| `learning.py:690`, `build_learning_proposal` | Strict new-spec validation also parses historical v1 records; an old reused-outcome record can fail before a readable audit result | Preserve original bytes/hashes and report explicit historical-ineligible status without allowing new decisions |
+| `test/core/test_learning.py:226`, `test/core/test_lifecycle.py:198` | Existing positive fixtures set terminal state directly with SQL | Replace positive authority proofs with distinct prepared runs, actual fixture attempts and public completion; retain SQL only for explicitly labelled migration/tamper negatives |
+
+**R3b.1 — authoritative saved-run reader.** Keep `learning.py`'s evaluator
+pure and make Store responsible for constructing its trusted inputs. In one
+consistent transaction, verify saved spec/assignment hashes and project
+identity, recompute the original pair/corpus/execution fingerprints from
+`experiment_assignments.snapshot_json` and its package digest, and bind every
+relevant role attempt to that declaration. Include failed attempts, retries,
+fallbacks and repairs, not only the eventual successful worker. An actual
+different-profile fallback cannot be credited as the declared arm. Reconcile
+durable attempt profile/index/package and frozen adapter identity; retain
+native observed evidence without manufacturing missing identity. Preparation
+must precede attempts by the existing fence/order, not timestamp comparison.
+No attempt or missing partner is missing evidence, never an invented exposure.
+Verify and hash final outcomes plus ordered corrections from saved rows.
+
+First acceptance: a minimum qualifying set of disjoint public offline runs
+can be evaluated through Service/Store without supplied provenance; changing
+the saved actual profile, assignment, package or paired input fails atomically,
+including when the other arm is missing. A test-only preflight seam may attach
+the predeclared manifest until R5 supplies the public controller, but it must
+still use fenced preparation, real fixture attempts and public disposition.
+Document that seam: it does not prove normal public experiment entry exists.
+
+**R3b.2 — one eligibility gate and explicit revisions.** Define one reusable
+current-evidence result with concrete ineligibility reasons, bound to spec,
+evaluation and evidence hashes. Keep historical decoding separate. Protect
+new qualification and binding mutations against a correction arriving between
+validation and commit; do not run a read check and then write from stale data.
+Qualified profile fingerprints must match the tested candidate, with role and
+task-class applicability checked rather than inferred from the alias alone.
+
+Settle the correction/re-evaluation contract before implementation:
+`migrations/011_experiments.sql` permits only one evaluation per experiment ID,
+and preparation already freezes that spec. A correction therefore cannot be
+handled by silently overwriting its evaluation or repeatedly replaying the
+same stale receipt. Use an explicit append-only evaluation/review revision
+referencing the original spec and evidence, with qualifications/decisions
+pinning the reviewed revision/hash. Update contract, migration and public
+response semantics together. Do not reassign old runs to a new experiment to
+make corrected evidence appear to be new independent samples.
+
+| Consumer | Acceptance for current evidence | Acceptance after a late correction / for unverified v1 history |
+|---|---|---|
+| Evaluation and its replay | Saved-run-derived evidence and deterministic hashes | Preserve receipt; expose stale/ineligible status or a specific error, never silently re-authorize it |
+| Qualification and its replay | Exact candidate/context, measured pairs and current evidence match | Cannot return an unqualifiedly current `qualified` result; require explicit review/revision |
+| New promotion | Validated qualification plus current evidence, in the same write transaction | Block without incrementing binding version |
+| New regression rollback | Validate both regression evidence and any qualification-backed target | Stale/legacy regression or target cannot authorize the change |
+| New catalog fallback | Select only a currently eligible, available predecessor | Skip stale qualification-backed predecessors; block if none remain |
+| Report / proposal / historical audit | Show evidence scope and current eligibility | Remain readable; no promotion proposal from historical-ineligible evidence |
+| Exact completed binding-decision replay | Return the original receipt without another mutation | Still return historical receipt; do not retroactively undo the completed decision |
+
+Preserve the existing explicitly proven bootstrap-baseline contract for a
+predecessor without a qualification record; do not invent an experiment for
+it or treat any arbitrary legacy profile as proven. A new correction blocks
+future unsafe use; it does not itself authorize automatic binding changes.
+
+**R3c — public and upgrade proof, then close R3.** Cover branch-review and
+issue-delivery input identities, honest failed/missing arms, correction after
+evaluation and after qualification, valid promotion/rollback, rejected stale
+catalog fallback, and repeated completion with no duplicate state mutation.
+Upgrade a historical database and exercise actual report/proposal/read paths,
+including previously saved duplicate-outcome evidence, not only SQL byte
+preservation. Positive fixtures must meet the original sample/budget gates;
+do not lower those gates or replace a valid-success test with rejection to
+make the suite green. Run focused tests per change, one full integration gate
+at the coherent R3 boundary, then a bounded independent review. Record R3
+closure separately from R5 controller and R8 installed/live acceptance.
+
 ### R4 — Connect normal routing, catalog lifecycle and quota
 
 **Files:** `task_entry.py`, `catalog.py`, `capacity.py`, `router.py`,
@@ -334,6 +428,9 @@ partial/auth-failed discovery does not remove models; two projects honor
 fresh weekly exhaustion despite short-window availability; stale/unsupported
 quota remains unknown; no permission or billing expansion occurs. Exercise
 these through normal task entry, not only router/store helper calls.
+Include concurrent refreshes (one lease owner), interrupted refresh, and
+account/config/version switches: incompatible scopes cannot reuse each
+other's catalog or quota, and failed refresh preserves the last-good incumbent.
 The existing normal profiles are already labelled `trial`; the defect is
 bypassing stable alias/qualification policy, not a missing trial label.
 
@@ -347,7 +444,8 @@ bypassing stable alias/qualification policy, not a missing trial label.
    Keep subjective later corrections explicit. Recover safely from a crash
    between terminalization and outcome projection without duplicate records.
 2. Freeze the experiment, cases, splits, profiles and budgets before either
-   arm launches, and run bounded paired
+   arm launches. Reuse R3a's schema-14 assignment writer and R3b's saved-run
+   reader/eligibility; do not introduce another assignment authority. Run bounded paired
    trials through the existing runner, account reservations and experiment
    budgets. Derive consumed budget from durable attempts, not imported counters.
    Carry assignment, case/split and profile provenance into outcomes. Use a
@@ -364,6 +462,19 @@ correction, crash/replay, budgets and promotion/rollback all remain truthful.
 Exercise the complete public chain: freeze experiment → run both arms → record
 terminal outcomes → evaluate → qualify → promote for a new run → rerun held-out
 cases → roll back. Count independent completed pairs, not labels or retries.
+
+Use branch-review runs over one already-frozen candidate for reviewer trials,
+and issue-delivery runs over one baseline/task/check contract for implementer
+trials. Delivery preflight has no produced review candidate yet; assigning two
+whole delivery runs as a controlled reviewer comparison would not establish
+the same candidate. Assignment must still precede every attempt.
+
+Test outcome projection from each terminal origin: preparation failure/cancel,
+worker failure, host completion, headless completion, and crash/replay around
+the projection boundary. All yield exactly one objective final outcome, with
+missing attempt/criteria evidence explicitly absent. A prelaunch failure must
+not become a completed experiment exposure. Do not project success merely
+because one successful terminal path passes.
 
 ### R6 — Finish the normal terminal and readiness experience
 
@@ -421,6 +532,20 @@ Inconclusive comparison is recorded as inconclusive, with automatic use off.
    dependency/drift/idempotence checks and required installed-SDK tests.
    Independently review the repaired paths. Preserve previous releases and
    saved receipts; a new release does not erase earlier failures.
+   **Before updating the real installation**, prove safe upgrade behavior
+   with active or recoverable old-package runs in a temporary install:
+   compatible coexistence across a real schema migration, or explicit upgrade
+   deferral until those runs are safely reconciled. Test continuation, cancel
+   and recovery for the selected approach. Frozen daemons load their old package
+   (`service.py:963`, `detached.py:84`), while `Store.migrate` rejects a newer
+   schema (`store.py:175`). The existing installer survival fixture changes
+   package versions, not schema (`test/core/test_install_core.py:58`). This is
+   a source-backed compatibility risk and missing test, not a reproduced live
+   failure. Cover schema 13 → 14 and any R3b evaluation-revision migration;
+   implement safe compatible coexistence or an explicit non-destructive
+   deferred upgrade, without stranding active runs or relaxing schema checks.
+   Deferral is a documented safety state, not proof of cross-schema
+   coexistence or completion of the installed-upgrade gate.
 2. After normal Claude login, prove the M4 real-host handoff and one bounded
    installed Claude implementation → verified different-model Codex review →
    mandatory checks → disposition. After Grok login, prove its supported
@@ -468,15 +593,17 @@ permission to claim routing improvement.
 
 ## First action for Sol
 
-Read the recovery files and verify current Git state. Preserve `ef98889` and
-later work. R3a's review and full gate are verified; implement **R3b**'s
-saved-run evidence reader and shared current-evidence gate. Complete R3c before R4.
+Read the recovery files and verify current Git state. Preserve `b766f9e`, its
+`672e383` source checkpoint and later work. R3a's review and full gate are
+verified; implement **R3b.1**'s authoritative saved-run reader first, then
+**R3b.2**'s shared current-evidence gate and explicit evaluation/review revisions.
+Use the consumer acceptance matrix above. Complete R3c before R4.
 Preserve R1's check-integrity gate and R2's actual-attempt/native-identity gate.
 Continue R3–R6 without waiting on the Claude login or Jev key. Retain R7/R8
 and C1 in the full scope. Report each slice as red baseline, verified offline,
 installed proof, or externally blocked; never collapse those into one claim.
 
-Suggested instruction to SOL: “Execute this plan from R3 on
+Suggested instruction to SOL: “Execute this plan from R3b.1 on
 `codex/engineering-team`, in small spec → failing public test → implementation
 → verification → review → checkpoint cycles. Do not redo R1/R2 or reload the
 old chat. After each slice report the evidence, open gates and exact next
