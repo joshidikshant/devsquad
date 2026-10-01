@@ -19,9 +19,17 @@ unchanged. An explicit regression keeps the stale-clock rejection strict.
 
 The focused lifecycle/eligibility gate passes 20 tests in 128.937 seconds;
 all 227 Bash assertions, generated reference and whitespace checks pass.
-Next: checkpoint, then one frozen full gate. Only after it passes update the actual installation and run Claude
-delivery/handoff, Grok and updated Gemini/Antigravity proofs. No provider job is
-currently live. The actual installation still points at the schema-13 release.
+The frozen full gate at `dc68944` now passes **455 tests in 485.168 seconds**,
+with two optional-SDK skips, zero errors/failures and zero unraisable diagnostics.
+UTC 485.364056s and monotonic 485.360219s agree. Retain the failed 228-test
+clock-fixture gate as history; no additional production validation was relaxed.
+Next: checkpoint, safely refresh the actual installation using the existing
+Python 3.12/offline MCP wheelhouse, run installed SDK tests and prove Claude
+delivery/handoff, Grok and updated Gemini/Antigravity. Use a bounded genuine G4
+check-discovery repair for the Claude implementation → Codex review → tests
+workflow. The private offline probe reproduces both wrong-checkout discovery
+and missing Python core checks. No provider job is currently live. The actual
+installation still points at the schema-13 release.
 
 Privacy warning: Antigravity's global native MCP listing unexpectedly printed
 an unrelated StitchMCP credential. It is not repeated or saved in evidence;

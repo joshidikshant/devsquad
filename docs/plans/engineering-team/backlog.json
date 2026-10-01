@@ -21,8 +21,8 @@
     "status": "partial",
     "artifact": "evidence/R3b2-eligibility-partial-2026-10-01.json",
     "scope": "Reader full gate passed at a4a87fd; schema-15 explicit revisions and shared lifecycle eligibility implemented with focused public fixtures; no install or provider calls",
-    "next_action": "Bounded upgrade re-review at 6874de7 is clean and accepted with two verified checks. Full gate stopped after 228 tests on an aged module-import clock in lifecycle fixtures; the strict-skew-preserving fixture repair passes 20 focused tests and 227 Bash assertions. Run one spawn-safe frozen full gate, then safely refresh and prove requested live workflows.",
-    "limitations": "Full integration after clock-fixture repair pending; R4 catalog/quota, R5 public controller/outcomes, R6 UX and R7 Council open. Installed schema 13 has no nonterminal runs but is not yet refreshed. Claude/Grok/updated Gemini live proofs pending."
+    "next_action": "Full spawn-safe integration at dc68944 passes 455 tests (two optional-SDK skips, zero errors/failures/unraisable diagnostics) after the lifecycle clock fixture repair. Bounded upgrade review is clean. Safely refresh using the existing Python 3.12/MCP wheelhouse, verify installed SDK, then prove Claude delivery/handoff, Grok and updated Gemini/Antigravity.",
+    "limitations": "R4 catalog/quota, R5 public controller/outcomes, R6 UX and R7 Council open. Installed schema 13 has no nonterminal runs but is not yet refreshed. Claude/Grok/updated Gemini live proofs pending."
   },
   "planning_checkpoint": {
     "recorded_on": "2026-10-01",
