@@ -322,7 +322,10 @@ evaluation SHA256, which identifies either the original or reviewed revision.
 New qualifications must match the full tested candidate fingerprint and all
 assigned candidate tasks' declared role/task class. Qualification replay and
 every new binding mutation recheck current evidence within their write
-transaction. A proven bootstrap predecessor without qualification retains its
+transaction. A new promotion must compare the tested control fingerprint with
+the current incumbent, not merely find a candidate that passed against some
+other profile. Regression rollback requires complete evaluation and held-out
+pairs and both exact tested fingerprints. A proven bootstrap predecessor without qualification retains its
 existing explicit baseline contract. Installation of this schema remains
 gated on old active/recoverable-run upgrade safety; adding the migration does
 not establish that installation gate. Implementation status is in RESUME.md.

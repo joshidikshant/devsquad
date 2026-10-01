@@ -44,6 +44,29 @@ class ExperimentSavedRunsTest(unittest.TestCase):
         self.assertTrue(replay["replayed"])
         self.assertEqual(replay, {**result, "replayed": True})
 
+    def test_public_issue_delivery_pairs_bind_baseline_and_all_real_attempts(self):
+        fixture = ExperimentRuntimeFixture(self.fixture.root / "delivery", workflow="issue-delivery")
+        self.addCleanup(fixture.close)
+        source_before = fixture.git("status", "--porcelain")
+        head_before = fixture.git("rev-parse", "HEAD")
+        fixture.run_all()
+        result = fixture.service.policy_evaluate(fixture.spec)
+        self.assertEqual(result["evaluation"]["verdict"], "promotion_proposal")
+        self.assertTrue(result["eligibility"]["eligible"])
+        self.assertEqual(fixture.spec["variable"]["role"], "implementer")
+        store = fixture.store()
+        try:
+            for run_id in fixture.runs.values():
+                attempts = store.attempts_for_run(run_id)
+                self.assertEqual([row["role"] for row in attempts], ["implementer", "reviewer"])
+                self.assertTrue(all(row["status"] == "finished" for row in attempts))
+                snapshot = json.loads(store.run(run_id)["mutable_snapshot"])
+                self.assertNotEqual(snapshot["workspace"]["target_oid"], snapshot["target_oid"])
+        finally:
+            store.close()
+        self.assertEqual(fixture.git("status", "--porcelain"), source_before)
+        self.assertEqual(fixture.git("rev-parse", "HEAD"), head_before)
+
     def test_project_symlink_alias_preserves_the_predeclared_spec_hash(self):
         alias = self.fixture.root / "project-alias"
         alias.symlink_to(self.fixture.repo, target_is_directory=True)

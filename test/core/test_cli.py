@@ -295,6 +295,22 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, response)
         service.policy_evaluate.assert_called_once_with(experiment)
 
+    def test_policy_evaluate_dispatches_explicit_review_revision(self):
+        experiment = {"schema_version": 2, "experiment_id": "experiment-1", "project_path": str(self.root)}
+        experiment_file = self.root / "experiment.json"
+        experiment_file.write_text(json.dumps(experiment))
+        service = mock.Mock()
+        service.policy_evaluate.return_value = {"revision_id": "review-1", "replayed": False}
+        code, payload, stderr = self.invoke([
+            "policy", "evaluate", "--experiment", str(experiment_file), "--revision-id", "review-1",
+            "--previous-evaluation-sha256", "a" * 64, "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, service.policy_evaluate.return_value)
+        service.policy_evaluate.assert_called_once_with(
+            experiment, revision_id="review-1", previous_evaluation_sha256="a" * 64,
+        )
+
     def test_learn_propose_dispatches_project(self):
         service = mock.Mock()
         response = {

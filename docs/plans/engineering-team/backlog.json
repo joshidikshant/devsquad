@@ -21,7 +21,7 @@
     "status": "partial",
     "artifact": "evidence/R3b2-eligibility-partial-2026-10-01.json",
     "scope": "Reader full gate passed at a4a87fd; schema-15 explicit revisions and shared lifecycle eligibility implemented with focused public fixtures; no install or provider calls",
-    "next_action": "Finish stale fallback/rollback, transaction race, revision/CLI and upgraded legacy public proof; audit R3 and run its complete integration gate",
+    "next_action": "Stale fallback/rollback, race, CLI, upgraded legacy and real delivery-pair proofs pass; finish revision/wheel checks, audit R3 and run its complete integration gate",
     "limitations": "Schema-15 full integration and independent audit incomplete; SQLite warning and production paired-trial controller remain R5; native Gemini worker and refreshed installed proof unverified"
   },
   "planning_checkpoint": {

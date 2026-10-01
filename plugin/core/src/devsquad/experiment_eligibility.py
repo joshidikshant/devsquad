@@ -37,6 +37,12 @@ def saved_evaluation(
                 (experiment_id, evaluation_sha256),
             ).fetchone()
         if revision is not None:
+            parent = revision["previous_evaluation_sha256"]
+            if parent != original["evaluation_sha256"] and connection.execute(
+                    "SELECT 1 FROM experiment_evaluation_revisions WHERE experiment_id=? "
+                    "AND evaluation_sha256=? AND id<?", (experiment_id, parent, revision["id"]),
+            ).fetchone() is None:
+                raise ContractError("saved evaluation revision predecessor is invalid")
             record.update({key: revision[key] for key in (
                 "revision_id", "previous_evaluation_sha256", "evaluation_json",
                 "evaluation_sha256", "verdict", "recorded_at",

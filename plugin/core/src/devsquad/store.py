@@ -1879,6 +1879,8 @@ class Store:
                     ),
                 )
             else:
+                if saved_evaluation(self.connection, spec["experiment_id"], evaluation_sha256) is not None:
+                    raise ConflictError("evaluation review must create a distinct immutable receipt")
                 self.connection.execute(
                     "INSERT INTO experiment_evaluation_revisions(revision_id,experiment_id,"
                     "previous_evaluation_sha256,evaluation_json,evaluation_sha256,verdict,recorded_at) "
@@ -2358,6 +2360,15 @@ class Store:
                 qualification_payload = self._require_current_qualification(
                     request["qualification_id"], now=_authoritative_now(now),
                 )
+                from .experiment_eligibility import saved_evaluation
+
+                tested = saved_evaluation(
+                    self.connection, qualification_payload["experiment_id"],
+                    qualification_payload["evaluation_sha256"],
+                )["spec"]["variable"]
+                if (tested["control_profile_id"] != current["profile_id"]
+                        or tested["control_profile_sha256"] != current["profile_sha256"]):
+                    raise ContractError("promotion evidence does not compare the current incumbent")
                 if (request["actor"] == "guarded_auto"
                         and target_template_id != current["template_id"]):
                     raise ContractError(

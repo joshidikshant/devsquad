@@ -27,12 +27,27 @@ passed. No full integration gate or independent audit has run on schema 15.
 The source checkpoints, failure history and limitations are recorded in
 [R3b.2 partial evidence](evidence/R3b2-eligibility-partial-2026-10-01.json).
 
-**Exact next action:** finish the negative/public proof for stale catalog
-fallback and regression rollback, correction/qualification transaction races,
-revision-chain/CLI semantics and upgraded historical duplicate-outcome report/
-proposal readability. Audit the shared gate and finish R3c's remaining public
-coverage, then run one full unchanged-source integration gate at the coherent
-R3 boundary. Preserve the original evaluations and completed decisions. Do
+The next compatibility slice now proves stale regression rejection followed
+by an explicit valid rollback review, stale qualified rollback-target rejection,
+catalog fallback skipping that target (or blocking without any eligible
+predecessor), correction/qualification writer fencing, current-versus-stale
+proposal output and schema-13 duplicated-outcome history remaining readable
+but ineligible. Fresh reviewed qualifying evidence pins a new promotion to its
+revision hash. CLI revision dispatch passes. Four public delivery arms each
+executed implementation, independent fixture review and checks with unchanged
+source HEAD/checkout. Failures in that new test helper (wrong fixture shape
+and treating a candidate-ready status as final review readiness) were repaired;
+they are not represented as runtime defects or passing gates.
+
+The final targeted revision/installed-wheel checks passed two tests in 8.102
+seconds; the packaged wheel contains/applies schema 15. All 227 Bash assertions
+and generated-reference/whitespace checks passed. This does not prove an old
+active daemon can survive a schema change.
+
+**Exact next action:** run one full unchanged-source integration gate on the checkpointed schema-15
+source. No full gate on this source or independent audit is claimed yet.
+The shared gate audit and bounded independent review remain required for R3
+closure. Preserve the original evaluations and completed decisions. Do
 not install schema 15 before the old active/recoverable-run upgrade test; R4–R6
 and R8's Claude/Grok/Gemini installed proofs remain pending. No provider call,
 installation refresh, purchase, global setting change or push occurred.
