@@ -155,6 +155,10 @@ def decode_native_result(payload: bytes | str) -> tuple[dict[str, Any], dict[str
             raise ContractError("Claude stream requires one final result")
         document = terminals[0]
         session = _session(document.get("session_id"))
+        # Native authentication failures emit a synthetic assistant model.
+        # Retain the error terminal for classification, never writer identity.
+        if document.get("is_error") is True:
+            return document, None
         models = []
         for item in records:
             if item.get("type") != "assistant":
@@ -165,8 +169,6 @@ def decode_native_result(payload: bytes | str) -> tuple[dict[str, Any], dict[str
                 raise ContractError("Claude writer message is not session-correlated")
             models.append(_model(message.get("model")))
         if not models:
-            if document.get("is_error") is True:
-                return document, None
             raise ContractError("Claude stream has no reported writer messages")
         return document, {"session_id": session, "models": sorted(set(models)), "message_count": len(models)}
     if not isinstance(document, dict):

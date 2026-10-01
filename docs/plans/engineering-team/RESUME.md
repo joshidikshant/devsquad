@@ -13,13 +13,23 @@ implementer invocation and `native_result_invalid`; no candidate, reviewer or
 mandatory checks were produced. Its 6,183 native output bytes have only a safe
 digest/typed failure receipt, not raw logs. Preserve both failed runs.
 
-A private tool-free replay of the frozen adapter/profile and workspace passes
-both with ordinary input and with the snapshot file at EOF inherited on fd 0.
-Therefore input inheritance is **not a demonstrated cause**. A bounded one-Read
-diagnostic is now capturing native output privately under
-`/Users/Dikshant/.devsquad/private-probes/r8-installed-workflows-20261001`.
-Next: inspect only event/identity/error metadata, repair the demonstrated
-transport problem with regressions, refresh safely, then retry genuine G4
+A private tool-free replay passes even with the snapshot file at EOF on fd 0;
+input inheritance is **not the cause**. One-Read replays pass under the operator
+environment, but reproduce failure under the actual minimal detached
+environment: a synthetic assistant model and a native `is_error: true`,
+not-logged-in terminal, zero model usage. HOME alone still fails; HOME plus USER
+restores the saved subscription login and passes the same one-Read replay.
+No other environment variables or API credentials are needed. Raw output stays
+private; redacted event/identity metadata is recorded in installed evidence.
+
+The repair preserves only HOME and USER alongside PATH/frozen PYTHONPATH at
+the detached boundary. Native error terminals are classified before requiring
+writer identity; a synthetic not-logged-in stream remains unverified and
+reports AUTH_ERROR instead of generic CLI_ERROR, ahead of rate banners. Two red
+regressions reproduced the omissions before source repair. The 50-test affected
+gate passes in 69.606s; 227 Bash assertions and generated reference/diff pass.
+The final auth-priority refinement passes a 22-test focused rerun in 3.652s.
+Next: checkpoint after affected/Bash gates, refresh safely, then retry genuine G4
 Claude implementation → independent Codex review → mandatory tests under a
 new run. Do not claim managed delivery passed or repeat completed host proofs.
 

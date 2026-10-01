@@ -199,8 +199,6 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     ), None)
     if timed_out:
         error_code = "TIMEOUT"
-    elif completed.returncode != 0 and error_code is None:
-        error_code = "CLI_ERROR"
     provider_document = None
     try:
         from .claude_identity import decode_native_result
@@ -212,10 +210,17 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         provider_text = str(
             safe_document.get("result") or safe_document.get("error") or ""
         )
-        error_code = error_code or next((
+        native_code = next((
             code for code, pattern in adapter["error_patterns"].items()
             if re.search(pattern, provider_text, re.IGNORECASE)
         ), None)
+        if (safe_document.get("is_error") is True
+                and re.search(r"\bnot logged in\b", provider_text, re.IGNORECASE)):
+            native_code = "AUTH_ERROR"
+        if error_code != "TIMEOUT":
+            reported_codes = {error_code, native_code}
+            error_code = next((code for code in ("AUTH_ERROR", "RATE_LIMITED")
+                               if code in reported_codes), error_code or native_code)
         if error_code is None and re.search(
             adapter["denied_pattern"], provider_text, re.IGNORECASE,
         ):
@@ -223,6 +228,8 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         raise ClaudeResultError(error_code or "CLI_ERROR", failure_diagnostics(
             stdout, provider_document, "native_result_invalid",
         )) from exc
+    if completed.returncode != 0 and error_code is None:
+        error_code = "CLI_ERROR"
     if error_code is not None:
         raise ClaudeResultError(error_code, failure_diagnostics(
             stdout, provider_document, "execution_failed",

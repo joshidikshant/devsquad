@@ -86,6 +86,19 @@ def crash_after_recovery_cancel_commits(database, artifacts, run_id):
 
 
 class ServiceTest(unittest.TestCase):
+    def test_detached_environment_preserves_home_without_ambient_api_credentials(self):
+        fake_home = self.root / "signed-in-home"
+        with mock.patch.dict(os.environ, {
+            "HOME": str(fake_home), "USER": "signed-in-fixture", "ANTHROPIC_API_KEY": "must-not-pass",
+            "OPENAI_API_KEY": "must-not-pass", "BASH_ENV": "must-not-pass",
+        }), mock.patch("devsquad.service.subprocess.Popen") as popen:
+            popen.return_value.pid = 12345
+            self.service._spawn_daemon("private-fixture", 1, self.root / "package", "a" * 64)
+        environment = popen.call_args.kwargs["env"]
+        self.assertEqual(environment["HOME"], str(fake_home))
+        self.assertEqual(environment["USER"], "signed-in-fixture")
+        self.assertEqual(set(environment), {"HOME", "USER", "PATH", "PYTHONPATH"})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="devsquad-service-")
         self.root = Path(self.temp.name); self.repo = self.root / "repo"; self.runtime = self.root / "runtime"

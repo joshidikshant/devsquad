@@ -371,6 +371,25 @@ class ClaudeImplementationIdentityTest(unittest.TestCase):
                 with self.assertRaises(ContractError):
                     self.run_document(document)
 
+    def test_synthetic_auth_failure_is_classified_without_verifying_identity(self):
+        from devsquad.claude_identity import ClaudeResultError, decode_native_result
+        records = self.stream_records()
+        records[0]["message"]["model"] = "<synthetic>"
+        records[-1].update({"is_error": True, "result": "Not logged in. Please run /login.", "modelUsage": {}})
+        payload = "\n".join(json.dumps(item) for item in records)
+        document, messages = decode_native_result(payload)
+        self.assertIsNone(messages)
+        self.assertTrue(document["is_error"])
+        original_binary = self.binary.read_text()
+        for stderr in ("", "rate limit"):
+            with self.subTest(stderr=stderr):
+                self.binary.write_text(original_binary + f"printf '%s\\n' {shlex.quote(stderr)} >&2\nexit 1\n")
+                with self.assertRaises(ClaudeResultError) as raised:
+                    self.run_stream(records)
+                self.assertEqual(raised.exception.code, "AUTH_ERROR")
+                self.assertEqual(raised.exception.diagnostics["identity_status"], "unverified")
+                self.assertEqual(raised.exception.diagnostics["model_usage"], {})
+
     def test_missing_or_invalid_native_session_cannot_supply_identity(self):
         for session in (None, "", "   ", 42, [], "s" * 10000):
             with self.subTest(session=session):

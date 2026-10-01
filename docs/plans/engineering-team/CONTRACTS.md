@@ -100,6 +100,9 @@ again on coordinator import, before candidate finalization.
 The tested Claude 2.1.220 transport label `firstParty` maps to Anthropic only
 for that verified harness version; the original label remains in evidence.
 Unknown or contradictory provider labels still block identity verification.
+Native error streams can report synthetic assistant messages; their strict
+final error terminal is classified without claiming writer identity. A native
+not-logged-in error reports AUTH_ERROR, ahead of a concurrent rate banner.
 
 New delivery review imports and acceptance require verified different reported
 model IDs, regardless of requested aliases, family labels or harness names.
@@ -148,6 +151,9 @@ Execution completion is separate from deliverable validity and acceptance. Empty
 Use Git's tracked-file inventory and explicit task scope for context. Preserve filenames with spaces, TSX/JSX and other tracked extensions. Bound bytes and document exclusions; never silently truncate required evidence. Exclude runtime state, secrets and ignored files by default; an explicitly required ignored input needs an intentional input artifact. Large context should use native scoped filesystem access when supported rather than concatenating every file.
 
 Workers get `DEVSQUAD_WORKER=1`, run/attempt IDs and a delegation-depth guard. DevSquad's worker-facing MCP tools reject new team starts and workflow mutations, and legacy hooks honor the guard. Native authentication remains available through the provider's normal mechanism, but credentials and environment contents are not logged. Do not assume prompt text alone stops recursive delegation.
+Detached launch preserves PATH, the frozen package PYTHONPATH, HOME and USER
+for the normal saved-login mechanism. It does not inherit API credentials,
+provider overrides or arbitrary host environment variables.
 
 ## 4. Durable state, concurrency and recovery
 

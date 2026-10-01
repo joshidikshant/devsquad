@@ -1,6 +1,7 @@
 """Durable M2 application operations shared by CLI and later MCP surfaces."""
 from __future__ import annotations
 
+import getpass
 import hashlib
 import json
 import os
@@ -995,7 +996,14 @@ class Service:
 
     def _spawn_daemon(self, run_id: str, expected_version: int, package: Path, digest: str) -> int:
         command = [sys.executable, "-P", "-m", "devsquad.detached", "--database", str(self.database), "--artifacts", str(self.artifacts), "--run-id", run_id, "--expected-version", str(expected_version), "--package-digest", digest]
-        environment = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(package)}
+        # Claude's native saved-login lookup needs the login name and HOME.
+        # Keep this explicit: ambient API keys/provider overrides never cross
+        # the detached boundary, and package imports remain frozen.
+        environment = {
+            "PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(package),
+            "HOME": str(Path.home()),
+            "USER": os.environ.get("USER") or getpass.getuser(),
+        }
         log_dir=self.runtime/"private-logs"; log_dir.mkdir(parents=True,exist_ok=True)
         with (log_dir/f"{run_id}.supervisor.log").open("ab",buffering=0) as diagnostic:
             process = subprocess.Popen(command, cwd=self.runtime, env=environment, stdin=subprocess.DEVNULL, stdout=diagnostic, stderr=diagnostic, start_new_session=True, close_fds=True)
