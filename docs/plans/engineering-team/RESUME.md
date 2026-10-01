@@ -4,6 +4,25 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ## Current position — October 1, 2026
 
+### Active continuation — managed delivery failure remains unresolved
+
+HEAD `6f51db9` is installed as `0.1.0-py31214-7d7e408303b3-mcp-a26bc88afbef`,
+with payload drift false and `pip check` passed. The second genuine G4 delivery,
+`8c116b7d-3416-4f80-a990-d610e2a5a558`, failed at version 13 with one
+implementer invocation and `native_result_invalid`; no candidate, reviewer or
+mandatory checks were produced. Its 6,183 native output bytes have only a safe
+digest/typed failure receipt, not raw logs. Preserve both failed runs.
+
+A private tool-free replay of the frozen adapter/profile and workspace passes
+both with ordinary input and with the snapshot file at EOF inherited on fd 0.
+Therefore input inheritance is **not a demonstrated cause**. A bounded one-Read
+diagnostic is now capturing native output privately under
+`/Users/Dikshant/.devsquad/private-probes/r8-installed-workflows-20261001`.
+Next: inspect only event/identity/error metadata, repair the demonstrated
+transport problem with regressions, refresh safely, then retry genuine G4
+Claude implementation → independent Codex review → mandatory tests under a
+new run. Do not claim managed delivery passed or repeat completed host proofs.
+
 ### Latest continuation — Claude launch/stream repair, Grok and Gemini proof
 
 The frozen stream/framing gate at `3555a91` passes **458 tests in 467.018s**,
