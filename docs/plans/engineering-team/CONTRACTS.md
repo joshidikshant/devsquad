@@ -255,3 +255,44 @@ Use this loop:
 Default experiment budget is disabled until explicitly configured, then at most 10% of eligible runs with a hard call/time cap. Most work uses the current proven policy. V1 uses human-governed static preferences, not exhaustive permutations, an automatic bandit or foundation-model fine-tuning. Report sample sizes and missingness; tiny samples justify hypotheses, not provider rankings.
 
 Measure acceptance and critical defects first; also show retries, lead rework, elapsed time, measured usage by pool, blocked time and unmeasured overhead. Final task success and original worker quality are distinct. Pair deterministic checks with review and human correction; a model judging itself is not sufficient evidence.
+
+### Independent experiment provenance (v2)
+
+Outcome IDs are globally unique across all cases, arms and splits of a new
+evaluation. A profile-binding experiment v2 adds its tested `role` and both
+concrete `control_profile_sha256` / `candidate_profile_sha256` values, plus
+per-arm `control_execution_sha256` / `candidate_execution_sha256` fingerprints
+of the profile and frozen native adapter (including binary/version/provider).
+Each
+case declares two distinct fingerprints: `case_sha256` identifies the exact
+task/candidate corpus item independently of runtime settings, while
+`input_sha256` binds the controlled pair context. Corpus identities cannot be
+relabelled across evaluation/held-out splits by changing package or policy.
+
+The corpus projection retains frozen source identity, goal, workflow/task
+class, acceptance, checks (including argv/cwd/output declarations), scope and
+review mode/focus. Implementer comparisons use the original baseline, never
+their produced candidates; reviewer comparisons include the exact candidate.
+Pair context additionally retains runtime package, policy, lead mode, budgets,
+supporting-role profiles/adapters and all fallback configuration. Only the
+explicitly declared tested execution binding and incidental machine paths/origin/runtime capacity
+observations are excluded. Absolute path-looking check arguments are not
+blanket-removed. Assignment/spec hashes are excluded to avoid a hash cycle.
+
+An assignment binds the spec hash, project Git common directory, case, split,
+arm, tested role/profile/execution fingerprints, both input fingerprints and outcome ID.
+Schema 14 records the full spec and original preparation snapshot under the
+run's preparation fence, atomically before any attempt. One run cannot be
+rebound; one experiment arm cannot acquire a second run. This is an ordering
+guarantee, not a comparison of wall-clock timestamps. Plain runs are unchanged.
+
+Evaluation consumers must derive provenance from those saved records and all
+actual relevant attempts. A supplied assignment dictionary or experimental
+label is not authority. V2 normalized chains bind final/correction hashes and
+distinct run/attempt IDs; an absent partner cannot hide invalid provenance.
+Their evidence digest changes when outcomes or correction chains change.
+Historical rows remain immutable; current eligibility for a new qualification,
+promotion, rollback or fallback must be checked separately from historical
+read/replay. Implementation progress and remaining reader/eligibility/public
+controller work are tracked in [RESUME.md](RESUME.md), not implied by this
+contract or by pure normalized-chain unit fixtures.

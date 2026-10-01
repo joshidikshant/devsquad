@@ -693,7 +693,7 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 13
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 14
     attempt_columns = {row[1] for row in store.connection.execute("PRAGMA table_info(attempts)")}
     assert {"role", "account_pool_id", "profile_id", "profile_index"} <= attempt_columns
     columns = {row[1] for row in store.connection.execute("PRAGMA table_info(runs)")}

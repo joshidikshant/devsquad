@@ -8,6 +8,14 @@ catalog and quota connections (G1/G2). Execute R3–R5 in
 [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The Jev key blocks only its
 separate measurement; it does not block this engineering work.
 
+R3a now rejects reused outcomes and adds v2 concrete-profile/paired-input
+contracts, a stable corpus identity distinct from runtime context, strict
+normalized evidence chains and schema-14 prelaunch assignment persistence.
+The focused 47-test learning/lifecycle/experiment gate passes. This is partial:
+the saved-run v2 reader, shared lifecycle eligibility, historical compatibility
+audit and public trial execution are not complete. See RESUME for the current
+review/full-gate status; do not treat legacy helper fixtures as public proof.
+
 | Requirement | Planned evidence | Status |
 |---|---|---|
 | Strict capacity evidence | Typed pool/window/scope/source/confidence/TTL validation; stale, estimated and incomplete measurements remain unknown | verified at `21b1331` |

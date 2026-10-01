@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 13
+SUPPORTED_SCHEMA_VERSION = 14
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -409,6 +409,9 @@ class Store:
                 if not predecessor or predecessor["project_id"] != project["project_id"] or predecessor["state"] not in TERMINAL_STATES:
                     raise ConflictError("superseded run must be terminal and belong to the same project")
             version, now = row["version"] + 1, _utc_now()
+            self._freeze_experiment_assignment(
+                run_id, fencing_token, version, mutable_snapshot, package_digest, now,
+            )
             self.connection.execute(
                 "UPDATE runs SET mutable_snapshot=?,package_path=?,package_digest=?,"
                 "supersedes_run_id=?,worktree_path=COALESCE(?,worktree_path),phase=NULL,"
@@ -423,6 +426,87 @@ class Store:
         except Exception:
             self.connection.execute("ROLLBACK")
             raise
+
+    def _freeze_experiment_assignment(
+        self, run_id: str, fencing_token: int, run_version: int,
+        snapshot: Any, package_digest: str | None, recorded_at: str,
+    ) -> None:
+        """Inside complete_preparation's transaction, before any launch is possible."""
+        from .experiment_provenance import (
+            paired_input_identity, selected_execution_fingerprint, validate_assignment,
+        )
+        from .learning import validate_experiment
+
+        if not isinstance(snapshot, dict):
+            return
+        fields = {"experiment_spec", "experiment_assignment"} & set(snapshot)
+        if not fields:
+            return
+        if fields != {"experiment_spec", "experiment_assignment"}:
+            raise ContractError("experiment preparation requires both specification and assignment")
+        spec = validate_experiment(snapshot["experiment_spec"])
+        project = self.connection.execute(
+            "SELECT r.project_id,p.git_common_dir FROM runs r "
+            "JOIN projects p ON p.id=r.project_id WHERE r.id=?", (run_id,),
+        ).fetchone()
+        if str(git_common_dir(Path(spec["project_path"]))) != project["git_common_dir"]:
+            raise ContractError("experiment specification belongs to another project")
+        assignment = validate_assignment(
+            snapshot["experiment_assignment"], spec=spec,
+            project_common_dir=project["git_common_dir"],
+        )
+        identity = paired_input_identity(
+            snapshot, role=assignment["role"], package_digest=package_digest,
+        )
+        if any(identity[key] != assignment[key] for key in identity):
+            raise ContractError("experiment paired input does not match its declaration")
+        selected = snapshot["routing"]["roles"][assignment["role"]]["selected"]
+        if any(selected[key] != assignment[key] for key in ("profile_id", "profile_sha256")):
+            raise ContractError("experiment selected profile does not match its arm")
+        if selected_execution_fingerprint(snapshot, role=assignment["role"]) != assignment["execution_sha256"]:
+            raise ContractError("experiment native execution does not match its declared arm")
+        if self.connection.execute(
+            "SELECT 1 FROM attempts WHERE run_id=? LIMIT 1", (run_id,),
+        ).fetchone() is not None:
+            raise ConflictError("experiment assignment must precede every attempt")
+        spec_json = canonical_json(spec)
+        spec_sha256 = hashlib.sha256(spec_json.encode()).hexdigest()
+        existing = self.connection.execute(
+            "SELECT project_id,spec_json,spec_sha256 FROM experiment_specs WHERE experiment_id=?",
+            (spec["experiment_id"],),
+        ).fetchone()
+        if existing is not None:
+            if (existing["project_id"] != project["project_id"]
+                    or existing["spec_json"] != spec_json or existing["spec_sha256"] != spec_sha256):
+                raise ConflictError("experiment specification is already frozen differently")
+        else:
+            # An evaluation created before this contract cannot be retroactively
+            # upgraded into a predeclared trial with the same identifier.
+            if self.connection.execute(
+                "SELECT 1 FROM experiments WHERE experiment_id=?", (spec["experiment_id"],),
+            ).fetchone() is not None:
+                raise ConflictError("historical experiment cannot acquire new assignments")
+            self.connection.execute(
+                "INSERT INTO experiment_specs(experiment_id,project_id,spec_json,spec_sha256,recorded_at) "
+                "VALUES(?,?,?,?,?)",
+                (spec["experiment_id"], project["project_id"], spec_json, spec_sha256, recorded_at),
+            )
+        if self.connection.execute(
+            "SELECT 1 FROM experiment_assignments WHERE run_id=? OR "
+            "(experiment_id=? AND (outcome_id=? OR (case_id=? AND arm=?)))",
+            (run_id, spec["experiment_id"], assignment["outcome_id"],
+             assignment["case_id"], assignment["arm"]),
+        ).fetchone() is not None:
+            raise ConflictError("experiment run or arm is already assigned")
+        payload = canonical_json(assignment)
+        self.connection.execute(
+            "INSERT INTO experiment_assignments(run_id,experiment_id,case_id,arm,outcome_id,"
+            "assignment_json,assignment_sha256,snapshot_json,package_digest,frozen_run_version,"
+            "preparation_fencing_token,recorded_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (run_id, spec["experiment_id"], assignment["case_id"], assignment["arm"],
+             assignment["outcome_id"], payload, hashlib.sha256(payload.encode()).hexdigest(),
+             canonical_json(snapshot), package_digest, run_version, fencing_token, recorded_at),
+        )
 
     def fail_preparation(
         self,

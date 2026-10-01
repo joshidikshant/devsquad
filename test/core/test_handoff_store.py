@@ -197,7 +197,7 @@ class HandoffStoreTest(unittest.TestCase):
         self.addCleanup(upgraded.close)
         self.assertEqual(
             upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],
-            13,
+            14,
         )
         tables = {
             row[0]
@@ -684,7 +684,7 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 13
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 14
     assert store.connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='handoff_submissions'"
     ).fetchone()

@@ -29,6 +29,13 @@ open under R5; this is not a warning-free or installed/live pass. See
 [R2 evidence](evidence/R2-observed-identity-2026-10-01.json). Start at **R3**.
 R3–R8, C1 and affected installed/live proofs remain open.
 
+R3a continuation after `b3de5c6`: outcome uniqueness, the v2 provenance
+contract, separate corpus/pair hashes, schema-14 fenced prelaunch assignments
+and normalized-chain checks are implemented. Focused tests pass; full gate
+and independent patch review are pending. The saved-run v2 outcome reader and
+shared lifecycle eligibility are still R3b; do not describe this partial
+checkpoint as trustworthy end-to-end qualification or a public trial runner.
+
 ### Ready-to-execute handoff for Sol
 
 Do not reimplement R2. It now has a shared strict native parser, v2 imported
@@ -458,8 +465,8 @@ permission to claim routing improvement.
 ## First action for Sol
 
 Read the recovery files and verify current Git state. Preserve `ef98889` and
-later work. Begin **R3a** with the two-outcome/three-case failing regression and
-the versioned provenance contract above, then finish R3b/R3c before R4.
+later work. Finish R3a's pending review/full gate, then implement **R3b**'s
+saved-run evidence reader and shared current-evidence gate. Complete R3c before R4.
 Preserve R1's check-integrity gate and R2's actual-attempt/native-identity gate.
 Continue R3–R6 without waiting on the Claude login or Jev key. Retain R7/R8
 and C1 in the full scope. Report each slice as red baseline, verified offline,

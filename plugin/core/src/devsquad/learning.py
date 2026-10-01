@@ -344,7 +344,7 @@ def validate_experiment(value: dict[str, Any]) -> dict[str, Any]:
     """Validate a predeclared one-variable, paired outcome experiment."""
     if not isinstance(value, dict) or set(value) != EXPERIMENT_FIELDS:
         raise ContractError("experiment fields are invalid")
-    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+    if type(value["schema_version"]) is not int or value["schema_version"] not in {1, 2}:
         raise ContractError("experiment schema_version is invalid")
     experiment_id = _identifier(value["experiment_id"], "experiment_id")
     project_path = value["project_path"]
@@ -360,9 +360,15 @@ def validate_experiment(value: dict[str, Any]) -> dict[str, Any]:
     }):
         raise ContractError("experiment evidence_availability is invalid")
     variable = value["variable"]
-    if not isinstance(variable, dict) or set(variable) != {
+    variable_fields = {
         "kind", "alias", "control_profile_id", "candidate_profile_id",
-    }:
+    }
+    if value["schema_version"] == 2:
+        variable_fields.update({
+            "role", "control_profile_sha256", "candidate_profile_sha256",
+            "control_execution_sha256", "candidate_execution_sha256",
+        })
+    if not isinstance(variable, dict) or set(variable) != variable_fields:
         raise ContractError("experiment variable fields are invalid")
     if variable["kind"] != "profile_binding":
         raise ContractError("experiment variable kind is invalid")
@@ -370,6 +376,15 @@ def validate_experiment(value: dict[str, Any]) -> dict[str, Any]:
         _identifier(variable[field], f"variable.{field}")
     if variable["control_profile_id"] == variable["candidate_profile_id"]:
         raise ContractError("experiment control and candidate must differ")
+    if value["schema_version"] == 2:
+        from .experiment_provenance import require_sha256
+
+        if (not isinstance(variable["role"], str)
+                or variable["role"] not in {"implementer", "reviewer"}):
+            raise ContractError("experiment tested role is invalid")
+        for arm in ("control", "candidate"):
+            require_sha256(variable[f"{arm}_profile_sha256"], f"{arm} profile")
+            require_sha256(variable[f"{arm}_execution_sha256"], f"{arm} execution")
 
     budget = value["budget"]
     if not isinstance(budget, dict) or set(budget) != {
@@ -386,12 +401,17 @@ def validate_experiment(value: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(cases, list) or not cases or len(cases) > budget["max_cases"]:
         raise ContractError("experiment cases exceed the bounded case budget")
     case_ids = set()
+    outcome_ids = set()
+    case_hashes = set()
     normalized_cases = []
     split_counts = {"evaluation": 0, "held_out": 0}
     for case in cases:
-        if not isinstance(case, dict) or set(case) != {
+        case_fields = {
             "case_id", "split", "control_outcome_id", "candidate_outcome_id",
-        }:
+        }
+        if value["schema_version"] == 2:
+            case_fields.update({"input_sha256", "case_sha256"})
+        if not isinstance(case, dict) or set(case) != case_fields:
             raise ContractError("experiment case fields are invalid")
         case_id = _identifier(case["case_id"], "case_id")
         if case_id in case_ids:
@@ -406,7 +426,17 @@ def validate_experiment(value: dict[str, Any]) -> dict[str, Any]:
         )
         if control_id == candidate_id:
             raise ContractError("experiment paired outcomes must differ")
+        if control_id in outcome_ids or candidate_id in outcome_ids:
+            raise ContractError("experiment outcome ids must be globally unique")
+        outcome_ids.update((control_id, candidate_id))
+        if value["schema_version"] == 2:
+            require_sha256(case["input_sha256"], "paired input")
+            require_sha256(case["case_sha256"], "corpus case")
+            if case["case_sha256"] in case_hashes:
+                raise ContractError("experiment corpus case identities must be unique")
+            case_hashes.add(case["case_sha256"])
         normalized_cases.append({
+            **case,
             "case_id": case_id,
             "split": case["split"],
             "control_outcome_id": control_id,
@@ -460,12 +490,41 @@ def evaluate_experiment(
     outcome_chains: dict[str, dict[str, Any]],
     *,
     evaluated_at: str,
+    project_common_dir: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate a frozen paired experiment without changing active policy."""
     spec = validate_experiment(experiment)
     _timestamp(evaluated_at, "evaluated_at")
     if not isinstance(outcome_chains, dict):
         raise ContractError("experiment outcome chains are invalid")
+    provenance = {}
+    if spec["schema_version"] == 2:
+        from .experiment_provenance import validate_arm_chain
+
+        if not isinstance(project_common_dir, str) or not Path(project_common_dir).is_absolute():
+            raise ContractError("experiment provenance requires the saved project identity")
+        run_ids = set()
+        attempt_ids = set()
+        # Validate every available arm, even when its partner is missing. A
+        # missing partner must not hide reused or crossed evidence.
+        for case in spec["cases"]:
+            for arm in ("control", "candidate"):
+                outcome_id = case[f"{arm}_outcome_id"]
+                chain = outcome_chains.get(outcome_id)
+                if chain is None:
+                    provenance[outcome_id] = None
+                    continue
+                witness = validate_arm_chain(
+                    chain, spec=spec, case=case, arm=arm,
+                    project_common_dir=project_common_dir, evaluated_at=evaluated_at,
+                )
+                if witness["run_id"] in run_ids:
+                    raise ContractError("experiment provenance run ids must be globally unique")
+                if attempt_ids.intersection(witness["attempt_ids"]):
+                    raise ContractError("experiment provenance attempt ids must be globally unique")
+                run_ids.add(witness["run_id"])
+                attempt_ids.update(witness["attempt_ids"])
+                provenance[outcome_id] = witness
     rows = []
     metrics = {
         split: {
@@ -497,7 +556,10 @@ def evaluate_experiment(
             rows.append(row)
             continue
         for arm, chain in (("control", control), ("candidate", candidate)):
-            if (not isinstance(chain, dict) or set(chain) != {"final", "late_corrections"}
+            chain_fields = {"final", "late_corrections"}
+            if spec["schema_version"] == 2:
+                chain_fields.add("provenance")
+            if (not isinstance(chain, dict) or set(chain) != chain_fields
                     or not isinstance(chain["final"], dict)
                     or not isinstance(chain["late_corrections"], list)):
                 raise ContractError("experiment outcome chain is invalid")
@@ -555,8 +617,8 @@ def evaluate_experiment(
         reasons.append("candidate_escaped_defect_limit_exceeded")
 
     verdict = "promotion_proposal" if not reasons else "no_change"
-    return {
-        "schema_version": 1,
+    evaluation = {
+        "schema_version": spec["schema_version"],
         "experiment_id": spec["experiment_id"],
         "spec_sha256": hashlib.sha256(
             canonical_json(spec).encode(),
@@ -572,6 +634,9 @@ def evaluate_experiment(
         "rollback_target": spec["rollback_target"],
         "evidence_availability": spec["evidence_availability"],
     }
+    if spec["schema_version"] == 2:
+        evaluation["evidence_sha256"] = hashlib.sha256(canonical_json(provenance).encode()).hexdigest()
+    return evaluation
 
 
 def build_learning_proposal(
@@ -624,9 +689,17 @@ def build_learning_proposal(
             raise ContractError("learning proposal experiment record is invalid")
         spec = validate_experiment(experiment_record["experiment"])
         evaluation = experiment_record["evaluation"]
+        expected_fields = EXPERIMENT_EVALUATION_FIELDS | (
+            {"evidence_sha256"} if spec["schema_version"] == 2 else set()
+        )
         if (not isinstance(evaluation, dict)
-                or set(evaluation) != EXPERIMENT_EVALUATION_FIELDS):
+                or set(evaluation) != expected_fields
+                or type(evaluation.get("schema_version")) is not int
+                or evaluation["schema_version"] != spec["schema_version"]):
             raise ContractError("learning proposal evaluation is invalid")
+        if spec["schema_version"] == 2:
+            from .experiment_provenance import require_sha256
+            require_sha256(evaluation["evidence_sha256"], "evaluated evidence")
         spec_sha256 = hashlib.sha256(canonical_json(spec).encode()).hexdigest()
         evaluation_sha256 = hashlib.sha256(
             canonical_json(evaluation).encode(),

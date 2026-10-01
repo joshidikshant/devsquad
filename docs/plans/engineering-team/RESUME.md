@@ -6,6 +6,27 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Review correction and next action
 
+R3a is now implemented after `b3de5c6`: global outcome-reuse rejection,
+versioned profile/input/assignment contracts, separate corpus-versus-pair
+fingerprints, schema-14 prelaunch assignment persistence under the preparation
+fence, and strict normalized v2 chain evaluation. The original five reuse
+regressions failed before the repair and now pass. The focused experiment,
+learning and lifecycle gate currently passes 47 tests; nine targeted migration
+checks, including installed-wheel upgrades, also passed. Bounded review found
+omitted tested-role fallback policy and native execution identity; both now
+have regressions and fixes, including predeclared per-arm execution hashes.
+Independent follow-up and the full integration gate remain pending here.
+
+**R3 remains in progress.** The v2 saved-run outcome reader is not wired into
+`Store.evaluate_learning_experiment` yet, so public v2 evaluation fails closed
+rather than accepting outcome labels as provenance. R3b must join immutable
+assignments, actual attempts and outcomes, then enforce one current-evidence
+gate for replay/qualification/promotion/rollback/catalog fallback. Audit/read
+compatibility for unsafe legacy v1 proposals and public realistic fixtures
+remain R3c; the public paired-trial controller remains R5. Do not count current
+legacy positive fixtures as proof of that integration. No live providers,
+installation refresh or global settings changes occurred.
+
 R2 source/offline repair is verified at `ef98889`: strict native result parsing,
 v2 import evidence, actual-model independence and durable failed diagnostics.
 The 16 original worker regressions, 12 import/parser regressions, 19 existing
@@ -32,12 +53,10 @@ recorded; installed/live closure remains R8.** See
 No live provider call, installed refresh or global provider-setting change
 occurred. The original red baseline is retained in
 [R2 baseline evidence](evidence/R2-identity-red-baseline-2026-09-29.json).
-The latest user request was to create a plan and feedback for SOL. This
-checkpoint updates the canonical handoff and verification records only; no
-new implementation was added. SOL should begin **R3a** in
-[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), not redo R2 or retry blocked
-authentication. R3's two-outcome/three-case promotion bug was reproduced
-again without modifying production code; it still needs provenance repair.
+The planning handoff was saved at `b3de5c6`; the persistent implementation
+goal subsequently resumed R3a as recorded above. Do not redo R2 or retry
+blocked authentication. The reproduced two-outcome/three-case reuse is now
+rejected, but R3's full saved-run provenance and eligibility repair remains.
 
 R1's source repair is verified after `399d93d`: the public regression first
 reproduced four unsafe mutation paths (review/delivery × host/headless). The
@@ -347,8 +366,9 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Begin R3a: add the two-outcome/three-case regression and strict frozen
-   experiment provenance contract. Finish R3b/R3c saved evidence, replay,
+2. Complete R3a's pending independent review/integration gate, then implement
+   the R3b saved-run v2 outcome reader and current-evidence eligibility. Finish
+   R3b/R3c saved evidence, replay,
    qualification/promotion/rollback/catalog-fallback eligibility and historical
    compatibility, then execute R4–R6 in dependency order. Preserve R1/R2,
    explicit check `output_paths` contract and historical receipts. Do not
