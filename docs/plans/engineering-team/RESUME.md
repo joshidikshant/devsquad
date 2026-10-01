@@ -71,6 +71,14 @@ to `ChatGPT.app/Contents/Resources/codex-cli/bin/codex` and is now 0.159.2.
 A non-generating 0.159.2 probe passed initialize, complete model/list,
 account/read and rateLimits/read without settings changes or model requests.
 Version/path compatibility and operation verification remain separate gates.
+The new bundled layout/version now has an explicit manifest and registration
+entry. Its regression first failed on the missing path; 61 M1/MCP/task-entry
+tests then passed (two optional-SDK skips), and all 227 Bash assertions passed.
+Before the next source slice, checkpoint and run one bounded, source-only
+native Codex R3 audit against the frozen `672e383` → current range in a private
+runtime. This is not an updated-installation or Claude-delivery proof. Retain
+the exact reviewer/check artifacts and any findings; do not claim completion
+without reviewing them. No paid fallback or global configuration change.
 The shared gate audit and bounded independent review remain required for R3
 closure. Preserve the original evaluations and completed decisions. Do
 not install schema 15 before the old active/recoverable-run upgrade test; R4–R6

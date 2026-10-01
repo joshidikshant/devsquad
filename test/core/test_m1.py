@@ -56,6 +56,30 @@ class M1ContractsTest(unittest.TestCase):
         with patch.dict(os.environ, {"PATH": str(older.parent)}):
             self.assertEqual(manifest.resolve_binary(), str(verified))
 
+    def test_current_bundled_layout_and_version_are_explicitly_supported(self):
+        manifest = self.manifest("codex")
+        bundled = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
+        self.assertIn(bundled, manifest.binary_candidates)
+        self.assertIn("codex-cli 0.159.2", manifest.verified_versions)
+        registration = json.loads((CORE / "integrations/codex/registration.json").read_text())
+        self.assertIn(bundled, registration["executable_paths"])
+        temp, older = self.fake_path("codex")
+        self.addCleanup(temp.cleanup)
+        older.write_text("#!/bin/sh\necho 'codex-cli 0.135.0'\n")
+        current = Path(temp.name) / "current-codex"
+        current.write_text("#!/bin/sh\necho 'codex-cli 0.159.2'\n")
+        current.chmod(0o700)
+        manifest = replace(manifest, binary_candidates=("codex", str(current)))
+        with patch.dict(os.environ, {"PATH": str(older.parent)}):
+            self.assertEqual(manifest.resolve_binary(), str(current))
+            spec = prepare_native_codex(
+                manifest.with_model_efforts({"gpt-test": ("low",)}),
+                cwd=temp.name, model="gpt-test", effort="low",
+                permission="read_only", timeout_seconds=9,
+                harness_version_value="codex-cli 0.159.2",
+            )
+        self.assertEqual(spec.requested.verification, "verified")
+
     def test_prepare_preserves_spaces_and_tsx_prompt(self):
         temp, binary = self.fake_path("agy")
         self.addCleanup(temp.cleanup)
