@@ -215,6 +215,7 @@ def _attempts(
             incomplete = True
         # These immutable artifacts retain imported observed identity and
         # native usage; failure diagnostics are retained in output_metadata.
+        review_imported = False
         for prefix in ("review", "implementation", "lead"):
             artifact_row = connection.execute(
                 "SELECT id FROM artifacts WHERE run_id=? AND name=?",
@@ -228,11 +229,38 @@ def _attempts(
                         or canonical_json(evidence.get("selected_profile")) != canonical_json(selected)):
                     raise ContractError("experiment imported execution differs from its frozen attempt profile")
                 artifacts.append(artifact)
+                review_imported = review_imported or prefix == "review"
         if (role == "reviewer" and snapshot["task"]["workflow"] == "branch-review"
-                and captures and metadata.get("failure") is None):
-            from .workflows import validate_branch_review_evidence
+                and captures):
+            if review_imported:
+                from .workflows import validate_branch_review_evidence
 
-            validate_branch_review_evidence(strict_json(captures["stdout"]), snapshot)
+                validate_branch_review_evidence(strict_json(captures["stdout"]), snapshot)
+            else:
+                # Terminal failed/cancelled workers do not publish successful
+                # review evidence. Bind their opaque output to the hashed
+                # early-terminal receipt, not an absent metadata.failure key.
+                receipt_row = connection.execute(
+                    "SELECT id FROM artifacts WHERE run_id=? AND name='result-receipt.json'",
+                    (run["id"],),
+                ).fetchone()
+                if receipt_row is None:
+                    raise ContractError("experiment reviewer has no imported review or failure receipt")
+                artifact, content = _artifact(connection, receipt_row["id"], run["id"])
+                receipt = _object(content, "terminal failure receipt")
+                receipt_attempts = receipt.get("attempts")
+                if not isinstance(receipt_attempts, list):
+                    raise ContractError("experiment failed reviewer receipt attempts are invalid")
+                projections = [item for item in receipt_attempts
+                               if isinstance(item, dict) and item.get("id") == row["id"]]
+                if (receipt.get("run_id") != run["id"]
+                        or receipt.get("state") != run["state"]
+                        or len(projections) != 1
+                        or projections[0].get("status") not in {"failed", "cancelled"}
+                        or projections[0].get("role") != role
+                        or canonical_json(projections[0].get("selected_profile")) != canonical_json(selected)):
+                    raise ContractError("experiment failed reviewer receipt is inconsistent")
+                artifacts.append(artifact)
         history.append({
             **{key: row[key] for key in (
                 "id", "run_id", "project_id", "role", "status", "profile_id",

@@ -27,10 +27,11 @@ from devsquad.store import Store, canonical_json, git_common_dir, request_hash
 
 
 class ExperimentRuntimeFixture:
-    def __init__(self, root: Path, *, with_fallback=False):
+    def __init__(self, root: Path, *, with_fallback=False, fail_candidate=False):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.with_fallback = with_fallback
+        self.fail_candidate = fail_candidate
         self.repo = self.root / "repo"
         self.service = Service(self.root / "runtime")
         self.runs = {}
@@ -52,7 +53,7 @@ class ExperimentRuntimeFixture:
             arm: profile(f"profile-{letter}", f"model-{letter}")
             for arm, letter in (("control", "a"), ("candidate", "b"))
         }
-        if with_fallback:
+        if with_fallback or fail_candidate:
             # The real offline worker deliberately errors on this suffix.
             self.profiles["candidate"]["id"] = "candidate-fixture-fail"
         self.registry = {
@@ -176,20 +177,23 @@ class ExperimentRuntimeFixture:
             verdict = "cancelled"
         else:
             waiting = self.wait(run_id)
-            if waiting["state"] != "awaiting_host":
-                raise AssertionError(f"public fixture worker failed: {waiting}")
-            claimed = self.service.handoff_claim(run_id, waiting["version"], "experiment-fixture-host")
-            packet = claimed["handoff"]["packet"]
-            body = {
-                "schema_version": 1, "submission_id": f"finish-{arm}-{case_id}",
-                "disposition": "accept" if arm == "candidate" else "reject",
-                "reason": "Predeclared offline fixture disposition.",
-                "evidence_refs": [{"artifact_id": reference["artifact_id"], "sha256": reference["sha256"]} for reference in packet["artifacts"]],
-            }
-            completed = self.service.handoff_complete(run_id, claimed["claim"], {**body, "submission_hash": request_hash(body)})
-            verdict = "succeeded" if arm == "candidate" else "failed"
-            if completed["state"] != verdict:
-                raise AssertionError(f"public fixture disposition failed: {completed}")
+            if waiting["state"] == "failed" and self.fail_candidate and arm == "candidate":
+                verdict = "failed"
+            else:
+                if waiting["state"] != "awaiting_host":
+                    raise AssertionError(f"public fixture worker failed: {waiting}")
+                claimed = self.service.handoff_claim(run_id, waiting["version"], "experiment-fixture-host")
+                packet = claimed["handoff"]["packet"]
+                body = {
+                    "schema_version": 1, "submission_id": f"finish-{arm}-{case_id}",
+                    "disposition": "accept" if arm == "candidate" else "reject",
+                    "reason": "Predeclared offline fixture disposition.",
+                    "evidence_refs": [{"artifact_id": reference["artifact_id"], "sha256": reference["sha256"]} for reference in packet["artifacts"]],
+                }
+                completed = self.service.handoff_complete(run_id, claimed["claim"], {**body, "submission_hash": request_hash(body)})
+                verdict = "succeeded" if arm == "candidate" else "failed"
+                if completed["state"] != verdict:
+                    raise AssertionError(f"public fixture disposition failed: {completed}")
         outcome = experimental_final(f"{arm}-{case_id}", verdict)
         outcome["observed_at"] = datetime.now(timezone.utc).isoformat()
         outcome["evidence_refs"] = ["receipt.json", "result-receipt.json"]

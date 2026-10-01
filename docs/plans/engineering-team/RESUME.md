@@ -25,12 +25,21 @@ No full Python integration gate, installed refresh or provider call has run
 for this reader slice. The independent follow-up review hit its usage limit;
 do not claim an independent reader audit passed.
 
-**Exact next action:** reproduce the reader's handling of an honest terminal
-failed reviewer whose output metadata has no `failure` key. The present
-successful-review stdout decoder is guarded by that key and may incorrectly
-decode failed non-JSON output. This is an open inspection concern, not yet a
-reproduced/fixed regression. Resolve it and run the complete core gate before
-accepting R3b.1. Then finish R3b.2's shared current-evidence eligibility and
+The terminal-failure concern is now reproduced and repaired. A real offline
+failed reviewer exited with empty stdout and captured stderr, without a
+`failure` metadata key; the old reader rejected it as invalid JSON. The reader
+now requires either imported successful review evidence (still strictly
+decoded) or a hash-verified terminal receipt with the exact failed/cancelled
+attempt, role and frozen profile. A forged failure label cannot hide missing
+successful evidence. Receipt run/profile/status/list corruptions fail closed.
+The 34-test focused regression set passed in 42.301 seconds; six additional
+success-integrity and saved-evidence tests passed in 9.803 seconds. The Bash
+gate passed all 227 assertions. Source fingerprints and red/green results are
+saved in [failure-path evidence](evidence/R3b1-failure-path-2026-10-01.json).
+
+**Exact next action:** run the complete core gate on the checkpointed reader
+source before accepting R3b.1; no test is running at this checkpoint. Then
+finish R3b.2's shared current-evidence eligibility and
 explicit append-only evaluation/review revisions; legacy/public compatibility
 remains R3c and the production paired-trial controller remains R5.
 
@@ -458,8 +467,8 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Finish R3b.1 from the preserved partial reader: reproduce/repair honest
-   terminal failed-output handling and run the full unchanged-source gate.
+2. Finish R3b.1 from the preserved reader: honest terminal failed-output
+   handling is repaired; run the full unchanged-source gate.
    Then implement R3b.2 shared current-evidence eligibility and append-only
    evaluation/review revisions. Validate every relevant attempt, including
    fallbacks/repairs. Finish

@@ -69,6 +69,100 @@ class ExperimentSavedRunsTest(unittest.TestCase):
         finally:
             store.close()
 
+    def test_real_terminal_worker_failure_is_retained_as_failed_exposure(self):
+        fixture = ExperimentRuntimeFixture(self.fixture.root / "terminal-failure", fail_candidate=True)
+        self.addCleanup(fixture.close)
+        fixture.run_all()
+        store = fixture.store()
+        try:
+            for case_id in ("eval-1", "hold-1"):
+                run_id = fixture.runs[(case_id, "candidate")]
+                self.assertEqual(store.run(run_id)["state"], "failed")
+                attempt = store.connection.execute(
+                    "SELECT * FROM attempts WHERE run_id=?", (run_id,),
+                ).fetchone()
+                self.assertEqual(attempt["status"], "finished")
+                metadata = json.loads(attempt["output_metadata"])
+                self.assertNotIn("failure", metadata)
+                self.assertEqual(metadata["stdout"]["captured_bytes"], 0)
+                self.assertGreater(metadata["stderr"]["captured_bytes"], 0)
+        finally:
+            store.close()
+        evaluation = fixture.service.policy_evaluate(fixture.spec)["evaluation"]
+        self.assertEqual(evaluation["verdict"], "no_change")
+        for split in ("evaluation", "held_out"):
+            self.assertEqual(evaluation["metrics"][split]["available_pairs"], 1)
+            self.assertEqual(evaluation["metrics"][split]["candidate_success_rate"], 0.0)
+        self.assertTrue(all(case["candidate_verdict"] == "failed" for case in evaluation["cases"]))
+
+    def test_failed_receipt_requires_matching_terminal_attempt_even_with_valid_hash(self):
+        fixture = ExperimentRuntimeFixture(self.fixture.root / "failure-receipt", fail_candidate=True)
+        self.addCleanup(fixture.close)
+        run_id = fixture.run_arm("eval-1", "candidate")
+        store = fixture.store()
+        try:
+            artifact = dict(store.connection.execute(
+                "SELECT * FROM artifacts WHERE run_id=? AND name='result-receipt.json'", (run_id,),
+            ).fetchone())
+            path = Path(artifact["path"])
+            original = path.read_bytes()
+            receipt = json.loads(original)
+            changed_profile = json.loads(original)
+            changed_profile["attempts"][0]["selected_profile"]["profile"]["model_id"] = "wrong-model"
+            changed_status = json.loads(original)
+            changed_status["attempts"][0]["status"] = "succeeded"
+            mutations = [
+                {**receipt, "attempts": None},
+                {**receipt, "attempts": []},
+                {**receipt, "state": "succeeded"},
+                {**receipt, "run_id": "another-run"},
+                changed_profile, changed_status,
+            ]
+            # Corrupt only negative evidence; each real failed run and its
+            # opaque native streams were produced through the public runtime.
+            for changed in mutations:
+                with self.subTest(receipt=changed):
+                    content = canonical_json(changed).encode()
+                    path.write_bytes(content)
+                    store.connection.execute(
+                        "UPDATE artifacts SET sha256=?,byte_size=? WHERE id=?",
+                        (digest(changed), len(content), artifact["id"]),
+                    )
+                    try:
+                        with self.assertRaises(ContractError):
+                            fixture.service.policy_evaluate(fixture.spec)
+                    finally:
+                        path.write_bytes(original)
+                        store.connection.execute(
+                            "UPDATE artifacts SET sha256=?,byte_size=? WHERE id=?",
+                            (artifact["sha256"], artifact["byte_size"], artifact["id"]),
+                        )
+        finally:
+            store.close()
+
+    def test_success_cannot_hide_missing_review_behind_failure_metadata(self):
+        run_id = self.fixture.run_arm("eval-1", "candidate")
+        store = self.fixture.store()
+        try:
+            attempt = store.connection.execute(
+                "SELECT id,output_metadata FROM attempts WHERE run_id=?", (run_id,),
+            ).fetchone()
+            artifact_name = f"review-attempt-{attempt['id']}.json"
+            metadata = json.loads(attempt["output_metadata"])
+            metadata["failure"] = {"code": "CLI_ERROR"}
+            store.connection.execute(
+                "UPDATE artifacts SET name='hidden-review.json' WHERE run_id=? AND name=?",
+                (run_id, artifact_name),
+            )
+            store.connection.execute(
+                "UPDATE attempts SET output_metadata=? WHERE id=?",
+                (canonical_json(metadata), attempt["id"]),
+            )
+            with self.assertRaisesRegex(ContractError, "failed reviewer receipt"):
+                self.fixture.service.policy_evaluate(self.fixture.spec)
+        finally:
+            store.close()
+
     def test_reader_uses_prelaunch_snapshot_not_later_mutable_snapshot(self):
         self.fixture.run_all()
         run_id = self.fixture.runs[("hold-1", "candidate")]
