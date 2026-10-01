@@ -6,6 +6,18 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Active continuation — managed delivery failure remains unresolved
 
+The auth repair is committed at `1781b89` and installed as
+`0.1.0-py31214-68d542f6e8ea-mcp-a26bc88afbef`; payload drift is false,
+`pip check` passes, and previous releases remain recoverable. A fresh genuine
+G4 delivery is running: **`45667697-1aa2-4a49-9737-2c4e637ebd26`**, initially
+running/version 4. It freezes the repaired source, scoped Claude Sonnet writer,
+independent Codex gpt-6.1-sol/low adversarial review, Bash check and mandatory
+spawn-safe full Python core runner (900s check timeout). Do not start a second
+full core gate or edit its frozen candidate. Inspect saved status/evidence,
+finish the fenced host disposition if eligible, then integrate only accepted
+source changes and refresh the final installation. Managed delivery is not
+yet a pass. The older installation/failures below are retained history.
+
 HEAD `6f51db9` is installed as `0.1.0-py31214-7d7e408303b3-mcp-a26bc88afbef`,
 with payload drift false and `pip check` passed. The second genuine G4 delivery,
 `8c116b7d-3416-4f80-a990-d610e2a5a558`, failed at version 13 with one
