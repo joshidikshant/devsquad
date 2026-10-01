@@ -18,12 +18,14 @@ from pathlib import Path
 import json
 
 from .contracts import ContractError, LaunchSpec
+from .claude_identity import strict_json, validate_failure
 from .reports import build_early_terminal_reports
 from .store import AttemptReservation, ConflictError, Store, canonical_json
 from .workflows import (
     decode_branch_review_evidence,
     decode_headless_lead_evidence,
     review_mode,
+    require_independent_delivery_review,
     validate_implementation_evidence,
     validate_review_document,
 )
@@ -33,6 +35,26 @@ from .workspaces import (
     prepare_review_workspace,
     repo_relative_config,
 )
+
+
+def _require_attempt_profile(
+    evidence: dict[str, Any], snapshot: dict[str, Any],
+    attempt: dict[str, Any], role: str,
+) -> None:
+    """A permitted fallback is not proof that this invocation used it."""
+    try:
+        routed = snapshot["routing"]["roles"][role]
+        candidates = [routed["selected"], *routed["fallbacks"]]
+        index = attempt["profile_index"]
+        if type(index) is not int or not 0 <= index < len(candidates):
+            raise ContractError("durable attempt profile index is invalid")
+        selected = candidates[index]
+        if (selected["profile_id"] != attempt["profile_id"]
+                or canonical_json(evidence["attempt"]["selected_profile"])
+                != canonical_json(selected)):
+            raise ContractError("imported evidence differs from the actual attempt profile")
+    except (KeyError, TypeError, IndexError) as exc:
+        raise ContractError("durable attempt profile binding is missing") from exc
 
 
 def _open_stdin_artifact(path: str) -> BinaryIO:
@@ -340,6 +362,7 @@ class Supervisor:
         stdout: bytes,
     ) -> str:
         evidence = decode_branch_review_evidence(stdout, snapshot)
+        _require_attempt_profile(evidence, snapshot, attempt, "reviewer")
         suffix = attempt["id"]
         documents = {
             f"review-{suffix}.json": evidence["review"],
@@ -399,8 +422,9 @@ class Supervisor:
         stdout: bytes,
     ) -> str:
         evidence = validate_implementation_evidence(
-            json.loads(stdout.decode("utf-8")), snapshot,
+            strict_json(stdout), snapshot,
         )
+        _require_attempt_profile(evidence, snapshot, attempt, "implementer")
         task = snapshot["task"]
         delivery = snapshot["delivery_workspace"]
         source_repo = Path(task["project"]["repo_path"]).resolve(strict=True)
@@ -596,6 +620,20 @@ class Supervisor:
             workflow_delivery = managed_workflow and workflow == "issue-delivery"
             role = attempt.get("role", "worker")
             semantic_error=None
+            native_failure = None
+            if role == "implementer" and workflow_delivery:
+                # Only normalized, profile-bound diagnostics may reach reports.
+                # Raw output remains a hash-bound private artifact, not identity.
+                try:
+                    routed = snapshot["routing"]["roles"][role]
+                    selected = [routed["selected"], *routed["fallbacks"]][attempt["profile_index"]]
+                    adapter = snapshot.get("implementation_adapters", {}).get(selected["profile_id"])
+                    if isinstance(adapter, dict) and adapter.get("harness") == "claude":
+                        native_failure = validate_failure(
+                            strict_json(captures["stdout"]), selected["profile_sha256"],
+                        )
+                except (ContractError, KeyError, TypeError, IndexError):
+                    pass
             if (role == "implementer" and workflow_delivery
                     and not receipt["cancelled"]
                     and not receipt["timed_out"] and receipt["returncode"] == 0):
@@ -627,6 +665,9 @@ class Supervisor:
                     evidence = decode_headless_lead_evidence(
                         captures["stdout"], snapshot, frozen_handoff,
                     )
+                    _require_attempt_profile(evidence, snapshot, attempt, "lead")
+                    if evidence["choice"]["disposition"] == "accept":
+                        require_independent_delivery_review(snapshot, handoff.packet)
                     content = (canonical_json(evidence) + "\n").encode()
                     name = f"lead-attempt-{attempt['id']}.json"
                     path,digest,size=self.store.finalize_artifact(run_id,name,content)
@@ -705,6 +746,12 @@ class Supervisor:
                         "returncode": receipt["returncode"],
                     }
                     payload.update(report_error)
+                if native_failure is not None:
+                    diagnostics = native_failure["native_diagnostics"]
+                    metadata["native_diagnostics"] = diagnostics
+                    if report_error is not None:
+                        report_error["native_diagnostics"] = diagnostics
+                    payload["native_diagnostics"] = diagnostics
                 candidates = []
                 profile_index = None
                 try:
@@ -759,6 +806,8 @@ class Supervisor:
                         "returncode": receipt["returncode"],
                         "cancelled": receipt["cancelled"],
                         "timed_out": receipt["timed_out"],
+                        **({"native_diagnostics": native_failure["native_diagnostics"]}
+                           if native_failure is not None else {}),
                         "selected_profile": (
                             candidates[profile_index]
                             if type(profile_index) is int

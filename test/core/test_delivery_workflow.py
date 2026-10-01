@@ -384,9 +384,10 @@ class DeliveryWorkspaceTest(unittest.TestCase):
             "  exit 0\n"
             "fi\n"
             "printf '%s\\n' \"VALUE = 'fixed'\" > src/app.py\n"
-            "printf '%s\\n' '{\"type\":\"result\",\"is_error\":false,"
+            "printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,"
             "\"result\":\"Applied the bounded fix.\","
             "\"session_id\":\"session-fixture\","
+            "\"modelUsage\":{\"claude-sonnet-fixture\":{\"inputTokens\":12,\"outputTokens\":7}},"
             "\"usage\":{\"input_tokens\":12,\"output_tokens\":7}}'\n"
         )
         binary.chmod(0o700)

@@ -2,25 +2,35 @@
 
 This file is the recovery entry point for a quota cutoff, interrupted task or new coding-agent session. Update it at each coherent checkpoint and before a long live probe. A pending milestone stays pending when its evidence is incomplete.
 
-## Current position — September 29, 2026
+## Current position — October 1, 2026
 
 ### Review correction and next action
 
-Latest handoff is a **plan plus preserved failing R2 regressions**, not an R2
-repair. Production remains at R1 commit `6848f11`.
-`test/core/test_claude_identity.py` now contains 16 fake-CLI tests; the focused
-baseline ran in 3.162 seconds with 39 assertion/subtest failures and 4 errors
-(non-object JSON raises `AttributeError`). No live provider call or new
-production change occurred. The current test tree is knowingly red; the
-330-test green result below predates these new regressions. See
+R2 implementation is preserved after `3612942`: strict native result parsing,
+v2 import evidence, actual-model independence and durable failed diagnostics.
+The 16 original worker regressions, 12 import/parser regressions, 19 existing
+delivery tests and nine public native delivery/fallback/cancellation/legacy
+tests have passed focused runs. Independent review identified two additional
+gaps (actual durable-attempt profile binding and exact native-byte retention);
+both were reproduced, repaired and independently rechecked with four passing
+targeted regressions and no additional actionable finding.
+
+The first integrated gate before those last two fixes passed 363 tests with
+two optional-SDK skips. The subsequent 367-test gate completed with **six
+failures and two skips**, not a pass. Four failures show budget expiration or
+15–17 minute UTC jumps during a 231-second monotonic suite. On October 1, all
+six failed cases passed unchanged in 18.998 seconds; per-test UTC and monotonic
+elapsed measurements agreed. This supports an environmental timing explanation,
+but does not erase the failed gate. A clean complete rerun remains the next
+verification step; do not weaken budget or identity enforcement. The recurring
+SQLite cleanup warning remains assigned to R5. **R2 is not closed yet.**
+
+No live provider call, installed refresh or global provider-setting change
+occurred. The original red baseline is retained in
 [R2 baseline evidence](evidence/R2-identity-red-baseline-2026-09-29.json).
-This handoff's Bash gate passed all 227 assertions across 11 files with
-process inspection permitted; the first sandbox-stalled run was stopped and
-is not a pass. Generated-reference, JSON and whitespace checks passed. No
-complete core rerun was needed for this plan-only checkpoint; R2 remains red.
-Sol's next slice is R2a parser/worker, then R2b strict import/actual-model
-independence and R2c failed-receipt/replay coverage, as detailed in the
-[updated execution plan](SOL-REVIEW-FOLLOWUP.md#ready-to-execute-handoff-for-sol).
+Once R2's final gate is green and recorded, continue R3 rather than retrying
+blocked authentication. R3's two-outcome/three-case promotion bug was reproduced
+again without modifying production code; it still needs provenance repair.
 
 R1's source repair is verified after `399d93d`: the public regression first
 reproduced four unsafe mutation paths (review/delivery × host/headless). The

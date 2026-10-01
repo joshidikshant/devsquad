@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from .contracts import ContractError
+from .claude_identity import validate_observation
 from .store import canonical_json
 from .validation import validate_task
 
@@ -585,7 +586,7 @@ def validate_implementation_evidence(
     document = _exact(value, {
         "schema_version", "workflow", "baseline_oid", "summary", "attempt",
     }, "implementation evidence")
-    if document["schema_version"] != 1 or type(document["schema_version"]) is not int:
+    if type(document["schema_version"]) is not int or document["schema_version"] not in {1, 2}:
         raise ContractError("implementation evidence schema_version is invalid")
     if document["workflow"] != "issue-delivery":
         raise ContractError("implementation evidence workflow is invalid")
@@ -624,10 +625,16 @@ def validate_implementation_evidence(
         selected["profile_id"]
     )
     if adapter is None:
-        if attempt["observed_identity"] is not None or attempt["native_ids"] != {}:
+        if (document["schema_version"] != 1
+                or attempt["observed_identity"] is not None or attempt["native_ids"] != {}):
             raise ContractError("fixture implementation cannot claim native identity")
-    elif not isinstance(attempt["observed_identity"], dict):
-        raise ContractError("native implementation identity is missing")
+    else:
+        if document["schema_version"] != 2:
+            raise ContractError("native implementation requires v2 reported identity evidence")
+        validate_observation(
+            attempt["observed_identity"], adapter, selected["profile"],
+            attempt["native_ids"], attempt["usage"],
+        )
     if attempt["worker_invocations"] != 1 or type(attempt["worker_invocations"]) is not int:
         raise ContractError("implementation worker invocation accounting is invalid")
     native_requests = attempt["native_model_requests"]
@@ -662,7 +669,7 @@ def make_implementation_evidence(
 ) -> dict[str, Any]:
     selected = snapshot["routing"]["roles"]["implementer"]["selected"]
     document = {
-        "schema_version": 1,
+        "schema_version": 2 if observed_identity is not None else 1,
         "workflow": "issue-delivery",
         "baseline_oid": snapshot["delivery_workspace"]["baseline_oid"],
         "summary": summary,
@@ -1091,7 +1098,43 @@ def decode_branch_review_evidence(
         snapshot,
     )
     require_check_integrity(evidence["checks"])
+    require_independent_delivery_review(snapshot, evidence)
     return evidence
+
+
+def require_independent_delivery_review(
+    snapshot: dict[str, Any], review: dict[str, Any],
+) -> None:
+    """Gate new imports/acceptances; historical receipts remain readable."""
+    if snapshot.get("task", {}).get("workflow") != "issue-delivery":
+        return
+    candidate = review.get("candidate_sha256")
+    iteration = next((item for item in snapshot.get("delivery_iterations", [])
+                      if item.get("candidate", {}).get("candidate_sha256") == candidate), None)
+    if iteration is None:
+        raise ContractError("independent review has no saved implementation candidate")
+    implementation_snapshot = dict(snapshot)
+    implementation_snapshot.pop("revision_request", None)
+    if "revision_request" in iteration:
+        implementation_snapshot["revision_request"] = iteration["revision_request"]
+    implementation = validate_implementation_evidence(
+        iteration.get("implementation"), implementation_snapshot,
+    )
+    writer = implementation["attempt"]["observed_identity"]
+    reviewer = review["attempt"]["observed_identity"]
+    # Explicit all-fixture runs exercise orchestration, never native identity.
+    if (writer is None and reviewer is None
+            and "internal_implementation_fixture" in snapshot
+            and "internal_review_fixture" in snapshot):
+        return
+    if (not isinstance(writer, dict) or not isinstance(reviewer, dict)
+            or writer.get("verification") != "verified"
+            or reviewer.get("verification") != "verified"
+            or not isinstance(reviewer.get("model_id"), str)
+            or reviewer["model_id"] in {"sonnet", "opus", "haiku"}):
+        raise ContractError("delivery requires verified independent native model identities")
+    if writer["model_id"].casefold() == reviewer["model_id"].casefold():
+        raise ContractError("delivery reviewer model is not independent of the implementer")
 
 
 def require_check_integrity(checks: list[dict[str, Any]]) -> None:

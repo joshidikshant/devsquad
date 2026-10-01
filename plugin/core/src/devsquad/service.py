@@ -1355,6 +1355,8 @@ class Service:
         validate_handoff_decision_evidence(decision, packet)
         if decision.get("disposition") == "accept":
             require_check_integrity(packet["checks"])
+            from .workflows import require_independent_delivery_review
+            require_independent_delivery_review(snapshot, packet)
         revisions_used = sum(
             entry["decision"]["disposition"] == "revise"
             for entry in store.branch_review_history(run_id)
@@ -1433,12 +1435,14 @@ class Service:
                 "observed_identity": None,
                 "worker_invocations": 1,
                 "native_model_requests": None,
-                "usage": {
+                "usage": error.get("native_diagnostics", {}).get("usage", {
                     "input_tokens": None,
                     "output_tokens": None,
                     "total_tokens": None,
                     "source": "unavailable",
-                },
+                }),
+                **({"native_diagnostics": error["native_diagnostics"]}
+                   if "native_diagnostics" in error else {}),
                 "error": error,
             })
         return failures

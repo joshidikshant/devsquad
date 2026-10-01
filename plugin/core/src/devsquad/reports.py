@@ -276,6 +276,9 @@ def build_early_terminal_reports(
             "output_artifacts": projected,
             "error": error,
         }
+        if "native_diagnostics" in attempt:
+            attempt_projection["native_diagnostics"] = attempt["native_diagnostics"]
+            attempt_projection["usage"] = attempt["native_diagnostics"]["usage"]
     criteria = [{
         "id": criterion.get("id"),
         "description": criterion.get("description"),

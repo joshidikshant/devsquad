@@ -81,6 +81,28 @@ same versioned binding shape and affects new runs only.
 
 Install-time discovery reports supported values and evidence (`documented`, `probed`, `unavailable`, `unknown`) with `checked_at`, CLI version and toolset hash. Selecting a known catalog entry verifies that it exists, not that the invocation used it: attempts retain separate `requested` and `observed` fields. Manually verified mappings may establish identity for a versioned harness; silent model fallback must never be labelled confirmed.
 
+Claude implementation evidence v2 keeps the frozen requested profile separate
+from `observed_identity`. The tested native result must have a success envelope,
+bounded session ID and a single concrete `modelUsage` entry. Its model key is
+the reported serving identity; `canonicalModel` is pricing metadata only.
+Tested family aliases may resolve to a reported concrete member of that family,
+without hardcoded current revisions. Multiple entries cannot identify a unique
+writer and fail closed. Effective effort and backing revision remain null when
+the result does not report them; `verification_scope: reported_model` does not
+claim that these unknown settings were verified. Native session, typed usage,
+alias resolution and the normalized result evidence are retained and validated
+again on coordinator import, before candidate finalization.
+
+New delivery review imports and acceptance require verified different reported
+model IDs, regardless of requested aliases, family labels or harness names.
+Unknown or mixed native/fixture identities cannot establish independence;
+explicit all-fixture runs test orchestration only. Legacy native implementation
+v1 receipts remain readable and exact terminal decisions replayable, but cannot
+authorize new acceptance. Rejected native results retain unverified, bounded
+model/session/usage diagnostics, native-output hash/size and durable stream
+artifact references across failure, fallback and cancellation. Provider prose
+and arbitrary result fields are not copied into those diagnostic projections.
+
 ### Automatic selection and manual overrides
 
 Default selection is automatic among policy-eligible profiles. The host supplies task requirements; the deterministic router chooses the model/effort/tool profile without another planning-model call. Within the selected toolbox, the worker chooses individual tool calls. Discovery can enumerate supported configurations; initial quality preferences and account-pool mappings still require evidence and operator setup.

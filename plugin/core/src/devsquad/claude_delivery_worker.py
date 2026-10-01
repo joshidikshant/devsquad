@@ -11,6 +11,10 @@ import sys
 from typing import Any
 
 from .contracts import CapabilityUnavailable, ContractError, ProfileUnsupported
+from .claude_identity import (
+    ClaudeResultError, failure_diagnostics, failure_envelope, native_result,
+    observed_identity, strict_json,
+)
 from .store import canonical_json
 from .workflows import build_implementation_prompt, make_implementation_evidence
 
@@ -122,41 +126,6 @@ def _validated(snapshot: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
     return adapter, profile
 
 
-def _structured_result(payload: str) -> tuple[str, str, dict[str, Any]]:
-    try:
-        document = json.loads(payload)
-    except json.JSONDecodeError as exc:
-        raise ContractError("Claude implementation output is not JSON") from exc
-    if (not isinstance(document, dict) or document.get("type") != "result"
-            or document.get("is_error") is True
-            or not isinstance(document.get("result"), str)
-            or not document["result"].strip()):
-        raise ContractError("Claude implementation output has no successful result")
-    session_id = document.get("session_id")
-    if not isinstance(session_id, str) or not session_id:
-        raise ContractError("Claude implementation output has no session id")
-    raw_usage = document.get("usage")
-    usage = {
-        "input_tokens": None,
-        "output_tokens": None,
-        "total_tokens": None,
-        "source": "unavailable",
-    }
-    if isinstance(raw_usage, dict):
-        input_tokens = raw_usage.get("input_tokens")
-        output_tokens = raw_usage.get("output_tokens")
-        if all(type(value) is int and value >= 0 for value in (
-            input_tokens, output_tokens,
-        )):
-            usage = {
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-                "source": "native_reported",
-            }
-    return document["result"].strip(), session_id, usage
-
-
 def run(snapshot: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(snapshot, dict):
         raise ContractError("delivery snapshot must be an object")
@@ -175,7 +144,7 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
             [str(binary), "--version"], text=True, capture_output=True,
             timeout=3, check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except (OSError, subprocess.TimeoutExpired, UnicodeError) as exc:
         raise CapabilityUnavailable("Claude version could not be re-observed") from exc
     if version.returncode != 0 or version.stdout.strip() != adapter["harness_version"]:
         raise CapabilityUnavailable("Claude version changed after preflight")
@@ -200,7 +169,7 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
             argv,
             cwd=workspace,
             env={**os.environ, "DEVSQUAD_WORKER": "1"},
-            text=True,
+            text=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=timeout_seconds,
@@ -212,15 +181,17 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
             argv, 124, exc.stdout or "", exc.stderr or "",
         )
         timed_out = True
-    stdout = completed.stdout.decode("utf-8", "replace") if isinstance(
-        completed.stdout, bytes
-    ) else completed.stdout
+    # Preserve exact native bytes, including invalid UTF-8 and CRLF. Only
+    # stderr classification uses replacement decoding; stdout is parsed strictly.
+    stdout = completed.stdout
     stderr = completed.stderr.decode("utf-8", "replace") if isinstance(
         completed.stderr, bytes
     ) else completed.stderr
-    if (len(stdout.encode()) > MAX_CLAUDE_OUTPUT_BYTES
+    if (len(stdout.encode() if isinstance(stdout, str) else stdout) > MAX_CLAUDE_OUTPUT_BYTES
             or len(stderr.encode()) > MAX_CLAUDE_OUTPUT_BYTES):
-        raise ContractError("Claude implementation output exceeds its byte limit")
+        raise ClaudeResultError("CLI_ERROR", failure_diagnostics(
+            stdout, None, "output_limit",
+        ))
     import re
     error_code = next((
         code for code, pattern in adapter["error_patterns"].items()
@@ -230,15 +201,15 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         error_code = "TIMEOUT"
     elif completed.returncode != 0 and error_code is None:
         error_code = "CLI_ERROR"
+    provider_document = None
     try:
-        summary, session_id, usage = _structured_result(stdout)
+        provider_document = strict_json(stdout)
+        summary, native = native_result(provider_document)
+        observed = observed_identity(native, adapter, profile)
     except ContractError as exc:
-        try:
-            provider_document = json.loads(stdout)
-        except json.JSONDecodeError:
-            provider_document = {}
+        safe_document = provider_document if isinstance(provider_document, dict) else {}
         provider_text = str(
-            provider_document.get("result") or provider_document.get("error") or ""
+            safe_document.get("result") or safe_document.get("error") or ""
         )
         error_code = error_code or next((
             code for code, pattern in adapter["error_patterns"].items()
@@ -248,27 +219,20 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
             adapter["denied_pattern"], provider_text, re.IGNORECASE,
         ):
             error_code = "CLI_ERROR"
-        raise ContractError(
-            f"{error_code or 'CLI_ERROR'}: Claude implementation failed"
-        ) from exc
+        raise ClaudeResultError(error_code or "CLI_ERROR", failure_diagnostics(
+            stdout, provider_document, "native_result_invalid",
+        )) from exc
     if error_code is not None:
-        raise ContractError(f"{error_code}: Claude implementation failed")
-    observed = {
-        "harness": "claude",
-        "harness_version": adapter["harness_version"],
-        "model_provider": adapter["model_provider"],
-        "model_id": model,
-        "effort": effort,
-        "permission_policy": "workspace_write",
-        "verification": "verified",
-    }
+        raise ClaudeResultError(error_code, failure_diagnostics(
+            stdout, provider_document, "execution_failed",
+        ))
     return make_implementation_evidence(
         snapshot,
         summary,
         observed_identity=observed,
-        native_ids={"session_id": session_id},
+        native_ids={"session_id": native["session_id"]},
         native_model_requests=None,
-        usage=usage,
+        usage=native["usage"],
     )
 
 
@@ -280,7 +244,16 @@ def main() -> int:
         snapshot = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ContractError("delivery snapshot is not valid UTF-8 JSON") from exc
-    sys.stdout.write(canonical_json(run(snapshot)) + "\n")
+    try:
+        result = run(snapshot)
+    except ClaudeResultError as exc:
+        selected = snapshot["routing"]["roles"]["implementer"]["selected"]
+        sys.stdout.write(canonical_json(failure_envelope(
+            exc, selected["profile_sha256"],
+        )) + "\n")
+        sys.stderr.write(str(exc) + "\n")
+        return 1
+    sys.stdout.write(canonical_json(result) + "\n")
     return 0
 
 
