@@ -20,7 +20,7 @@ from .experiment_provenance import (
     validate_arm_chain, validate_assignment,
 )
 from .learning import validate_outcome
-from .store import canonical_json
+from .store import canonical_json, request_hash
 
 
 def _digest(value: Any) -> str:
@@ -108,6 +108,86 @@ def verify_prelaunch_snapshot(
         raise ContractError("experiment launch changed its controlled input/profile/execution")
 
 
+def _named_artifact(connection, run_id, name, artifacts):
+    row = connection.execute("SELECT id FROM artifacts WHERE run_id=? AND name=?", (run_id, name)).fetchone()
+    if row is None:
+        raise ContractError(f"experiment missing imported artifact: {name}")
+    artifact, content = _artifact(connection, row["id"], run_id)
+    artifacts.append(artifact)
+    return content
+
+
+def _delivery_revision(connection, run_id, events, claim_version, previous_candidate):
+    revisions = [event for event in events if event["type"] == "delivery.revision_queued"
+                 and event["run_version"] < claim_version]
+    if not revisions:
+        if previous_candidate is not None:
+            raise ContractError("experiment delivery continuation has no revision fence")
+        return None
+    event = revisions[-1]
+    payload = _object(event["payload"], "delivery revision event")
+    row = connection.execute(
+        "SELECT h.*,s.submission_id,s.submission_hash,s.decision_json,s.disposition,s.recorded_run_version "
+        "FROM handoffs h JOIN handoff_submissions s ON s.handoff_id=h.id "
+        "WHERE h.run_id=? AND h.id=? AND s.submission_id=? AND s.outcome='recorded'",
+        (run_id, payload.get("handoff_id"), payload.get("submission_id")),
+    ).fetchone()
+    if row is None:
+        raise ContractError("experiment delivery revision has no recorded disposition")
+    packet = _object(row["packet_json"], "revision handoff")
+    decision = _object(row["decision_json"], "revision disposition")
+    body = {key: value for key, value in decision.items() if key != "submission_hash"}
+    if (row["packet_sha256"] != _digest(packet) or row["submission_hash"] != request_hash(body)
+            or decision.get("submission_hash") != row["submission_hash"]
+            or decision.get("submission_id") != row["submission_id"]
+            or row["disposition"] != "revise" or decision.get("disposition") != "revise"
+            or row["recorded_run_version"] >= event["run_version"]
+            or previous_candidate is None
+            or packet.get("candidate_sha256") != previous_candidate["candidate_sha256"]
+            or payload.get("previous_candidate_sha256") != previous_candidate["candidate_sha256"]):
+        raise ContractError("experiment delivery revision identity/hash is inconsistent")
+    return {
+        "handoff_id": row["id"], "sequence": row["sequence"],
+        "submission_id": row["submission_id"], "submission_hash": row["submission_hash"],
+        "previous_candidate_sha256": packet["candidate_sha256"], "reason": decision["reason"],
+        "review": packet["review"], "checks": packet["checks"], "evidence_refs": decision["evidence_refs"],
+    }
+
+
+def _delivery_candidate(connection, run_id, attempt_id, events, artifacts, snapshot, iteration):
+    candidates = connection.execute(
+        "SELECT id FROM artifacts WHERE run_id=? AND name GLOB 'candidate-*.json'", (run_id,),
+    ).fetchall()
+    matches = []
+    for row in candidates:
+        artifact, content = _artifact(connection, row["id"], run_id)
+        candidate = _object(content, "delivery candidate")
+        if candidate.get("implementation_artifact") == f"implementation-attempt-{attempt_id}.json":
+            matches.append((artifact, candidate))
+    ready = [event for event in events if event["type"] == "delivery.candidate_ready"
+             and _object(event["payload"], "candidate event").get("attempt_id") == attempt_id]
+    if len(matches) != 1 or len(ready) != 1:
+        raise ContractError("experiment delivery implementation has no unique saved candidate fence")
+    artifact, candidate = matches[0]
+    fields = ("schema_version", "baseline_oid", "commit_oid", "tree_oid", "patch_sha256", "changed_paths")
+    if any(key not in candidate for key in fields):
+        raise ContractError("experiment saved candidate identity is incomplete")
+    identity = {key: candidate[key] for key in fields}
+    event = _object(ready[0]["payload"], "candidate event")
+    if (candidate.get("candidate_sha256") != _digest(identity)
+            or candidate["baseline_oid"] != snapshot["delivery_workspace"]["baseline_oid"]
+            or candidate.get("iteration") != iteration
+            or any(event.get(key) != candidate[key] for key in ("candidate_sha256", "commit_oid", "patch_sha256"))
+            or artifact["name"] != f"candidate-{iteration}.json"
+            or candidate.get("patch_artifact") != f"candidate-{iteration}.patch"):
+        raise ContractError("experiment saved candidate differs from its implementation fence")
+    artifacts.append(artifact)
+    patch = _named_artifact(connection, run_id, candidate["patch_artifact"], artifacts)
+    if hashlib.sha256(patch).hexdigest() != candidate["patch_sha256"] or len(patch) != candidate.get("patch_bytes"):
+        raise ContractError("experiment candidate patch differs from its saved identity")
+    return candidate, ready[0]["run_version"]
+
+
 def _attempts(
     connection: sqlite3.Connection, run: sqlite3.Row, frozen: sqlite3.Row,
     snapshot: dict[str, Any], assignment: dict[str, Any],
@@ -158,6 +238,9 @@ def _attempts(
     history = []
     exposed = False
     incomplete = False
+    delivery_snapshot = dict(snapshot)
+    delivery_iterations = []
+    candidate_version = None
     for row in sorted(rows, key=lambda item: claimed[item["id"]]["run_version"]):
         role = row["role"]
         route = snapshot["routing"]["roles"].get(role)
@@ -215,7 +298,7 @@ def _attempts(
             incomplete = True
         # These immutable artifacts retain imported observed identity and
         # native usage; failure diagnostics are retained in output_metadata.
-        review_imported = False
+        imports = {}
         for prefix in ("review", "implementation", "lead"):
             artifact_row = connection.execute(
                 "SELECT id FROM artifacts WHERE run_id=? AND name=?",
@@ -229,13 +312,60 @@ def _attempts(
                         or canonical_json(evidence.get("selected_profile")) != canonical_json(selected)):
                     raise ContractError("experiment imported execution differs from its frozen attempt profile")
                 artifacts.append(artifact)
-                review_imported = review_imported or prefix == "review"
-        if (role == "reviewer" and snapshot["task"]["workflow"] == "branch-review"
-                and captures):
-            if review_imported:
-                from .workflows import validate_branch_review_evidence
+                imports[prefix] = document
+        delivery = snapshot["task"]["workflow"] == "issue-delivery"
+        if captures and (role == "reviewer" or delivery and role == "implementer"):
+            prefix = "implementation" if role == "implementer" else "review"
+            if prefix in imports:
+                from .workflows import (
+                    validate_branch_review_evidence, validate_implementation_evidence,
+                    require_check_integrity, require_independent_delivery_review,
+                )
 
-                validate_branch_review_evidence(strict_json(captures["stdout"]), snapshot)
+                context = snapshot
+                if delivery and role == "implementer":
+                    context = dict(snapshot)
+                    previous = delivery_iterations[-1]["candidate"] if delivery_iterations else None
+                    revision = _delivery_revision(connection, run["id"], events, claimed[row["id"]]["run_version"], previous)
+                    if revision is not None:
+                        context["revision_request"] = revision
+                    document = validate_implementation_evidence(strict_json(captures["stdout"]), context)
+                    if canonical_json(imports[prefix]) != canonical_json(document):
+                        raise ContractError("experiment imported implementation differs from captured evidence")
+                    candidate, candidate_version = _delivery_candidate(
+                        connection, run["id"], row["id"], events, artifacts, snapshot, len(delivery_iterations) + 1,
+                    )
+                    if candidate_version <= claimed[row["id"]]["run_version"]:
+                        raise ContractError("experiment candidate precedes its implementation reservation")
+                    iteration = {"candidate": candidate, "implementation": document}
+                    if revision is not None:
+                        iteration["revision_request"] = revision
+                    delivery_iterations.append(iteration)
+                    delivery_snapshot = {**snapshot, "delivery_iterations": delivery_iterations, "workspace": {
+                        "candidate_sha256": candidate["candidate_sha256"], "base_oid": candidate["baseline_oid"],
+                        "target_oid": candidate["commit_oid"],
+                    }}
+                    if "pending_review_fixture" in snapshot:
+                        delivery_snapshot["internal_review_fixture"] = snapshot["pending_review_fixture"]
+                else:
+                    if delivery:
+                        if candidate_version is None or candidate_version >= claimed[row["id"]]["run_version"]:
+                            raise ContractError("experiment delivery reviewer has no preceding implementation candidate")
+                        context = delivery_snapshot
+                    document = validate_branch_review_evidence(strict_json(captures["stdout"]), context)
+                    if canonical_json(imports[prefix]) != canonical_json(document["attempt"]):
+                        raise ContractError("experiment imported review attempt differs from captured evidence")
+                    for name, expected in (
+                        (f"review-{row['id']}.json", document["review"]),
+                        (f"checks-{row['id']}.json", {"schema_version": 1, "candidate_sha256": document["candidate_sha256"],
+                                                   "target_oid": document["target_oid"], "results": document["checks"]}),
+                        (f"evaluation-{row['id']}.json", document["evaluation"]),
+                    ):
+                        imported = _object(_named_artifact(connection, run["id"], name, artifacts), "review import")
+                        if canonical_json(imported) != canonical_json(expected):
+                            raise ContractError("experiment imported review/check/evaluation differs from captured evidence")
+                    require_check_integrity(document["checks"])
+                    require_independent_delivery_review(context, document)
             else:
                 # Terminal failed/cancelled workers do not publish successful
                 # review evidence. Bind their opaque output to the hashed
@@ -245,12 +375,12 @@ def _attempts(
                     (run["id"],),
                 ).fetchone()
                 if receipt_row is None:
-                    raise ContractError("experiment reviewer has no imported review or failure receipt")
+                    raise ContractError(f"experiment {role} has no imported evidence or failure receipt")
                 artifact, content = _artifact(connection, receipt_row["id"], run["id"])
                 receipt = _object(content, "terminal failure receipt")
                 receipt_attempts = receipt.get("attempts")
                 if not isinstance(receipt_attempts, list):
-                    raise ContractError("experiment failed reviewer receipt attempts are invalid")
+                    raise ContractError(f"experiment failed {role} receipt attempts are invalid")
                 projections = [item for item in receipt_attempts
                                if isinstance(item, dict) and item.get("id") == row["id"]]
                 if (receipt.get("run_id") != run["id"]
@@ -259,7 +389,7 @@ def _attempts(
                         or projections[0].get("status") not in {"failed", "cancelled"}
                         or projections[0].get("role") != role
                         or canonical_json(projections[0].get("selected_profile")) != canonical_json(selected)):
-                    raise ContractError("experiment failed reviewer receipt is inconsistent")
+                    raise ContractError(f"experiment failed {role} receipt is inconsistent")
                 artifacts.append(artifact)
         history.append({
             **{key: row[key] for key in (

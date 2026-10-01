@@ -51,6 +51,23 @@ class ExperimentEligibilityTest(unittest.TestCase):
         )
         fixture.service.outcome_add(fixture.runs[("hold-1", arm)], correction)
 
+    def test_unmeasured_ratios_cannot_bypass_finite_qualification_gates(self):
+        template = copy.deepcopy(self.template)
+        template["template_id"] = "finite-measurement-template"
+        template["gate"].update(max_latency_ratio=2.0, max_usage_ratio=2.0)
+        self.store.register_profile_template(template)
+        qualification = copy.deepcopy(self.qualification)
+        qualification["template_id"] = template["template_id"]
+        for fields in (("latency_ratio",), ("usage_ratio",), ("latency_ratio", "usage_ratio")):
+            with self.subTest(invented=fields):
+                changed = copy.deepcopy(qualification)
+                for field in fields:
+                    changed["measured"][field] = 0.0
+                with self.assertRaisesRegex(ContractError, "measurements|unmeasured"):
+                    self.store.record_profile_qualification(changed)
+        with self.assertRaisesRegex(ContractError, "latency_ratio_missing.*usage_ratio_missing"):
+            self.store.record_profile_qualification(qualification)
+
     def next_fixture(self, experiment_id, *, profiles=None, candidate_succeeds=False):
         fixture = ExperimentRuntimeFixture(
             self.fixture.root / experiment_id, service=self.fixture.service, repo=self.fixture.repo,

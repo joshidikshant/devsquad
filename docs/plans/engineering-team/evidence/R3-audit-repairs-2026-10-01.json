@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-01",
+  "baseline_revision": "db55d3f",
+  "status": "source_targeted_verified_full_gate_pending",
+  "findings": {
+    "R3-001": "Delivery imports are mandatory for successful attempts; captured evidence is strictly decoded against immutable task, candidate/patch/event fences and recorded revision decisions. Review, check, evaluation and attempt imports must equal captured evidence. Failed workers require the exact hash-verified terminal attempt receipt.",
+    "R3-002": "Qualification rejects submitted latency/usage ratios when no verified paired saved measurement exists. Unknown remains unknown; finite gates requiring either metric block qualification.",
+    "check_bytecode": "Trusted checks set invocation-local PYTHONDONTWRITEBYTECODE and redirect PYTHONPYCACHEPREFIX under the isolated temporary HOME; candidate integrity allowances are unchanged."
+  },
+  "red": {
+    "delivery": "Hash-consistent malformed stdout, missing imports, candidate drift and changed imports were accepted by the baseline reader; negative regressions failed.",
+    "ratios": "Independent native audit confirmed invented-ratio bypass. Initial finite-gate regressions exposed submitted ratios not being checked against measurements; full integration/re-review pending.",
+    "bytecode": "1 test failed: importing a candidate module created __pycache__ in the candidate tree."
+  },
+  "verified": [
+    {"gate": "reader/eligibility/check targeted", "tests": 22, "seconds": 71.034, "result": "pass"},
+    {"gate": "delivery/task-entry/CLI/ratios/bytecode/historical installed upgrade", "tests": 37, "seconds": 37.167, "result": "pass"},
+    {"gate": "Bash", "assertions": 227, "files": 11, "result": "pass"},
+    {"gate": "generated reference and whitespace", "result": "pass"},
+    {"gate": "schema-13 old-package active/recoverable upgrade", "result": "pass", "scope": "Temporary install defers without selector/schema changes; old active run cancels; old queued run resumes and succeeds; subsequent update migrates to schema 15, retains old release and readable result."},
+    {"gate": "normal alias promotion", "result": "pass", "scope": "Four fake-native Codex protocol runs supply public paired evaluation. Promotion affects next normal entry; queued old snapshot and explicit pins remain unchanged. Not real-model qualification."}
+  ],
+  "failed_intermediate_gates": [
+    {"tests": 34, "seconds": 21.036, "errors": 1, "cause": "Test asserted a paired-case verdict for an unpaired failed arm; corrected fixture runs both arms."},
+    {"tests": 19, "seconds": 20.453, "failures": 1, "cause": "Public stale-evidence rejection wrapped the lower-level failed-receipt reason; corrected assertion."},
+    {"tests": 1, "seconds": 6.649, "errors": 2, "cause": "Test tearDown deleted runtime before registered cleanups; corrected cleanup ordering."}
+  ],
+  "installed_state": {"schema": 13, "nonterminal_runs": 0, "refreshed": false},
+  "limitations": ["Full core integration and bounded independent repair re-review pending", "No updated-installation Claude/Grok/Gemini live proof", "No verified paired latency/usage metric; required finite metric gates remain blocked", "R4 catalog/quota, R5 public controller/outcomes, R6 terminal UX and R7 Council remain separately open"]
+}

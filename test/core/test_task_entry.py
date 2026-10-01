@@ -2,6 +2,7 @@ import io
 import copy
 import contextlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -28,6 +29,7 @@ from devsquad import cli
 class ManagedTaskEntryTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="devsquad-task-entry-")
+        self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name) / "project"
         self.repo.mkdir()
         subprocess.run(
@@ -64,9 +66,6 @@ class ManagedTaskEntryTest(unittest.TestCase):
             "model_family": "gpt",
             "effort": "low",
         }
-
-    def tearDown(self):
-        self.temp.cleanup()
 
     def test_branch_review_freezes_exact_commits_and_embedded_routing(self):
         task, summary = build_managed_task(
@@ -187,6 +186,17 @@ class ManagedTaskEntryTest(unittest.TestCase):
         from experiment_runtime_fixture import ExperimentRuntimeFixture
         import test_lifecycle as lifecycle_fixtures
 
+        fake_bin = Path(self.temp.name) / "fake-bin"
+        fake_bin.mkdir()
+        (fake_bin / "codex").symlink_to(ROOT / "test/core/fakes/codex_review_cli.py")
+        fake_home = Path(self.temp.name) / "fake-home"
+        fake_home.mkdir()
+        (fake_home / "auth.json").write_text("{}\n")
+        (fake_home / "auth.json").chmod(0o600)
+        environment = mock.patch.dict(os.environ, {"PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}", "CODEX_HOME": str(fake_home)})
+        environment.start()
+        self.addCleanup(environment.stop)
+
         baseline_task, _ = build_managed_task(
             workflow="branch-review", project_dir=self.repo,
             base_ref="HEAD", target_ref="HEAD", goal="Normal alias proof.", codex_identity=self.codex,
@@ -207,7 +217,7 @@ class ManagedTaskEntryTest(unittest.TestCase):
         fixture = ExperimentRuntimeFixture(
             Path(self.temp.name) / "alias-pair", service=service, repo=self.repo,
             experiment_id="normal-alias-pair", profiles={"control": incumbent, "candidate": candidate},
-            policy=baseline_task["routing"]["policy"], task_class="managed-review",
+            policy=baseline_task["routing"]["policy"], task_class="managed-review", native_review=True,
         )
         self.addCleanup(fixture.close)
         fixture.run_all()
@@ -226,6 +236,7 @@ class ManagedTaskEntryTest(unittest.TestCase):
         helper.candidate = candidate
         qualification = helper.qualification(evaluated)
         qualification["task_class"] = "managed-review"
+        qualification["budget"].update(max_worker_invocations=4, worker_invocations=4)
         store.record_profile_qualification(qualification)
         store.change_profile_binding(helper.promotion("normal-promote-b"))
         self.assertEqual(store.run(old["run_id"])["mutable_snapshot"], old_snapshot)

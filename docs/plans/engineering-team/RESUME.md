@@ -4,6 +4,51 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ## Current position — October 1, 2026
 
+### Current continuation — R3 audit repairs and safe schema-update deferral
+
+The two independent findings now have source repairs and red regressions.
+Delivery evidence is decoded against the immutable prelaunch task, hash-bound
+implementation imports, candidate/patch artifacts and candidate-ready events.
+Review imports/checks must equal captured evidence, and independent identity
+is revalidated. Revision prompts are reconstructed from recorded handoff
+decisions, not unchecked final mutable snapshots. Failed writer/reviewer output
+requires the exact terminal failure receipt. Qualification cannot substitute
+caller-provided latency/usage ratios for missing saved paired measurements;
+finite measurement gates remain blocked when those measurements are unknown.
+Trusted Python checks suppress bytecode and redirect caches to their isolated
+temporary HOME, without broadening candidate integrity allowances.
+
+The initial 22-test targeted reader/eligibility/check gate passed in 71.034
+seconds. The next 34-test gate had one test-helper error (an unpaired failed
+arm has no paired case verdict), and the subsequent 19-test gate had one
+assertion mismatch: the public replay correctly reports stale evidence rather
+than exposing the lower-level failed-receipt reason. Both assertions are now
+corrected; neither failed run is represented as a pass. The real historical
+schema-13 installation test passed: the update defers without switching the
+launcher, the old active run cancels, the queued old run resumes/completes,
+then the update migrates to schema 15 and preserves readable results/releases.
+
+The normal-entry promotion fixture now uses an actual fake-native Codex
+protocol, frozen adapters and execution fingerprints instead of pretending
+fixture output is native. Its assertions pass after repairing cleanup order.
+This is an offline public-chain proof, not real-model qualification.
+
+**Next action:** finish the affected regression gate, checkpoint, then run one
+frozen full core integration gate and a bounded independent repair re-review.
+Do not repeat the broad audit. Inspect/reconcile the real old ledger before
+installing. The actual local installation remains unchanged; Claude/Grok and
+updated Gemini/Antigravity live proofs remain pending. R4 catalog/quota, R5
+public trials/outcomes, R6 terminal UX and R7 Council remain separately open.
+
+The final affected gate passes **37 tests in 37.167 seconds**, including the
+historical installed upgrade and fake-native normal-alias promotion proof.
+All **227 Bash assertions in 11 files**, generated reference and whitespace
+checks pass. A read-only inspection of the real default ledger found schema
+13 with **zero nonterminal runs**; no reconciliation/cancellation is needed.
+The installation still points at the original release. Checkpoint this slice
+before the unchanged-source full integration run. Portable details are in
+[audit repair evidence](evidence/R3-audit-repairs-2026-10-01.json).
+
 ### Latest runtime-repair slice — shared eligibility and explicit review
 
 R3b.1's unchanged-source gate at `a4a87fd` passed 427 tests (two optional-SDK

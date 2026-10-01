@@ -21,8 +21,8 @@
     "status": "partial",
     "artifact": "evidence/R3b2-eligibility-partial-2026-10-01.json",
     "scope": "Reader full gate passed at a4a87fd; schema-15 explicit revisions and shared lifecycle eligibility implemented with focused public fixtures; no install or provider calls",
-    "next_action": "441-test schema-15 integration passes at dc4e110 with two optional-SDK skips and zero unraisable exceptions; finish bounded independent R3 audit and R4 routing/catalog/quota",
-    "limitations": "Independent R3 audit incomplete; production paired-trial controller remains R5; Codex bundled path/version changed to 0.159.2 and needs compatibility update; native Gemini worker and refreshed installed proof unverified"
+    "next_action": "Independent R3 audit found delivery evidence and unmeasured-ratio gaps; repairs plus bytecode isolation and schema-13 upgrade safety pass 37 affected tests and 227 Bash assertions. Checkpoint, run frozen full integration and bounded repair re-review, then safely refresh and prove requested live workflows.",
+    "limitations": "Full integration/re-review on audit repairs pending; R4 catalog/quota, R5 public controller/outcomes, R6 UX and R7 Council open. Installed schema 13 has no nonterminal runs but is not yet refreshed. Claude/Grok/updated Gemini live proofs pending."
   },
   "planning_checkpoint": {
     "recorded_on": "2026-10-01",

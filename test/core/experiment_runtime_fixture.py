@@ -20,7 +20,8 @@ from test_experiment_provenance import digest, execution_digest
 from test_learning import experimental_final
 from test_lifecycle import profile, review_task, routing_policy
 
-from devsquad.experiment_provenance import assignment_for, paired_input_identity
+from devsquad.experiment_provenance import assignment_for, paired_input_identity, selected_execution_fingerprint
+from devsquad.codex_review_worker import freeze_codex_reviewer
 from devsquad.router import load_routing
 from devsquad.service import Service
 from devsquad.store import Store, canonical_json, git_common_dir, request_hash
@@ -31,7 +32,7 @@ class ExperimentRuntimeFixture:
         self, root: Path, *, with_fallback=False, fail_candidate=False,
         service=None, repo=None, experiment_id="saved-run-review-pair",
         candidate_succeeds=True, case_splits=None, profiles=None, workflow="branch-review",
-        policy=None, task_class=None,
+        policy=None, task_class=None, native_review=False,
     ):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -41,6 +42,7 @@ class ExperimentRuntimeFixture:
         self.experiment_id = experiment_id
         self.workflow = workflow
         self.task_class = task_class
+        self.native_review = native_review
         self.role = "implementer" if workflow == "issue-delivery" else "reviewer"
         self.case_splits = case_splits or [("eval-1", "evaluation"), ("hold-1", "held_out")]
         self.repo = repo or self.root / "repo"
@@ -86,6 +88,11 @@ class ExperimentRuntimeFixture:
             fallback = profile("profile-fallback", "model-fallback")
             self.registry["profiles"].append(fallback)
             self.policy["roles"]["reviewer"] = [{"kind": "profile", "id": fallback["id"]}]
+        self.review_adapters = {}
+        if native_review:
+            for value in self.profiles.values():
+                selected = {"profile_id": value["id"], "profile": value, "profile_sha256": digest(value)}
+                self.review_adapters[value["id"]] = freeze_codex_reviewer(selected)
         self.package_path, self.package_digest = self.service._freeze_package()
         cases = []
         for case_id, split in self.case_splits:
@@ -109,7 +116,8 @@ class ExperimentRuntimeFixture:
                 "kind": "profile_binding", "alias": "review.deep", "role": self.role,
                 **{f"{arm}_profile_id": value["id"] for arm, value in self.profiles.items()},
                 **{f"{arm}_profile_sha256": digest(value) for arm, value in self.profiles.items()},
-                **{f"{arm}_execution_sha256": execution_digest(value) for arm, value in self.profiles.items()},
+                **{f"{arm}_execution_sha256": selected_execution_fingerprint(self.declaration_snapshot(self.case_splits[0][0], arm), role=self.role)
+                   for arm in self.profiles},
             },
             "cases": cases,
             "gate": {
@@ -177,6 +185,7 @@ class ExperimentRuntimeFixture:
             "workspace": {**identity, "candidate_sha256": digest(identity)},
             "configs": {"policy_file": {"sha256": digest(self.policy)}},
             "routing": load_routing(task, canonical_json(self.registry), canonical_json(self.policy)),
+            **({"review_adapters": copy.deepcopy(self.review_adapters)} if self.native_review else {}),
         }
 
     def store(self):
@@ -212,10 +221,12 @@ class ExperimentRuntimeFixture:
                 fixture_args["_internal_implementation_fixture"] = {
                     "writes": [{"path": "README", "content": f"fixed {case_id}\n"}],
                     "delay_seconds": 0,
+                    **({"fail_profile_ids": [self.profiles["candidate"]["id"]]} if self.fail_candidate else {}),
                 }
+            if not self.native_review:
+                fixture_args["_internal_review_fixture"] = {"verdict": "clean", "summary": "Fixture review of the frozen candidate.", "findings": []}
             started = self.service.start(
                 self.task(case_id, arm), self.outcome_id(case_id, arm),
-                _internal_review_fixture={"verdict": "clean", "summary": "Fixture review of the frozen candidate.", "findings": []},
                 **fixture_args,
             )
         run_id = started["run_id"]

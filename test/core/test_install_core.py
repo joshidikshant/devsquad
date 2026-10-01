@@ -1,4 +1,5 @@
 import json
+import io
 from contextlib import closing
 import os
 from pathlib import Path
@@ -8,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
 import unittest
 import zipfile
@@ -434,6 +436,95 @@ print(json.dumps(Service(Path(sys.argv[2])).start(
             ).fetchone()
         self.assertTrue(Path(package_path).is_dir())
         self.assertEqual(len(package_digest), 64)
+
+    def test_schema_13_update_defers_for_active_and_recoverable_old_runs(self):
+        """Exercise the historical package, not a same-schema version bump."""
+        old_source = self.root / "schema13-core"
+        old_source.mkdir()
+        archived = subprocess.run(["git", "archive", "f4fa657:plugin/core"], cwd=ROOT,
+                                  check=True, capture_output=True).stdout
+        with tarfile.open(fileobj=io.BytesIO(archived)) as archive:
+            archive.extractall(old_source, filter="data")
+        first = self.install(old_source)
+        old_release = Path(first["current_target"])
+        old_python = old_release / "venv/bin/python"
+        runtime = self.install_root / "runtime"
+        repo = self.root / "schema13-repo"
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.invalid"], check=True)
+        (repo / "README").write_text("baseline\n")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-qm", "baseline"], check=True)
+        profiles, policy = branch_review_routing_documents()
+        task = json.loads((ROOT / "docs/plans/engineering-team/examples/branch-review.json").read_text())
+        task.update(project={"repo_path": str(repo), "base_ref": "HEAD", "target_ref": "HEAD"},
+                    scope={"read_paths": ["README"], "write_paths": []}, checks=[],
+                    routing={"profiles": json.loads(profiles), "policy": json.loads(policy)})
+        task_path = self.root / "schema13-task.json"
+        task_path.write_text(json.dumps(task))
+        script = """
+import json,sys
+from pathlib import Path
+from unittest.mock import patch
+from devsquad.service import Service
+s=Service(Path(sys.argv[2]))
+task=json.loads(Path(sys.argv[1]).read_text())
+live=s.start(task,'schema13-active',_internal_fake_delay=30)
+with patch.object(s,'_spawn_daemon',return_value=0):
+    queued=s.start(task,'schema13-recoverable',_internal_fake_delay=0.1)
+print(json.dumps([live,queued]))
+"""
+        process = subprocess.run([str(old_python), "-P", "-c", script, str(task_path), str(runtime)],
+                                 check=True, capture_output=True, text=True, env=self.environment, cwd=self.root)
+        live, queued = json.loads(process.stdout)
+        launcher = self.bin_dir / "squad"
+        try:
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                status = self.cli_json(launcher, "status", live["run_id"], "--runtime-dir", str(runtime))
+                if status["data"]["state"] == "running":
+                    break
+                time.sleep(0.05)
+            self.assertEqual(status["data"]["state"], "running", status)
+            result = subprocess.run(["/bin/bash", str(INSTALLER), "--json"], capture_output=True,
+                                    text=True, env=self.environment, cwd=ROOT)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("active/recoverable", result.stderr)
+            self.assertEqual((self.install_root / "current").resolve(), old_release)
+            with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 13)
+            self.cli_json(launcher, "cancel", live["run_id"], "--runtime-dir", str(runtime))
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                state = self.cli_json(launcher, "status", live["run_id"], "--runtime-dir", str(runtime))["data"]["state"]
+                if state == "cancelled":
+                    break
+                time.sleep(0.05)
+            self.assertEqual(state, "cancelled")
+            # A queued old-package run remains recoverable after the deferral.
+            self.cli_json(launcher, "resume", queued["run_id"], "--runtime-dir", str(runtime))
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                state = self.cli_json(launcher, "status", queued["run_id"], "--runtime-dir", str(runtime))["data"]["state"]
+                if state == "succeeded":
+                    break
+                time.sleep(0.05)
+            self.assertEqual(state, "succeeded")
+            updated = self.install()
+            self.assertNotEqual(updated["current_target"], str(old_release))
+            self.assertTrue(old_release.is_dir())
+            with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
+            self.assertTrue(self.cli_json(launcher, "result", queued["run_id"], "--runtime-dir", str(runtime))["data"]["ready"])
+        finally:
+            # Use the old package explicitly even if a later assertion fails.
+            cleanup_script = "from pathlib import Path; import sys; from devsquad.service import Service; s=Service(Path(sys.argv[1])); [s.cancel(r) for r in sys.argv[2:]]"
+            with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
+                schema = connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+            if schema == 13:
+                subprocess.run([str(old_python), "-P", "-c", cleanup_script, str(runtime), live["run_id"], queued["run_id"]],
+                               capture_output=True, env=self.environment, cwd=self.root)
 
     def cli_json(self, launcher, *arguments):
         result = subprocess.run(

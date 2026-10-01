@@ -175,6 +175,16 @@ class DurableBranchReviewTest(unittest.TestCase):
         self.assertTrue(all(not Path(home).exists() for home in homes))
         self.assertEqual((inherited_home / "credential-marker").read_text(), "private\n")
 
+    def test_trusted_python_check_does_not_write_bytecode_into_candidate(self):
+        (self.repo / "checked_module.py").write_text("VALUE = 7\n")
+        with patch.dict(os.environ, {"PYTHONDONTWRITEBYTECODE": "0"}):
+            result = _run_check({
+                "id": "import-candidate", "argv": [sys.executable, "-c", "import checked_module; assert checked_module.VALUE == 7"],
+                "cwd": ".", "timeout_seconds": 10, "required_to_pass": True,
+            }, self.repo.resolve(), "candidate-sha256", self.target)
+        self.assertEqual(result["status"], "passed")
+        self.assertFalse((self.repo / "__pycache__").exists())
+
     def configure_fixture_headless(self):
         profiles = json.loads((self.repo / "devsquad/profiles.json").read_text())
         lead = dict(profiles["profiles"][0])

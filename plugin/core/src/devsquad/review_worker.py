@@ -69,6 +69,8 @@ def _run_check(
     with tempfile.TemporaryDirectory(prefix="devsquad-check-home-") as check_home:
         environment = os.environ.copy()
         environment["HOME"] = check_home
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        environment["PYTHONPYCACHEPREFIX"] = str(Path(check_home) / "python-cache")
         try:
             process = subprocess.Popen(
                 check["argv"],

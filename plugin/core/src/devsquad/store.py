@@ -174,6 +174,18 @@ class Store:
             current = self.connection.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").fetchone()[0] if table else 0
             if current > SUPPORTED_SCHEMA_VERSION:
                 raise SchemaVersionError(f"database schema {current} is newer than supported {SUPPORTED_SCHEMA_VERSION}")
+            if 0 < current < SUPPORTED_SCHEMA_VERSION:
+                runs_table = self.connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='runs'").fetchone()
+                if runs_table is not None:
+                    pending = self.connection.execute(
+                        "SELECT id,state,phase FROM runs WHERE state NOT IN ('succeeded','failed','cancelled') ORDER BY created_at",
+                    ).fetchall()
+                    if pending:
+                        identifiers = ", ".join(row["id"] for row in pending)
+                        raise SchemaVersionError(
+                            f"schema upgrade {current} → {SUPPORTED_SCHEMA_VERSION} deferred: active/recoverable runs {identifiers}; "
+                            "finish or cancel them using the previous installed release, then retry the update"
+                        )
             while current < SUPPORTED_SCHEMA_VERSION:
                 next_version = current + 1
                 candidates = [entry for entry in files("devsquad.migrations").iterdir() if entry.name.startswith(f"{next_version:03d}_") and entry.name.endswith(".sql")]
@@ -2154,6 +2166,13 @@ class Store:
                     or record["measured"]["held_out_pairs"] != metrics["held_out"]["available_pairs"]
                     or record["measured"]["critical_defects"] != escaped):
                 raise ContractError("qualification measurements do not match saved evaluation")
+            # Saved evaluations currently contain no verified paired whole-run
+            # latency or usage measurement. UTC attempt timestamps are not
+            # monotonic latency, and partial native token reports are not a
+            # complete paired usage measure. Preserve unknown rather than
+            # letting caller-supplied ratios grant lifecycle authority.
+            if any(record["measured"][field] is not None for field in ("latency_ratio", "usage_ratio")):
+                raise ContractError("qualification measurements contain unmeasured latency/usage ratios")
             if evaluation["verdict"] != "promotion_proposal":
                 failures.append("experiment_did_not_propose_promotion")
         failures = sorted(set(failures))

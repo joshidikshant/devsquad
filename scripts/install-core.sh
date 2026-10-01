@@ -391,6 +391,28 @@ PY
   RELEASE_CREATED=1
 fi
 
+# Migrate the explicitly scoped default ledger before switching the launcher.
+# Store fences migrations transactionally against active/recoverable old runs.
+# Custom runtimes receive the same guard on their first new-release operation.
+UPGRADE_RUNTIME="${DEVSQUAD_RUNTIME_DIR:-${INSTALL_ROOT}/runtime}"
+case "$UPGRADE_RUNTIME" in /*) ;; *) fail "runtime directory must be absolute" ;; esac
+if [ -f "$UPGRADE_RUNTIME/state.sqlite3" ]; then
+  "$RELEASE_DIR/venv/bin/python" -P - "$UPGRADE_RUNTIME" <<'PY' || fail "runtime upgrade deferred; previous current selector and launcher are unchanged"
+from pathlib import Path
+import sys
+from devsquad.store import Store
+
+runtime = Path(sys.argv[1])
+try:
+    store = Store(runtime / "state.sqlite3", runtime / "artifacts")
+except Exception as exc:
+    print(str(exc), file=sys.stderr)
+    raise SystemExit(1)
+else:
+    store.close()
+PY
+fi
+
 CURRENT_CHANGED=0
 CURRENT_TARGET="releases/$RELEASE_ID"
 if [ -L "$INSTALL_ROOT/current" ] && [ "$(readlink "$INSTALL_ROOT/current")" = "$CURRENT_TARGET" ]; then
