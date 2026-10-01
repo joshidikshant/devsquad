@@ -13,6 +13,7 @@ import tarfile
 import time
 import unittest
 import zipfile
+from unittest.mock import patch
 
 from devsquad_test_fixtures import branch_review_routing_documents
 
@@ -515,8 +516,10 @@ print(json.dumps([live,queued]))
             self.assertNotEqual(updated["current_target"], str(old_release))
             self.assertTrue(old_release.is_dir())
             with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 13)
             self.assertTrue(self.cli_json(launcher, "result", queued["run_id"], "--runtime-dir", str(runtime))["data"]["ready"])
+            with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
         finally:
             # Use the old package explicitly even if a later assertion fails.
             cleanup_script = "from pathlib import Path; import sys; from devsquad.service import Service; s=Service(Path(sys.argv[1])); [s.cancel(r) for r in sys.argv[2:]]"
@@ -525,6 +528,82 @@ print(json.dumps([live,queued]))
             if schema == 13:
                 subprocess.run([str(old_python), "-P", "-c", cleanup_script, str(runtime), live["run_id"], queued["run_id"]],
                                capture_output=True, env=self.environment, cwd=self.root)
+
+    def test_failed_selector_activation_never_advances_the_old_ledger(self):
+        from devsquad.release_activation import activate_release
+        runtime = self.root / "activation-runtime"
+        runtime.mkdir()
+        database = runtime / "state.sqlite3"
+        with closing(sqlite3.connect(database)) as connection:
+            for migration in sorted((CORE / "src/devsquad/migrations").glob("*.sql")):
+                version = int(migration.name.split("_", 1)[0])
+                if version > 13:
+                    break
+                connection.executescript(migration.read_text())
+                connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?, 'fixture')", (version,))
+            connection.commit()
+        selector, temporary = self.root / "current", self.root / "prepared-selector"
+        selector.symlink_to("old-release")
+        temporary.symlink_to("new-release")
+        with patch("devsquad.release_activation.os.replace", side_effect=OSError("injected activation failure")):
+            with self.assertRaisesRegex(OSError, "injected activation failure"):
+                activate_release(temporary, selector, runtime, supported_schema_version=15)
+        self.assertEqual(os.readlink(selector), "old-release")
+        with closing(sqlite3.connect(database, timeout=1)) as connection:
+            connection.execute("BEGIN EXCLUSIVE")
+            self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 13)
+            connection.rollback()
+
+    def test_preopened_schema13_store_cannot_admit_work_after_new_schema_commit(self):
+        from devsquad.store import Store
+        old_source = self.root / "preopened-schema13-core"
+        old_source.mkdir()
+        archived = subprocess.run(["git", "archive", "f4fa657:plugin/core"], cwd=ROOT,
+                                  check=True, capture_output=True).stdout
+        with tarfile.open(fileobj=io.BytesIO(archived)) as archive:
+            archive.extractall(old_source, filter="data")
+        first = self.install(old_source)
+        old_python = Path(first["current_target"]) / "venv/bin/python"
+        runtime = self.install_root / "runtime"
+        repo = self.root / "preopened-repo"
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        script = """
+import json,sys
+from pathlib import Path
+from devsquad.store import Store,git_common_dir
+s=Store(Path(sys.argv[1])/'state.sqlite3',Path(sys.argv[1])/'artifacts')
+s._project(git_common_dir(Path(sys.argv[2])))
+print('ready',flush=True)
+sys.stdin.readline()
+try:
+    s.claim_start(Path(sys.argv[2]),'late-old-client',{'task':'bounded'},'old-owner')
+except Exception as exc:
+    print(json.dumps({'error':str(exc)}),flush=True)
+else:
+    print(json.dumps({'unsafe_admission':True}),flush=True)
+finally:
+    s.close()
+"""
+        process = subprocess.Popen([str(old_python), "-P", "-c", script, str(runtime), str(repo)],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, env=self.environment, cwd=self.root)
+        try:
+            self.assertEqual(process.stdout.readline().strip(), "ready")
+            self.install()
+            store = Store(runtime / "state.sqlite3", runtime / "artifacts")
+            try:
+                self.assertEqual(store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
+            finally:
+                store.close()
+            output, stderr = process.communicate("admit\n", timeout=8)
+            self.assertEqual(process.returncode, 0, stderr)
+            self.assertIn("devsquad_connection_schema", json.loads(output)["error"])
+            with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0], 0)
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.communicate(timeout=5)
 
     def cli_json(self, launcher, *arguments):
         result = subprocess.run(

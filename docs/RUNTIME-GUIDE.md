@@ -47,6 +47,18 @@ inherited, malformed or ambiguous MCP registrations instead of guessing which
 one to replace. An upgrade retains every previous release, so a process that
 started before the selector changed can finish against its frozen package.
 
+A schema-changing update defers while the ledger contains active or
+recoverable runs. Finish, resume or cancel them with the previous release,
+then retry the same installer command. Activation checks the ledger under
+its lock and never advances the schema before selecting the new release.
+The first new-release ledger operation performs the guarded migration;
+already-open old clients cannot write after that migration commits. An
+interruption before selector replacement leaves the old schema usable; an
+interruption after replacement leaves migration safely retryable. Old
+releases and saved receipts remain present. Custom runtime directories get
+the same migration guard on first access; use `DEVSQUAD_RUNTIME_DIR` for the
+installer's explicitly scoped ledger check.
+
 Antigravity's non-interactive print mode also enforces project permissions.
 For unattended read-only status checks, add this exact grant to the DevSquad
 project's Permissions list in Antigravity:

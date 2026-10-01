@@ -154,6 +154,7 @@ class Store:
         artifacts.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(database, timeout=10, isolation_level=None)
         self.connection.row_factory = sqlite3.Row
+        self.connection.create_function("devsquad_connection_schema", 0, lambda: SUPPORTED_SCHEMA_VERSION)
         try:
             self.connection.execute("PRAGMA busy_timeout=10000")
             self.connection.execute("PRAGMA foreign_keys=ON")
@@ -172,6 +173,7 @@ class Store:
         try:
             table = self.connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations'").fetchone()
             current = self.connection.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").fetchone()[0] if table else 0
+            initial_version = current
             if current > SUPPORTED_SCHEMA_VERSION:
                 raise SchemaVersionError(f"database schema {current} is newer than supported {SUPPORTED_SCHEMA_VERSION}")
             if 0 < current < SUPPORTED_SCHEMA_VERSION:
@@ -204,6 +206,24 @@ class Store:
                     )
                 self.connection.execute("INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)", (next_version, _utc_now()))
                 current = next_version
+            if initial_version < SUPPORTED_SCHEMA_VERSION:
+                # An old Store opened before the exclusive upgrade can outlive
+                # the constructor's version check. Fence its later writes at
+                # the database boundary, including admission of a new run.
+                # Old packages either report their lower version or lack the
+                # function entirely; both fail before mutating a saved row.
+                tables = self.connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name!='schema_migrations'",
+                ).fetchall()
+                for table_row in tables:
+                    name = table_row["name"].replace('"', '""')
+                    for action in ("INSERT", "UPDATE", "DELETE"):
+                        trigger = f"devsquad_schema_guard_{name}_{action.lower()}"
+                        self.connection.execute(
+                            f'CREATE TRIGGER IF NOT EXISTS "{trigger}" BEFORE {action} ON "{name}" BEGIN '
+                            "SELECT CASE WHEN devsquad_connection_schema() < (SELECT MAX(version) FROM schema_migrations) "
+                            "THEN RAISE(ABORT, 'database schema is newer than connection supports') END; END"
+                        )
             self.connection.execute("COMMIT")
         except Exception:
             self.connection.execute("ROLLBACK")

@@ -8,13 +8,14 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.capacity import derive_pool_capacity, validate_observation
 from devsquad.contracts import ContractError
-from devsquad.store import ConflictError, Store
+from devsquad.store import ConflictError, SchemaVersionError, Store
 
 
 NOW = datetime(2026, 9, 27, 15, 0, tzinfo=timezone.utc)
@@ -313,7 +314,17 @@ class CapacityContractTest(unittest.TestCase):
             connection.commit()
             connection.close()
 
-            store = Store(database, path / "artifacts")
+            with self.assertRaisesRegex(SchemaVersionError, "active/recoverable"):
+                Store(database, path / "artifacts")
+            # Keep the migration-9 SQL backfill unit coverage independently
+            # of public upgrades, which must now defer for old active runs.
+            connection = sqlite3.connect(database)
+            connection.executescript(next(migrations.glob("009_*.sql")).read_text())
+            connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(9,?)", (NOW.isoformat(),))
+            connection.commit()
+            connection.close()
+            with patch("devsquad.store.SUPPORTED_SCHEMA_VERSION", 9):
+                store = Store(database, path / "artifacts")
             self.addCleanup(store.close)
             self.assertEqual(store.active_pool_counts(), {"shared-pool": 1})
             row = store.connection.execute(
@@ -325,6 +336,10 @@ class CapacityContractTest(unittest.TestCase):
                 (NOW.isoformat(),),
             )
             self.assertEqual(store.active_pool_counts(), {})
+            store.connection.execute("UPDATE runs SET state='failed' WHERE id='r'")
+            upgraded = Store(database, path / "artifacts")
+            self.addCleanup(upgraded.close)
+            self.assertEqual(upgraded.active_pool_counts(), {})
 
 
 if __name__ == "__main__":

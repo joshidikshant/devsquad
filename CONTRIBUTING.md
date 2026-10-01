@@ -7,7 +7,7 @@ git clone https://github.com/joshidikshant/devsquad.git
 cd devsquad
 bash test/run.sh    # no network, no real CLIs required — should be all green
 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src \
-  python3 -m unittest discover -s test/core
+  python3 scripts/run-core-tests.py
 python3 scripts/generate-core-reference.py --check
 ```
 

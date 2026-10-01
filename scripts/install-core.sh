@@ -391,27 +391,29 @@ PY
   RELEASE_CREATED=1
 fi
 
-# Migrate the explicitly scoped default ledger before switching the launcher.
-# Store fences migrations transactionally against active/recoverable old runs.
-# Custom runtimes receive the same guard on their first new-release operation.
+# Never advance the ledger while the old release is still selected. Check
+# upgrade readiness and replace the selector under one ledger lock; actual
+# migration is lazy, through the new release's guarded Store constructor.
 UPGRADE_RUNTIME="${DEVSQUAD_RUNTIME_DIR:-${INSTALL_ROOT}/runtime}"
 case "$UPGRADE_RUNTIME" in /*) ;; *) fail "runtime directory must be absolute" ;; esac
-if [ -f "$UPGRADE_RUNTIME/state.sqlite3" ]; then
-  "$RELEASE_DIR/venv/bin/python" -P - "$UPGRADE_RUNTIME" <<'PY' || fail "runtime upgrade deferred; previous current selector and launcher are unchanged"
+activate_current() {
+  "$RELEASE_DIR/venv/bin/python" -P - "$1" "$INSTALL_ROOT/current" "$UPGRADE_RUNTIME" "$REPO_ROOT/plugin/core/src/devsquad/release_activation.py" <<'PY' || fail "runtime upgrade deferred; previous current selector and launcher are unchanged"
 from pathlib import Path
+import runpy
 import sys
-from devsquad.store import Store
+from devsquad.store import SUPPORTED_SCHEMA_VERSION
 
-runtime = Path(sys.argv[1])
+temporary, selector, runtime, helper = map(Path, sys.argv[1:])
+activate_release = runpy.run_path(str(helper))["activate_release"]
 try:
-    store = Store(runtime / "state.sqlite3", runtime / "artifacts")
+    activate_release(temporary, selector, runtime, supported_schema_version=SUPPORTED_SCHEMA_VERSION)
 except Exception as exc:
+    if temporary.is_symlink():
+        temporary.unlink()
     print(str(exc), file=sys.stderr)
     raise SystemExit(1)
-else:
-    store.close()
 PY
-fi
+}
 
 CURRENT_CHANGED=0
 CURRENT_TARGET="releases/$RELEASE_ID"
@@ -420,17 +422,11 @@ if [ -L "$INSTALL_ROOT/current" ] && [ "$(readlink "$INSTALL_ROOT/current")" = "
 elif [ -e "$INSTALL_ROOT/current" ] || [ -L "$INSTALL_ROOT/current" ]; then
   [ -L "$INSTALL_ROOT/current" ] || fail "current selector is not a symlink: $INSTALL_ROOT/current"
   ln -s "$CURRENT_TARGET" "$INSTALL_ROOT/.current.$$"
-  "$PYTHON" - "$INSTALL_ROOT/.current.$$" "$INSTALL_ROOT/current" <<'PY'
-import os, sys
-os.replace(sys.argv[1], sys.argv[2])
-PY
+  activate_current "$INSTALL_ROOT/.current.$$"
   CURRENT_CHANGED=1
 else
   ln -s "$CURRENT_TARGET" "$INSTALL_ROOT/.current.$$"
-  "$PYTHON" - "$INSTALL_ROOT/.current.$$" "$INSTALL_ROOT/current" <<'PY'
-import os, sys
-os.replace(sys.argv[1], sys.argv[2])
-PY
+  activate_current "$INSTALL_ROOT/.current.$$"
   CURRENT_CHANGED=1
 fi
 

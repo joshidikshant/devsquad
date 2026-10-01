@@ -49,6 +49,48 @@ The installation still points at the original release. Checkpoint this slice
 before the unchanged-source full integration run. Portable details are in
 [audit repair evidence](evidence/R3-audit-repairs-2026-10-01.json).
 
+### Upgrade re-review and current full-gate rerun
+
+The bounded real Codex repair review against `db55d3f` → `e8cdf07` completed
+in private runtime `r3-bounded-repair-review-20261001`, run
+`fcc030af-26ec-423c-b462-b6fc0f8b55d1`. It found one high-severity upgrade
+activation/admission race, not a separate R3 evidence/ratio finding. The
+normal Bash check passed with **verified candidate integrity and no changed
+inputs**, confirming the bytecode repair. The host rejected this review;
+terminal state is failed, version 22. Native usage was 390,975 input / 4,422
+output tokens (395,397 total), one worker invocation, unknown internal request
+count. Re-review only the additional upgrade repairs, not the broad source.
+
+Activation now checks/swaps under the ledger lock **without migrating**. The
+new selected release performs lazy transactional migration; database guards
+reject late writes by already-open old clients. Injected activation failure
+leaves the old selector/schema untouched and releases the lock. The historical
+schema-13 active/queued continuation/cancel test and pre-opened old-client
+admission test pass. The final 12-test upgrade/capacity gate passes in 9.109
+seconds. The initial helper extraction run had two errors because the historic
+package lacks the new helper; the installer now uses its own helper with the
+selected package's explicit supported schema version. The old schema-8 SQL
+backfill is still tested separately, while public upgrade correctly defers.
+
+The full integration launch from stdin was **invalid and interrupted (exit
+130)**: spawned subprocess tests cannot reopen `<stdin>`. It is not a passing
+gate or a proven runtime failure. A tracked spawn-safe runner now records
+UTC/monotonic timing, forced collection and unraisable diagnostics. Use
+`PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning
+PYTHONPATH=plugin/core/src:test/core python3 scripts/run-core-tests.py`.
+Run one unchanged-source full gate after this checkpoint, then bounded upgrade
+re-review. The real installation is still unchanged and all requested live
+installed gates are pending. Do not repeat the spent Jev pilot or use paid APIs.
+
+The subsequent evidence/process regression gate passes **32 tests in 137.768
+seconds**, including real spawned-process recovery tests from a valid module
+entrypoint. All 227 Bash assertions and generated-reference/whitespace checks
+pass again. No process from the invalid stdin gate remains. The next full
+gate must use the tracked runner, not stdin. The Antigravity IDE computer-use
+surface was denied by the tool's app permission gate; do not bypass it. Recheck
+the existing supported CLI/MCP surface after installation, and distinguish any
+unavailable IDE UI proof from a CLI receipt.
+
 ### Latest runtime-repair slice — shared eligibility and explicit review
 
 R3b.1's unchanged-source gate at `a4a87fd` passed 427 tests (two optional-SDK

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "reviewed_revision": "e8cdf07",
+  "status": "finding_repaired_targeted_full_and_re_review_pending",
+  "run_id": "fcc030af-26ec-423c-b462-b6fc0f8b55d1",
+  "runtime": "/Users/Dikshant/.devsquad/private-probes/r3-bounded-repair-review-20261001",
+  "review_sha256": "13b77ee0812c9beefda98df697af4189c132c7e311df995c7b78e9f6282b8644",
+  "review_attempt_sha256": "5517920d44aa8eaa66bffbf1d147fe8e64bc8acc16be3d62f2c8c38ddcd6bb74",
+  "checks_sha256": "1e94a349e0bc098ce23f3b24332ef36aed099c23eb713463f07e1965e774805d",
+  "reviewer": {"harness": "codex", "version": "0.159.2", "model": "gpt-6.1-sol", "effort": "high", "permission": "read_only", "verification": "verified"},
+  "finding": {"id": "upgrade-activation-window", "severity": "high", "summary": "Migration committed while the old release selector remained active; pre-opened old clients could admit work after the pending-run check."},
+  "host_disposition": "reject",
+  "terminal": {"state": "failed", "version": 22},
+  "check": {"command": "bash test/run.sh", "returncode": 0, "assertions": 227, "integrity": "verified", "changed_inputs": []},
+  "usage": {"input_tokens": 390975, "output_tokens": 4422, "total_tokens": 395397, "source": "native_reported", "worker_invocations": 1, "native_model_requests": null},
+  "repair": "Readiness/selector swap under one ledger lock without advancing schema. New-release lazy migration transactionally installs connection-version write guards. Old active/recoverable runs defer; late preopened old clients fail before writing. Previous releases and receipts retained.",
+  "targeted": {"tests": 12, "seconds": 9.109, "result": "pass"},
+  "evidence_process_regressions": {"tests": 32, "seconds": 137.768, "result": "pass"},
+  "bash": {"assertions": 227, "files": 11, "result": "pass"},
+  "full_gate": "Original stdin launch interrupted as invalid: multiprocessing cannot reopen <stdin>; repeat using tracked spawn-safe runner.",
+  "installed_refresh": false
+}
