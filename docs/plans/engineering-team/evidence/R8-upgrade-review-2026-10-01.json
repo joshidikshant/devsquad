@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "reviewed_revision": "e8cdf07",
-  "status": "finding_repaired_targeted_full_and_re_review_pending",
+  "status": "upgrade_follow_up_pass_full_gate_fixture_repair_pending",
   "run_id": "fcc030af-26ec-423c-b462-b6fc0f8b55d1",
   "runtime": "/Users/Dikshant/.devsquad/private-probes/r3-bounded-repair-review-20261001",
   "review_sha256": "13b77ee0812c9beefda98df697af4189c132c7e311df995c7b78e9f6282b8644",
@@ -17,6 +17,18 @@
   "targeted": {"tests": 12, "seconds": 9.109, "result": "pass"},
   "evidence_process_regressions": {"tests": 32, "seconds": 137.768, "result": "pass"},
   "bash": {"assertions": 227, "files": 11, "result": "pass"},
-  "full_gate": "Original stdin launch interrupted as invalid: multiprocessing cannot reopen <stdin>; repeat using tracked spawn-safe runner.",
+  "clock_fixture_gate": {"tests": 20, "seconds": 128.937, "result": "pass", "production_clock_skew_validation": "unchanged"},
+  "full_gate": {"tests": 228, "seconds": 313.702, "errors": 1, "failures": 0, "unraisable": [], "result": "failed_failfast", "cause": "Lifecycle test injected module-import time more than five minutes before real outcome observations; reproduced with ten-minute-old clock. Production skew fence unchanged."},
+  "upgrade_follow_up": {
+    "revision": "6874de7", "run_id": "3c89bb19-64ec-4600-9080-436df89edcfb",
+    "runtime": "/Users/Dikshant/.devsquad/private-probes/r8-upgrade-follow-up-20261001",
+    "reviewer": {"harness": "codex", "version": "0.159.2", "model": "gpt-6.1-sol", "effort": "low", "permission": "read_only", "verification": "verified"},
+    "verdict": "clean", "required_checks": 2, "checks": "passed", "integrity": "verified_unchanged",
+    "host_disposition": "accept", "terminal": {"state": "succeeded", "version": 22},
+    "review_sha256": "68d90b7b05a382b665df7862af528c97457451dc388f5140d39033d5c272fa2f",
+    "checks_sha256": "77de92c3ae4eec05188f956a995586d273ab10abd49eeaf693f4cee76fe495a3",
+    "review_attempt_sha256": "059d4286fbc991ec9cd169f7869a7ed68c2d3c2405ae247eaf18ac832d005f37",
+    "usage": {"input_tokens": 81225, "output_tokens": 675, "total_tokens": 81900, "worker_invocations": 1, "native_model_requests": null}
+  },
   "installed_refresh": false
 }

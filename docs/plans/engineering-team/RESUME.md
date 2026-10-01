@@ -4,6 +4,30 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ## Current position — October 1, 2026
 
+### Latest continuation — upgrade review passed, full-gate clock fixture repair
+
+At `6874de7`, the bounded native upgrade follow-up is clean. Both required
+checks passed with verified unchanged candidate integrity; the accepted run
+`3c89bb19-64ec-4600-9080-436df89edcfb` terminalized succeeded, version 22.
+The proper spawn-safe full gate stopped failfast after 228 tests in 313.702s:
+one lifecycle eligibility error, zero failures and zero unraisable diagnostics.
+The original reader cause is `outcome observed_at exceeds allowed clock skew`.
+The test injected module-import time, which ages beyond five minutes in the
+full suite; a ten-minute-old clock reproduces it while the isolated case passes.
+Use current runtime clocks in those fixtures; production validation remains
+unchanged. An explicit regression keeps the stale-clock rejection strict.
+
+The focused lifecycle/eligibility gate passes 20 tests in 128.937 seconds;
+all 227 Bash assertions, generated reference and whitespace checks pass.
+Next: checkpoint, then one frozen full gate. Only after it passes update the actual installation and run Claude
+delivery/handoff, Grok and updated Gemini/Antigravity proofs. No provider job is
+currently live. The actual installation still points at the schema-13 release.
+
+Privacy warning: Antigravity's global native MCP listing unexpectedly printed
+an unrelated StitchMCP credential. It is not repeated or saved in evidence;
+the user was advised to rotate it. Capture/filter future listings to DevSquad
+only. Do not alter unrelated credentials/settings or bypass the denied IDE UI.
+
 ### Current continuation — R3 audit repairs and safe schema-update deferral
 
 The two independent findings now have source repairs and red regressions.

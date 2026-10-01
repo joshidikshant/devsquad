@@ -256,16 +256,16 @@ class ProfileLifecycleTest(unittest.TestCase):
 
     def test_qualification_cas_promotion_and_rollback_are_replay_safe(self):
         template = lifecycle_template()
-        registered = self.store.register_profile_template(template, now=NOW)
-        replayed = self.store.register_profile_template(template, now=NOW)
+        registered = self.store.register_profile_template(template)
+        replayed = self.store.register_profile_template(template)
         self.assertFalse(registered["replayed"])
         self.assertTrue(replayed["replayed"])
         baseline = self.store.bootstrap_profile_binding(
-            template, self.incumbent, version=7, now=NOW,
+            template, self.incumbent, version=7,
         )
         self.assertFalse(baseline["replayed"])
         self.assertTrue(self.store.bootstrap_profile_binding(
-            template, self.incumbent, version=7, now=NOW,
+            template, self.incumbent, version=7,
         )["replayed"])
         registry = {
             "schema_version": 1,
@@ -288,11 +288,11 @@ class ProfileLifecycleTest(unittest.TestCase):
         )
         evaluation = self.seed_experiment()
         qualified = self.store.record_profile_qualification(
-            self.qualification(evaluation), now=NOW,
+            self.qualification(evaluation),
         )
         self.assertEqual(qualified["gate_failures"], [])
         self.assertTrue(self.store.record_profile_qualification(
-            self.qualification(evaluation), now=NOW,
+            self.qualification(evaluation),
         )["replayed"])
 
         barrier = threading.Barrier(2)
@@ -303,7 +303,7 @@ class ProfileLifecycleTest(unittest.TestCase):
             try:
                 barrier.wait(timeout=10)
                 results.append(connection.change_profile_binding(
-                    self.promotion(decision_id), now=NOW,
+                    self.promotion(decision_id),
                 ))
             except Exception as exc:
                 results.append(exc)
@@ -349,7 +349,7 @@ class ProfileLifecycleTest(unittest.TestCase):
         )
         winning_request = self.promotion(receipt["decision_id"])
         self.assertTrue(self.store.change_profile_binding(
-            winning_request, now=NOW,
+            winning_request,
         )["replayed"])
 
         regression = self.seed_experiment(
@@ -371,7 +371,7 @@ class ProfileLifecycleTest(unittest.TestCase):
             "reason": "Held-out regression requires the qualified predecessor.",
             "evidence_refs": ["experiment-profile-b-regression", "regression.json"],
         }
-        rolled_back = self.store.change_profile_binding(rollback, now=NOW)
+        rolled_back = self.store.change_profile_binding(rollback)
         self.assertEqual(rolled_back["receipt"]["to"]["binding_version"], 9)
         self.assertEqual(self.store.profile_binding("review.deep")["profile_id"], "profile-a")
         self.assertEqual(len(self.store.profile_binding_decisions("review.deep")), 2)
@@ -400,7 +400,7 @@ class ProfileLifecycleTest(unittest.TestCase):
     def test_insufficient_evidence_and_disabled_guarded_auto_cannot_promote(self):
         reviewed = lifecycle_template(update_mode="reviewed")
         self.store.bootstrap_profile_binding(
-            reviewed, self.incumbent, version=7, now=NOW,
+            reviewed, self.incumbent, version=7,
         )
         incomplete = self.qualification({
             "experiment": {"experiment_id": "unused"},
@@ -412,33 +412,33 @@ class ProfileLifecycleTest(unittest.TestCase):
             "verdict": "incomplete",
             "evidence_refs": [],
         })
-        saved = self.store.record_profile_qualification(incomplete, now=NOW)
+        saved = self.store.record_profile_qualification(incomplete)
         self.assertIn("experiment_evidence_missing", saved["gate_failures"])
         with self.assertRaisesRegex(ContractError, "qualified candidate"):
             self.store.change_profile_binding(
-                self.promotion("decision-insufficient"), now=NOW,
+                self.promotion("decision-insufficient"),
             )
 
         evaluation = self.seed_experiment()
         self.store.record_profile_qualification(
-            self.qualification(evaluation), now=NOW,
+            self.qualification(evaluation),
         )
         with self.assertRaisesRegex(ContractError, "not enabled"):
             self.store.change_profile_binding(
-                self.promotion("decision-auto", actor="guarded_auto"), now=NOW,
+                self.promotion("decision-auto", actor="guarded_auto"),
             )
 
     def test_catalog_unavailable_incumbent_uses_only_qualified_predecessor(self):
         template = lifecycle_template()
         self.store.bootstrap_profile_binding(
-            template, self.incumbent, version=7, now=NOW,
+            template, self.incumbent, version=7,
         )
         evaluation = self.seed_experiment()
         self.store.record_profile_qualification(
-            self.qualification(evaluation), now=NOW,
+            self.qualification(evaluation),
         )
         self.store.change_profile_binding(
-            self.promotion("decision-promote-catalog"), now=NOW,
+            self.promotion("decision-promote-catalog"),
         )
         registry = {
             "schema_version": 1,
@@ -516,7 +516,7 @@ class ProfileLifecycleTest(unittest.TestCase):
         )
 
         self.store.change_profile_binding(
-            self.promotion("decision-repromote-catalog", expected=9), now=NOW,
+            self.promotion("decision-repromote-catalog", expected=9),
         )
         all_removed_path = self.root / "catalog-all-removed.json"
         update_last_good(
@@ -535,7 +535,7 @@ class ProfileLifecycleTest(unittest.TestCase):
             "catalog_change": all_removed,
         }
         with self.assertRaisesRegex(ContractError, "no available qualified predecessor"):
-            self.store.fallback_unavailable_profile_binding(blocked, now=NOW)
+            self.store.fallback_unavailable_profile_binding(blocked)
         self.assertEqual(
             self.store.profile_binding("review.deep")["profile_id"], "profile-b",
         )
@@ -545,7 +545,7 @@ class ProfileLifecycleTest(unittest.TestCase):
         trial["quality_status"] = "trial"
         with self.assertRaisesRegex(ContractError, "already be proven"):
             self.store.bootstrap_profile_binding(
-                lifecycle_template(), trial, version=1, now=NOW,
+                lifecycle_template(), trial, version=1,
             )
 
     def test_schema_twelve_contains_lifecycle_ledger(self):

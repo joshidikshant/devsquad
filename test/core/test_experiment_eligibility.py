@@ -1,7 +1,7 @@
 """New lifecycle authority is bound to current public saved-run evidence."""
 
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -67,6 +67,15 @@ class ExperimentEligibilityTest(unittest.TestCase):
                     self.store.record_profile_qualification(changed)
         with self.assertRaisesRegex(ContractError, "latency_ratio_missing.*usage_ratio_missing"):
             self.store.record_profile_qualification(qualification)
+
+    def test_live_outcomes_require_current_clock_not_module_import_time(self):
+        # A full suite may spend more than the permitted skew before this
+        # module's first lifecycle case. Keep the real clock fence strict.
+        with self.assertRaisesRegex(ContractError, "invalid_saved_run_evidence"):
+            self.store.record_profile_qualification(
+                self.qualification, now=datetime.now(timezone.utc) - timedelta(minutes=10),
+            )
+        self.assertEqual(self.store.record_profile_qualification(self.qualification)["gate_failures"], [])
 
     def next_fixture(self, experiment_id, *, profiles=None, candidate_succeeds=False):
         fixture = ExperimentRuntimeFixture(
