@@ -57,9 +57,20 @@ It now uses `contextlib.closing`; its targeted active-release test passes in
 6.837 seconds with ResourceWarning promoted to error, forced collection and
 zero unraisable exceptions. The complete suite must still confirm no warning.
 
-**Exact next action:** run one full unchanged-source integration gate on the
-checkpointed schema-15 source. All 227 Bash assertions pass. No
-passing full gate on this source or independent audit is claimed yet.
+The unchanged-source rerun at `dc4e110` completed **441 tests in 374.998
+seconds, OK with two optional-SDK skips**, with forced collection and **zero
+unraisable exceptions** (no SQLite warning). UTC/monotonic elapsed times agreed
+at 375.115/375.116 seconds. Retain the earlier failed run; its missing-receipt
+cause remains unproven, not represented as a source repair. All 227 Bash
+assertions and generated reference passed before this checkpoint.
+
+**Exact next action:** finish bounded R3 independent audit and continue R4's
+normal routing/catalog/quota connections. Native Codex discovery currently
+fails closed: PATH is 0.135.0, the previously verified bundled executable moved
+to `ChatGPT.app/Contents/Resources/codex-cli/bin/codex` and is now 0.159.2.
+A non-generating 0.159.2 probe passed initialize, complete model/list,
+account/read and rateLimits/read without settings changes or model requests.
+Version/path compatibility and operation verification remain separate gates.
 The shared gate audit and bounded independent review remain required for R3
 closure. Preserve the original evaluations and completed decisions. Do
 not install schema 15 before the old active/recoverable-run upgrade test; R4–R6

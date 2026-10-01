@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_package": "R3b.2/R3c",
-  "status": "public_compatibility_verified_full_integration_pending",
+  "status": "source_offline_verified_independent_audit_pending",
   "recorded_at": "2026-10-01T21:29:24Z",
   "baseline_revision": "4e6297f",
   "source_sha256": {
@@ -25,11 +25,11 @@
     "generated_reference_and_whitespace": "Both checks passed",
     "full_core": "At 5de6655: 441 tests in 372.506 seconds FAILED (1 missing-receipt error, 2 optional-SDK skips); UTC elapsed 372.689586 and monotonic 372.691304 seconds. Not a passing gate",
     "failed_case_recheck": "The exact headless delivery check-integrity case passed unchanged (1 test in 2.760 seconds); all 9 check-integrity cases passed in 19.194 seconds. Cause remains unproven; added status/artifact-name diagnostics",
-    "sqlite_cleanup": "Found installer test transaction context that did not close its SQLite connection; replaced with contextlib.closing. Active-release test passed in 6.837 seconds under ResourceWarning=error, forced collection and zero unraisable exceptions; complete-suite warning recheck pending",
+    "sqlite_cleanup": "Found installer test transaction context that did not close its SQLite connection; replaced with contextlib.closing. Active-release test passed in 6.837 seconds under ResourceWarning=error, forced collection and zero unraisable exceptions. Full 441-test rerun at dc4e110 had zero unraisable exceptions and no SQLite warning",
+    "full_core_rerun": "At dc4e110: 441 tests in 374.998 seconds OK (2 optional-SDK skips); UTC elapsed 375.114707 and monotonic 375.116386 seconds; forced collection, zero unraisable exceptions. Earlier failed gate retained",
     "independent_audit": "Not completed"
   },
   "remaining": [
-    "Complete unchanged-source core integration",
     "Bounded independent R3 audit",
     "R4-R6 runtime repairs and R8 safe updated installation/live Claude, Grok and Gemini proofs"
   ],
