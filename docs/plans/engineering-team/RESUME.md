@@ -38,8 +38,25 @@ Gemini/Antigravity's September 29 live `squad_status` receipt proves read-only
 MCP observation of the same terminal-created saved run. It does not prove
 Gemini implementation/review worker execution or the updated installation.
 No extra Gemini login action is currently recorded; keep the normal session
-signed in. Claude requires normal login; Grok's last verified authentication
-was expired. The optional Jev key is separate from normal operation.
+signed in. On October 1, a non-generating `claude auth status` check confirmed
+`loggedIn=true` through normal Claude authentication. The user reports Grok
+signed in as well; its installed non-generating diagnostics do not establish
+authentication, so its bounded live operation remains unverified. No model
+request was made for those checks.
+
+Local Jev `.env` setup is prepared: the root file has a blank
+`TYPESAFE_API_KEY`, private mode 600 and Git ignore protection; the tracked
+`.env.example` is blank. The probe now accepts explicit `--env-file .env`,
+never executes shell text, preserves exported-key precedence and reports
+only key presence during dry runs. All 14 focused probe tests pass, including
+one mocked request and no-network dry runs. The 227-assertion Bash suite,
+generated reference, JSON and whitespace checks pass; `.env` is untracked and
+ignored while the blank example is trackable. No full core rerun was needed
+for this isolated probe/setup change; R3b.1's full core gate remains pending.
+The key must be filled locally;
+no TypeSafe authentication/API request has run and the classifier remains off.
+This setup does not close M6-D2 or change R3b.1's next action above. Recheck
+current provider pricing before any separately selected live pilot.
 
 The earlier requested action was a review and execution plan for SOL. The October 1
 planning pass inspected `b766f9e` / source `672e383` and updated

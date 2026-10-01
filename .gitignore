@@ -4,6 +4,11 @@
 .claude/
 .agent/
 
+# Local credentials; commit only the blank example.
+.env
+.env.*
+!.env.example
+
 # Dependencies
 node_modules/
 __pycache__/

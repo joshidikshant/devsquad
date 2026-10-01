@@ -2,8 +2,9 @@
 """Run one bounded, synthetic Jev decision-classifier pilot.
 
 The probe is deliberately separate from the DevSquad runtime. It makes exactly
-one billable request, performs no retries, accepts the API key only through the
-environment, and writes a redacted result containing no task text.
+one billable request, performs no retries, accepts the API key through the
+environment or an explicitly selected private env file, and writes a redacted
+result containing no task text. Dry run is the default and makes no API call.
 """
 
 from __future__ import annotations
@@ -15,7 +16,9 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import ssl
+import stat
 import sys
 import tempfile
 import time
@@ -37,10 +40,60 @@ CONTEXT_LIMIT_TOKENS = 64_000
 OFFICIAL_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 PINNED_MODEL = "jev-1.13.0"
 MAX_RESPONSE_BYTES = 1_048_576
+MAX_ENV_BYTES = 16_384
 
 
 class ProbeError(RuntimeError):
     """A safe, user-facing probe failure."""
+
+
+def _key_value(value: str) -> str | None:
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127
+           for character in value):
+        raise ProbeError("TYPESAFE_API_KEY must be a single non-whitespace value")
+    return value or None
+
+
+def load_api_key(env_file: Path | None = None) -> str | None:
+    """Read only the Jev key; never source shell code or mutate process env."""
+    exported = os.environ.get("TYPESAFE_API_KEY")
+    if exported:
+        return _key_value(exported)
+    if env_file is None:
+        return None
+    try:
+        descriptor = os.open(env_file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise ProbeError("Jev env file must be a regular file")
+            if info.st_mode & 0o077:
+                raise ProbeError("Jev env file permissions must be private (chmod 600)")
+            if info.st_size > MAX_ENV_BYTES:
+                raise ProbeError("Jev env file exceeded the size limit")
+            contents = handle.read(MAX_ENV_BYTES + 1)
+    except (OSError, UnicodeError):
+        raise ProbeError("Jev env file could not be read; use a private UTF-8 regular file") from None
+    if len(contents) > MAX_ENV_BYTES:
+        raise ProbeError("Jev env file exceeded the size limit")
+    key = None
+    found = False
+    for line in contents.splitlines():
+        match = re.fullmatch(r"(?:export[ \t]+)?TYPESAFE_API_KEY[ \t]*=[ \t]*(.*)", line.strip())
+        if match is None:
+            continue
+        if found:
+            raise ProbeError("Jev env file defines TYPESAFE_API_KEY more than once")
+        found = True
+        value = match[1].strip()
+        if value.startswith(("'", '"')):
+            if len(value) < 2 or value[-1] != value[0]:
+                raise ProbeError("Jev env file has an invalid quoted TYPESAFE_API_KEY")
+            value = value[1:-1]
+        else:
+            value = value.partition(" #")[0].rstrip()
+        key = _key_value(value)
+    return key
 
 
 def load_spec(path: Path) -> dict[str, Any]:
@@ -271,8 +324,10 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
-def execute(spec: dict[str, Any], request_body: dict[str, Any]) -> dict[str, Any]:
-    key = os.environ.get("TYPESAFE_API_KEY")
+def execute(
+    spec: dict[str, Any], request_body: dict[str, Any], *, env_file: Path | None = None,
+) -> dict[str, Any]:
+    key = load_api_key(env_file)
     if not key:
         raise ProbeError("TYPESAFE_API_KEY is not set")
     encoded = json.dumps(request_body, separators=(",", ":")).encode("utf-8")
@@ -314,6 +369,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--env-file", type=Path,
+        help="Read TYPESAFE_API_KEY from a private file; an exported key takes precedence",
+    )
     args = parser.parse_args(argv)
     try:
         spec = load_spec(args.spec)
@@ -343,13 +402,15 @@ def main(argv: list[str] | None = None) -> int:
             "data_class": spec["budget"]["data_class"],
         }
         if not args.execute:
+            if args.env_file is not None:
+                dry_run["api_key_configured"] = bool(load_api_key(args.env_file))
             print(json.dumps(dry_run, indent=2, sort_keys=True))
             return 0
         if args.output is None:
             raise ProbeError("--output is required for a live run")
         if args.output.resolve().is_relative_to(ROOT):
             raise ProbeError("live output must remain outside the Git repository")
-        result = execute(spec, request_body)
+        result = execute(spec, request_body, env_file=args.env_file)
         write_json(args.output, result)
         print(json.dumps({**dry_run, "result": str(args.output)}, indent=2, sort_keys=True))
         if result["pricing"]["estimated_cost_usd"] > max_cost:

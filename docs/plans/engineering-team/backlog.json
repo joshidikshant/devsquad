@@ -355,8 +355,17 @@
           "depends_on": ["M6-D1"],
           "status": "blocked",
           "specification": "DECISION-CLASSIFIERS.md",
-          "evidence": [],
-          "blocker": "The TypeSafe console is at login and no TYPESAFE_API_KEY is available; one billable request, no retries, synthetic input and a $0.01 ceiling are prepared"
+          "evidence": [
+            {
+              "kind": "local_env_setup",
+              "recorded_on": "2026-10-01",
+              "artifact": "../../../test/core/test_jev_decision_probe.py",
+              "command_or_action": "14 offline Jev probe tests, explicit --env-file dry run, private local .env and Git-ignore checks; 227 Bash assertions in 11 files, generated-reference, JSON and whitespace checks passed",
+              "outcome": "Explicit private env-file loading is verified without shell evaluation, key disclosure or a live API call. Local key field remains blank; authentication and the capped live pilot are still pending.",
+              "availability": "tracked_tests_and_blank_example"
+            }
+          ],
+          "blocker": "Private Git-ignored .env template and explicit probe loading are prepared, but TYPESAFE_API_KEY still needs local entry. No live TypeSafe authentication or pilot has run; recheck current pricing before the authorized one-request, no-retry, $0.01-capped synthetic pilot."
         },
         {
           "id": "M6-D3",

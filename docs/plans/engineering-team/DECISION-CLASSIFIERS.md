@@ -175,10 +175,25 @@ latency and usage—not task text.
 
 ```bash
 python3 test/core/probes/jev_decision_eval.py
-# Export TYPESAFE_API_KEY without placing its value in shell history, then run:
-python3 test/core/probes/jev_decision_eval.py --execute \
+# Fill TYPESAFE_API_KEY in the Git-ignored local .env using your editor.
+# For a fresh checkout, copy the blank .env.example to .env first.
+chmod 600 .env
+# This validates local configuration without calling the API or printing the key:
+python3 test/core/probes/jev_decision_eval.py --env-file .env
+# Live execution is a separate, explicitly selected step after pricing review:
+python3 test/core/probes/jev_decision_eval.py --env-file .env --execute \
   --output "$HOME/.devsquad/private-probes/jev-pilot-v1.json"
 ```
+
+The probe supports a single-line plain or quoted `TYPESAFE_API_KEY` assignment
+and optional `export`; it ignores unrelated variables, rejects duplicate key
+assignments, and never evaluates shell substitutions. The env file must be a
+private regular UTF-8 file, at most 16 KiB, with no group/other permissions.
+An already exported non-empty key takes precedence. Files are loaded only
+when `--env-file` is supplied; this does not enable the runtime classifier or
+pass the key to coding workers. A dry run reports only whether a key is present,
+not whether TypeSafe has authenticated it. The local `.env` and `.env.*` files
+are Git-ignored; `.env.example` contains no secret.
 
 Do not copy the key or private receipt into Git. If the provider's current price
 makes one maximum-context request exceed $0.01, if returned usage breaches the

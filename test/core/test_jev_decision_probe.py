@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -122,6 +127,109 @@ class JevDecisionProbeTest(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 2)
         self.assertIn("outside the Git repository", completed.stderr)
+
+
+class JevEnvFileTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.env_file = Path(self.temporary.name) / ".env"
+        environment = mock.patch.dict(os.environ, {}, clear=True)
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def write_env(self, text):
+        self.env_file.write_text(text, encoding="utf-8")
+        self.env_file.chmod(0o600)
+
+    def test_explicit_env_file_supports_plain_and_quoted_key(self):
+        for declaration in (
+            "TYPESAFE_API_KEY=fake-test-key",
+            "TYPESAFE_API_KEY='fake-test-key'",
+            'export TYPESAFE_API_KEY="fake-test-key"',
+        ):
+            with self.subTest(declaration=declaration):
+                self.write_env("# Local credentials\nUNRELATED=ignored\n" + declaration + "\n")
+                self.assertEqual(jev.load_api_key(self.env_file), "fake-test-key")
+                self.assertNotIn("TYPESAFE_API_KEY", os.environ)
+
+    def test_exported_key_wins_without_reading_env_file(self):
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "exported-test-key"}):
+            self.assertEqual(jev.load_api_key(self.env_file), "exported-test-key")
+
+    def test_no_implicit_env_loading_and_blank_template_has_no_key(self):
+        self.write_env("TYPESAFE_API_KEY=local-test-key\n")
+        with mock.patch.object(jev.os, "open", side_effect=AssertionError("implicit read")):
+            self.assertIsNone(jev.load_api_key())
+        self.write_env("TYPESAFE_API_KEY=\n")
+        self.assertIsNone(jev.load_api_key(self.env_file))
+
+    def test_values_are_literal_not_shell_expanded(self):
+        self.write_env("TYPESAFE_API_KEY='$UNDEFINED_KEY'\n")
+        self.assertEqual(jev.load_api_key(self.env_file), "$UNDEFINED_KEY")
+
+    def test_malformed_and_duplicate_key_errors_never_echo_contents(self):
+        for contents in (
+            "TYPESAFE_API_KEY='private-test-secret\n",
+            "TYPESAFE_API_KEY=private-test-secret with-spaces\n",
+            "TYPESAFE_API_KEY=private-test-secret\nTYPESAFE_API_KEY=second-key\n",
+        ):
+            with self.subTest():
+                self.write_env(contents)
+                with self.assertRaises(jev.ProbeError) as caught:
+                    jev.load_api_key(self.env_file)
+                self.assertNotIn("private-test-secret", str(caught.exception))
+
+    def test_missing_insecure_symlink_and_oversized_files_fail_safely(self):
+        with self.assertRaises(jev.ProbeError):
+            jev.load_api_key(self.env_file)
+        self.write_env("TYPESAFE_API_KEY=private-test-secret\n")
+        self.env_file.chmod(0o644)
+        with self.assertRaisesRegex(jev.ProbeError, "permissions"):
+            jev.load_api_key(self.env_file)
+        self.env_file.chmod(0o600)
+        link = Path(self.temporary.name) / "linked.env"
+        link.symlink_to(self.env_file)
+        with self.assertRaises(jev.ProbeError):
+            jev.load_api_key(link)
+        self.write_env("#" * (jev.MAX_ENV_BYTES + 1))
+        with self.assertRaisesRegex(jev.ProbeError, "size"):
+            jev.load_api_key(self.env_file)
+
+    def test_env_file_dry_run_only_reports_presence_and_never_calls_api(self):
+        for value, configured in (("", False), ("private-test-secret", True)):
+            with self.subTest(configured=configured):
+                self.write_env(f"TYPESAFE_API_KEY={value}\n")
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with mock.patch.object(jev, "urlopen") as network, \
+                        contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    result = jev.main(["--env-file", str(self.env_file)])
+                self.assertEqual(result, 0, stderr.getvalue())
+                self.assertEqual(json.loads(stdout.getvalue())["api_key_configured"], configured)
+                self.assertNotIn("private-test-secret", stdout.getvalue() + stderr.getvalue())
+                network.assert_not_called()
+
+    def test_blank_key_blocks_execution_before_network(self):
+        self.write_env("TYPESAFE_API_KEY=\n")
+        spec = jev.load_spec(SPEC)
+        with mock.patch.object(jev, "urlopen") as network:
+            with self.assertRaisesRegex(jev.ProbeError, "not set"):
+                jev.execute(spec, jev.build_request(spec), env_file=self.env_file)
+            network.assert_not_called()
+
+    def test_explicit_key_is_used_for_exactly_one_mocked_request(self):
+        self.write_env("TYPESAFE_API_KEY=private-test-secret\n")
+        spec = jev.load_spec(SPEC)
+        fixture = JevDecisionProbeTest()
+        fixture.setUp()
+        response = io.BytesIO(json.dumps(fixture.valid_response()).encode())
+        with mock.patch.object(jev, "urlopen", return_value=response) as network:
+            result = jev.execute(spec, jev.build_request(spec), env_file=self.env_file)
+        network.assert_called_once()
+        request = network.call_args.args[0]
+        self.assertEqual(request.get_header("Authorization"), "Bearer private-test-secret")
+        self.assertNotIn("private-test-secret", json.dumps(result))
+        self.assertNotIn("TYPESAFE_API_KEY", os.environ)
 
 
 if __name__ == "__main__":
