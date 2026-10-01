@@ -685,9 +685,19 @@ def build_learning_proposal(
     experiment_evidence = None
     if experiment_record is not None:
         if (not isinstance(experiment_record, dict)
-                or set(experiment_record) != EXPERIMENT_RECORD_FIELDS):
+                or set(experiment_record) not in (
+                    EXPERIMENT_RECORD_FIELDS, EXPERIMENT_RECORD_FIELDS | {"eligibility"},
+                )):
             raise ContractError("learning proposal experiment record is invalid")
-        spec = validate_experiment(experiment_record["experiment"])
+        raw_spec = experiment_record["experiment"]
+        if isinstance(raw_spec, dict) and raw_spec.get("schema_version") == 1:
+            # Audit history as saved, including cases whose old labels reused
+            # outcomes. Strict new-spec validation is not historical decoding.
+            if set(raw_spec) != EXPERIMENT_FIELDS:
+                raise ContractError("historical experiment fields are invalid")
+            spec = json.loads(canonical_json(raw_spec))
+        else:
+            spec = validate_experiment(raw_spec)
         evaluation = experiment_record["evaluation"]
         expected_fields = EXPERIMENT_EVALUATION_FIELDS | (
             {"evidence_sha256"} if spec["schema_version"] == 2 else set()
@@ -735,6 +745,28 @@ def build_learning_proposal(
         failures = list(evaluation["failures"])
         reasons = list(evaluation["reasons"])
         verdict = evaluation["verdict"]
+        eligibility = experiment_record.get("eligibility")
+        if spec["schema_version"] == 1:
+            verdict = "no_change"
+            reasons = sorted(set([*reasons, "legacy_unverified_evidence"]))
+        elif eligibility is None:
+            verdict = "no_change"
+            reasons = sorted(set([*reasons, "current_evidence_not_checked"]))
+        else:
+            if (not isinstance(eligibility, dict)
+                    or eligibility.get("experiment_id") != spec["experiment_id"]
+                    or eligibility.get("spec_sha256") != spec_sha256
+                    or eligibility.get("evaluation_sha256") != evaluation_sha256
+                    or eligibility.get("saved_evidence_sha256") != evaluation["evidence_sha256"]
+                    or type(eligibility.get("eligible")) is not bool
+                    or not isinstance(eligibility.get("reasons"), list)
+                    or (eligibility["eligible"] and (
+                        eligibility.get("current_evidence_sha256") != evaluation["evidence_sha256"]
+                        or eligibility["reasons"]))):
+                raise ContractError("learning proposal current eligibility is invalid")
+            if not eligibility["eligible"]:
+                verdict = "no_change"
+                reasons = sorted(set([*reasons, *eligibility["reasons"]]))
         evidence_availability = spec["evidence_availability"]
         experiment_samples = {
             split: {
@@ -748,6 +780,7 @@ def build_learning_proposal(
             "spec_sha256": spec_sha256,
             "evaluation_sha256": evaluation_sha256,
             "recorded_at": experiment_record["recorded_at"],
+            "eligibility": eligibility,
         }
 
     identity = {

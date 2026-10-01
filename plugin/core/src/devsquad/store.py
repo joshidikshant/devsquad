@@ -17,7 +17,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 14
+SUPPORTED_SCHEMA_VERSION = 15
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -1762,10 +1762,20 @@ class Store:
 
     def evaluate_learning_experiment(
         self, experiment: dict[str, Any], *, now: datetime | None = None,
+        revision_id: str | None = None,
+        previous_evaluation_sha256: str | None = None,
     ) -> dict[str, Any]:
-        """Persist one deterministic, replay-safe experiment evaluation."""
+        """Persist an original evaluation or an explicit append-only review."""
+        from .experiment_eligibility import current_evidence, saved_evaluation
+        from .experiment_provenance import require_sha256
         from .learning import evaluate_experiment, validate_experiment
 
+        if (revision_id is None) != (previous_evaluation_sha256 is None):
+            raise ContractError("evaluation revision id and predecessor must be supplied together")
+        if revision_id is not None:
+            if not isinstance(revision_id, str) or not revision_id.strip() or len(revision_id) > 128:
+                raise ContractError("evaluation revision id is invalid")
+            require_sha256(previous_evaluation_sha256, "previous evaluation")
         spec = validate_experiment(experiment)
         project_path = Path(spec["project_path"]).resolve(strict=True)
         # V2 hashes the exact predeclared specification. Resolving a symlink
@@ -1778,22 +1788,40 @@ class Store:
         common_dir = git_common_dir(project_path)
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            existing = self.connection.execute(
-                "SELECT spec_json,evaluation_json,evaluation_sha256,recorded_at "
-                "FROM experiments WHERE experiment_id=?",
-                (spec["experiment_id"],),
-            ).fetchone()
+            existing = saved_evaluation(self.connection, spec["experiment_id"])
             if existing is not None and existing["spec_json"] != spec_json:
                 raise ConflictError(
                     "experiment id was already used with a different specification",
                 )
-            if existing is not None and spec["schema_version"] == 1:
+            if revision_id is not None:
+                if existing is None or spec["schema_version"] != 2:
+                    raise ContractError("explicit evaluation review requires an original v2 evaluation")
+                revision = self.connection.execute(
+                    "SELECT experiment_id,previous_evaluation_sha256,evaluation_sha256 "
+                    "FROM experiment_evaluation_revisions WHERE revision_id=?", (revision_id,),
+                ).fetchone()
+                if revision is not None:
+                    if (revision["experiment_id"] != spec["experiment_id"]
+                            or revision["previous_evaluation_sha256"] != previous_evaluation_sha256):
+                        raise ConflictError("evaluation revision id was already used with different evidence")
+                    existing = saved_evaluation(self.connection, spec["experiment_id"], revision["evaluation_sha256"])
+                else:
+                    if existing["evaluation_sha256"] != previous_evaluation_sha256:
+                        raise ConflictError("evaluation revision predecessor is no longer the latest evaluation")
+                    existing = None
+            if existing is not None:
+                eligibility = current_evidence(self.connection, existing, now=current)
+                if spec["schema_version"] == 2 and not eligibility["eligible"]:
+                    raise ContractError("experiment evidence changed; saved evaluation is stale and requires explicit review/revision: " + ", ".join(eligibility["reasons"]))
                 self.connection.execute("COMMIT")
                 return {
                     "experiment": spec,
-                    "evaluation": json.loads(existing["evaluation_json"]),
+                    "evaluation": existing["evaluation"],
                     "evaluation_sha256": existing["evaluation_sha256"],
                     "recorded_at": existing["recorded_at"],
+                    "revision_id": existing["revision_id"],
+                    "previous_evaluation_sha256": existing["previous_evaluation_sha256"],
+                    "eligibility": eligibility,
                     "replayed": True,
                 }
             project = self.connection.execute(
@@ -1836,47 +1864,39 @@ class Store:
                 spec, chains, evaluated_at=current.isoformat(),
                 project_common_dir=str(common_dir),
             )
-            if existing is not None:
-                try:
-                    saved = json.loads(existing["evaluation_json"])
-                except (ValueError, TypeError) as exc:
-                    raise ContractError("saved experiment evaluation is invalid") from exc
-                if (not isinstance(saved, dict)
-                        or saved.get("evaluated_at") != existing["recorded_at"]
-                        or hashlib.sha256(existing["evaluation_json"].encode()).hexdigest()
-                        != existing["evaluation_sha256"]):
-                    raise ContractError("saved experiment evaluation hash/identity is invalid")
-                # Receipts are immutable. Corrections or changed run evidence
-                # require an explicit revision, never a silently updated replay.
-                if canonical_json({**evaluation, "evaluated_at": saved["evaluated_at"]}) != canonical_json(saved):
-                    raise ContractError(
-                        "experiment evidence changed; saved evaluation is stale and requires explicit review/revision",
-                    )
-                self.connection.execute("COMMIT")
-                return {
-                    "experiment": spec, "evaluation": saved,
-                    "evaluation_sha256": existing["evaluation_sha256"],
-                    "recorded_at": existing["recorded_at"], "replayed": True,
-                }
             evaluation_json = canonical_json(evaluation)
             evaluation_sha256 = hashlib.sha256(evaluation_json.encode()).hexdigest()
             recorded_at = current.isoformat()
-            self.connection.execute(
-                "INSERT INTO experiments(experiment_id,project_id,project_path,spec_json,"
-                "spec_sha256,evaluation_json,evaluation_sha256,verdict,recorded_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?)",
-                (
-                    spec["experiment_id"], project_id, spec["project_path"],
-                    spec_json, spec_sha256, evaluation_json, evaluation_sha256,
-                    evaluation["verdict"], recorded_at,
-                ),
-            )
+            if revision_id is None:
+                self.connection.execute(
+                    "INSERT INTO experiments(experiment_id,project_id,project_path,spec_json,"
+                    "spec_sha256,evaluation_json,evaluation_sha256,verdict,recorded_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?)",
+                    (
+                        spec["experiment_id"], project_id, spec["project_path"],
+                        spec_json, spec_sha256, evaluation_json, evaluation_sha256,
+                        evaluation["verdict"], recorded_at,
+                    ),
+                )
+            else:
+                self.connection.execute(
+                    "INSERT INTO experiment_evaluation_revisions(revision_id,experiment_id,"
+                    "previous_evaluation_sha256,evaluation_json,evaluation_sha256,verdict,recorded_at) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (revision_id, spec["experiment_id"], previous_evaluation_sha256,
+                     evaluation_json, evaluation_sha256, evaluation["verdict"], recorded_at),
+                )
+            saved = saved_evaluation(self.connection, spec["experiment_id"], evaluation_sha256)
+            eligibility = current_evidence(self.connection, saved, now=current)
             self.connection.execute("COMMIT")
             return {
                 "experiment": spec,
                 "evaluation": evaluation,
                 "evaluation_sha256": evaluation_sha256,
                 "recorded_at": recorded_at,
+                "revision_id": revision_id,
+                "previous_evaluation_sha256": previous_evaluation_sha256,
+                "eligibility": eligibility,
                 "replayed": False,
             }
         except Exception:
@@ -1887,6 +1907,7 @@ class Store:
         self, project: Path, *, now: datetime | None = None,
     ) -> dict[str, Any]:
         """Read a consistent report and the latest frozen project experiment."""
+        from .experiment_eligibility import current_evidence, saved_evaluation
         project_path = project.resolve(strict=True)
         current = _authoritative_now(now)
         self.connection.execute("BEGIN")
@@ -1894,26 +1915,26 @@ class Store:
             report = self.learning_report(project_path, now=current)
             if report["project_id"] is None:
                 row = self.connection.execute(
-                    "SELECT spec_json,spec_sha256,evaluation_json,evaluation_sha256,"
-                    "recorded_at FROM experiments WHERE project_path=? "
+                    "SELECT experiment_id FROM experiments WHERE project_path=? "
                     "ORDER BY recorded_at DESC,id DESC LIMIT 1",
                     (str(project_path),),
                 ).fetchone()
             else:
                 row = self.connection.execute(
-                    "SELECT spec_json,spec_sha256,evaluation_json,evaluation_sha256,"
-                    "recorded_at FROM experiments WHERE project_id=? OR "
+                    "SELECT experiment_id FROM experiments WHERE project_id=? OR "
                     "(project_id IS NULL AND project_path=?) "
                     "ORDER BY recorded_at DESC,id DESC LIMIT 1",
                     (report["project_id"], str(project_path)),
                 ).fetchone()
-            experiment = None if row is None else {
-                "experiment": json.loads(row["spec_json"]),
-                "spec_sha256": row["spec_sha256"],
-                "evaluation": json.loads(row["evaluation_json"]),
-                "evaluation_sha256": row["evaluation_sha256"],
-                "recorded_at": row["recorded_at"],
-            }
+            experiment = None
+            if row is not None:
+                saved = saved_evaluation(self.connection, row["experiment_id"])
+                experiment = {
+                    "experiment": saved["spec"], "spec_sha256": saved["spec_sha256"],
+                    "evaluation": saved["evaluation"], "evaluation_sha256": saved["evaluation_sha256"],
+                    "recorded_at": saved["recorded_at"],
+                    "eligibility": current_evidence(self.connection, saved, now=current),
+                }
             self.connection.execute("COMMIT")
             return {"report": report, "experiment": experiment}
         except Exception:
@@ -2088,15 +2109,88 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def _qualification_evidence(
+        self, record: dict[str, Any], *, now: datetime,
+    ) -> tuple[list[str], dict[str, Any] | None]:
+        """The same current-evidence and context checks for every consumer."""
+        from .experiment_eligibility import require_current_evidence
+        from .lifecycle import qualification_gate_failures, validate_profile_template, profile_fingerprint
+
+        template_row = self.connection.execute(
+            "SELECT payload_json,payload_sha256 FROM profile_templates WHERE template_id=?",
+            (record["template_id"],),
+        ).fetchone()
+        if template_row is None:
+            raise ContractError("qualification template is not registered")
+        if hashlib.sha256(template_row["payload_json"].encode()).hexdigest() != template_row["payload_sha256"]:
+            raise ContractError("qualification template hash is invalid")
+        template = validate_profile_template(json.loads(template_row["payload_json"]))
+        failures = qualification_gate_failures(record, template)
+        eligibility = None
+        if record["experiment_id"] is not None:
+            experiment, eligibility = require_current_evidence(
+                self.connection, record["experiment_id"], record["evaluation_sha256"], now=now,
+            )
+            spec, evaluation = experiment["spec"], experiment["evaluation"]
+            variable = spec["variable"]
+            if (variable["alias"] != record["alias"]
+                    or variable["candidate_profile_id"] != record["candidate_profile"]["id"]
+                    or variable["candidate_profile_sha256"] != profile_fingerprint(record["candidate_profile"])):
+                raise ContractError("qualification candidate fingerprint does not match the tested experiment")
+            contexts = self.connection.execute(
+                "SELECT assignment_json,snapshot_json FROM experiment_assignments "
+                "WHERE experiment_id=? AND arm='candidate'", (record["experiment_id"],),
+            ).fetchall()
+            if not contexts or any(
+                    json.loads(row["assignment_json"])["role"] != variable["role"]
+                    or json.loads(row["snapshot_json"])["task"]["task_class"] != record["task_class"]
+                    for row in contexts):
+                raise ContractError("qualification role/task-class context does not match actual frozen tasks")
+            metrics = evaluation["metrics"]
+            escaped = sum(metrics[split]["candidate_escaped_defects"] for split in ("evaluation", "held_out"))
+            if (record["measured"]["evaluation_pairs"] != metrics["evaluation"]["available_pairs"]
+                    or record["measured"]["held_out_pairs"] != metrics["held_out"]["available_pairs"]
+                    or record["measured"]["critical_defects"] != escaped):
+                raise ContractError("qualification measurements do not match saved evaluation")
+            if evaluation["verdict"] != "promotion_proposal":
+                failures.append("experiment_did_not_propose_promotion")
+        failures = sorted(set(failures))
+        if record["verdict"] == "qualified" and failures:
+            raise ContractError("qualification gate did not pass: " + ", ".join(failures))
+        return failures, eligibility
+
+    def _require_current_qualification(
+        self, qualification_id: str, *, now: datetime,
+    ) -> dict[str, Any]:
+        from .lifecycle import validate_qualification
+
+        row = self.connection.execute(
+            "SELECT * FROM qualification_runs WHERE qualification_id=?", (qualification_id,),
+        ).fetchone()
+        if row is None or row["verdict"] != "qualified":
+            raise ContractError("binding change requires a qualified candidate")
+        if hashlib.sha256(row["payload_json"].encode()).hexdigest() != row["payload_sha256"]:
+            raise ContractError("saved qualification hash is invalid")
+        record = validate_qualification(json.loads(row["payload_json"]))
+        if any(row[key] != record[key] for key in (
+                "qualification_id", "alias", "template_id", "experiment_id", "evaluation_sha256", "verdict")) or row["profile_id"] != record["candidate_profile"]["id"]:
+            raise ContractError("saved qualification identity is invalid")
+        failures, _ = self._qualification_evidence(record, now=now)
+        if failures or canonical_json(failures) != row["gate_failures_json"]:
+            raise ContractError("saved qualification gates are inconsistent")
+        profile_row = self.connection.execute(
+            "SELECT profile_json,profile_sha256 FROM concrete_profiles WHERE profile_id=?", (row["profile_id"],),
+        ).fetchone()
+        payload, digest = self._profile_record(record["candidate_profile"])
+        if profile_row is None or profile_row["profile_json"] != payload or profile_row["profile_sha256"] != digest:
+            raise ContractError("saved qualification concrete profile differs from tested evidence")
+        return record
+
     def record_profile_qualification(
         self, qualification: dict[str, Any], *, now: datetime | None = None,
     ) -> dict[str, Any]:
         """Persist bounded qualification evidence after checking saved evaluation."""
-        from .lifecycle import (
-            qualification_gate_failures,
-            validate_profile_template,
-            validate_qualification,
-        )
+        from .lifecycle import validate_qualification
 
         record = validate_qualification(qualification)
         payload = canonical_json(record)
@@ -2114,65 +2208,20 @@ class Store:
                     raise ConflictError(
                         "qualification id was already used with different evidence",
                     )
+                failures, eligibility = self._qualification_evidence(record, now=_authoritative_now(now))
+                if (existing["payload_sha256"] != digest
+                        or canonical_json(failures) != existing["gate_failures_json"]):
+                    raise ContractError("saved qualification evidence hash/gates are invalid")
                 self.connection.execute("COMMIT")
                 return {
                     "qualification": record,
                     "qualification_sha256": existing["payload_sha256"],
                     "gate_failures": json.loads(existing["gate_failures_json"]),
                     "recorded_at": existing["recorded_at"],
+                    "eligibility": eligibility,
                     "replayed": True,
                 }
-            template_row = self.connection.execute(
-                "SELECT payload_json FROM profile_templates WHERE template_id=?",
-                (record["template_id"],),
-            ).fetchone()
-            if template_row is None:
-                raise ContractError("qualification template is not registered")
-            template = validate_profile_template(
-                json.loads(template_row["payload_json"]),
-            )
-            failures = qualification_gate_failures(record, template)
-            experiment = None
-            if record["experiment_id"] is not None:
-                experiment = self.connection.execute(
-                    "SELECT spec_json,evaluation_json,evaluation_sha256,verdict "
-                    "FROM experiments WHERE experiment_id=?",
-                    (record["experiment_id"],),
-                ).fetchone()
-                if (experiment is None
-                        or experiment["evaluation_sha256"]
-                        != record["evaluation_sha256"]):
-                    raise ContractError(
-                        "qualification experiment evidence is unavailable",
-                    )
-                spec = json.loads(experiment["spec_json"])
-                evaluation = json.loads(experiment["evaluation_json"])
-                if (spec["variable"]["alias"] != record["alias"]
-                        or spec["variable"]["candidate_profile_id"]
-                        != record["candidate_profile"]["id"]):
-                    raise ContractError(
-                        "qualification candidate does not match the experiment",
-                    )
-                metrics = evaluation["metrics"]
-                escaped = sum(
-                    metrics[split]["candidate_escaped_defects"]
-                    for split in ("evaluation", "held_out")
-                )
-                if (record["measured"]["evaluation_pairs"]
-                        != metrics["evaluation"]["available_pairs"]
-                        or record["measured"]["held_out_pairs"]
-                        != metrics["held_out"]["available_pairs"]
-                        or record["measured"]["critical_defects"] != escaped):
-                    raise ContractError(
-                        "qualification measurements do not match saved evaluation",
-                    )
-                if experiment["verdict"] != "promotion_proposal":
-                    failures.append("experiment_did_not_propose_promotion")
-            failures = sorted(set(failures))
-            if record["verdict"] == "qualified" and failures:
-                raise ContractError(
-                    "qualification gate did not pass: " + ", ".join(failures),
-                )
+            failures, eligibility = self._qualification_evidence(record, now=_authoritative_now(now))
             self._insert_concrete_profile(
                 record["candidate_profile"], recorded_at,
             )
@@ -2195,6 +2244,7 @@ class Store:
                 "qualification_sha256": digest,
                 "gate_failures": failures,
                 "recorded_at": recorded_at,
+                "eligibility": eligibility,
                 "replayed": False,
             }
         except Exception:
@@ -2305,7 +2355,9 @@ class Store:
                 target_profile_sha256 = qualification["profile_sha256"]
                 target_template_sha256 = qualification["template_sha256"]
                 target_qualification_id = request["qualification_id"]
-                qualification_payload = json.loads(qualification["payload_json"])
+                qualification_payload = self._require_current_qualification(
+                    request["qualification_id"], now=_authoritative_now(now),
+                )
                 if (request["actor"] == "guarded_auto"
                         and target_template_id != current["template_id"]):
                     raise ContractError(
@@ -2340,40 +2392,39 @@ class Store:
                 target_template_sha256 = target["template_sha256"]
                 target_qualification_id = target["qualification_id"]
                 if target_qualification_id is not None:
-                    qualified = self.connection.execute(
-                        "SELECT verdict,payload_json FROM qualification_runs "
-                        "WHERE qualification_id=?",
-                        (target_qualification_id,),
-                    ).fetchone()
-                    if qualified is None or qualified["verdict"] != "qualified":
-                        raise ContractError("rollback target is no longer qualified")
-                    qualification_payload = json.loads(qualified["payload_json"])
+                    qualification_payload = self._require_current_qualification(
+                        target_qualification_id, now=_authoritative_now(now),
+                    )
                 if (request["actor"] == "guarded_auto"
                         and target_template_id != current["template_id"]):
                     raise ContractError(
                         "guarded automation cannot change lifecycle policy",
                     )
-                regression = self.connection.execute(
-                    "SELECT spec_json,evaluation_json,evaluation_sha256,verdict "
-                    "FROM experiments WHERE experiment_id=?",
-                    (request["experiment_id"],),
-                ).fetchone()
-                if (regression is None
-                        or regression["evaluation_sha256"]
-                        != request["evaluation_sha256"]
-                        or regression["verdict"] != "no_change"):
+                from .experiment_eligibility import require_current_evidence
+
+                regression, regression_eligibility = require_current_evidence(
+                    self.connection, request["experiment_id"], request["evaluation_sha256"],
+                    now=_authoritative_now(now),
+                )
+                if regression["verdict"] != "no_change":
                     raise ContractError(
                         "rollback requires saved no-change regression evidence",
                     )
-                regression_spec = json.loads(regression["spec_json"])
-                regression_evaluation = json.loads(regression["evaluation_json"])
+                regression_spec = regression["spec"]
+                regression_evaluation = regression["evaluation"]
                 variable = regression_spec["variable"]
                 if (variable["alias"] != request["alias"]
                         or variable["candidate_profile_id"] != current["profile_id"]
-                        or variable["control_profile_id"] != target_profile["id"]):
+                        or variable["control_profile_id"] != target_profile["id"]
+                        or variable["candidate_profile_sha256"] != current["profile_sha256"]
+                        or variable["control_profile_sha256"] != target_profile_sha256):
                     raise ContractError(
                         "rollback experiment does not compare the active and target profiles",
                     )
+                if any(
+                        regression_evaluation["metrics"][split]["available_pairs"] < regression_spec["gate"][minimum]
+                        for split, minimum in (("evaluation", "min_evaluation_pairs"), ("held_out", "min_held_out_pairs"))):
+                    raise ContractError("rollback requires complete evaluation and held-out regression pairs")
                 rollback_evaluation = {
                     "experiment_id": request["experiment_id"],
                     "evaluation_sha256": request["evaluation_sha256"],
@@ -2381,6 +2432,7 @@ class Store:
                     "reasons": regression_evaluation["reasons"],
                     "metrics": regression_evaluation["metrics"],
                     "failures": regression_evaluation["failures"],
+                    "eligibility": regression_eligibility,
                 }
             if target_profile["id"] == current["profile_id"]:
                 raise ConflictError("binding already targets the requested profile")
@@ -2567,9 +2619,12 @@ class Store:
                     if (candidate["qualification_verdict"] != "qualified"
                             or json.loads(candidate["qualification_failures"])):
                         continue
-                    candidate_qualification = json.loads(
-                        candidate["qualification_json"],
-                    )
+                    try:
+                        candidate_qualification = self._require_current_qualification(
+                            candidate["qualification_id"], now=_authoritative_now(now),
+                        )
+                    except ContractError:
+                        continue
                 else:
                     candidate_qualification = None
                 if (request["actor"] == "guarded_auto"

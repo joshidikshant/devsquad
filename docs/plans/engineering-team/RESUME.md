@@ -4,6 +4,39 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ## Current position — October 1, 2026
 
+### Latest runtime-repair slice — shared eligibility and explicit review
+
+R3b.1's unchanged-source gate at `a4a87fd` passed 427 tests (two optional-SDK
+skips). The subsequent **partial R3b.2/R3c** slice now adds schema 15's
+append-only evaluation revisions and one transaction-bound current-evidence
+gate for evaluation replay, qualification/replay, new promotion, regression
+rollback and qualification-backed catalog fallback. Exact completed binding
+decision replay remains historical and does not mutate again. Qualifications
+match the full tested candidate and frozen role/task-class context. Proposal
+inputs carry current eligibility; legacy v1 evidence cannot produce authority.
+
+The two-test red baseline reproduced stale qualification (`ContractError not
+raised`) and the missing explicit revision operation. Six new eligibility
+tests passed in 32.393 seconds. Lifecycle positive fixtures now use real
+offline workers and public host completion rather than SQL-terminalized empty
+runs: 14 lifecycle/assignment tests passed in 22.413 seconds. Learning's
+positive tests retain their original two-evaluation/one-held-out gate and now
+use six distinct actual runs. The latest 23-test learning/eligibility/reader
+gate passed in 91.779 seconds; 227 Bash assertions and generated reference
+passed. No full integration gate or independent audit has run on schema 15.
+The source checkpoints, failure history and limitations are recorded in
+[R3b.2 partial evidence](evidence/R3b2-eligibility-partial-2026-10-01.json).
+
+**Exact next action:** finish the negative/public proof for stale catalog
+fallback and regression rollback, correction/qualification transaction races,
+revision-chain/CLI semantics and upgraded historical duplicate-outcome report/
+proposal readability. Audit the shared gate and finish R3c's remaining public
+coverage, then run one full unchanged-source integration gate at the coherent
+R3 boundary. Preserve the original evaluations and completed decisions. Do
+not install schema 15 before the old active/recoverable-run upgrade test; R4–R6
+and R8's Claude/Grok/Gemini installed proofs remain pending. No provider call,
+installation refresh, purchase, global setting change or push occurred.
+
 ### Review correction and next action
 
 Interrupted R3b.1 work newer than the planning checkpoint is now preserved as
@@ -37,9 +70,13 @@ success-integrity and saved-evidence tests passed in 9.803 seconds. The Bash
 gate passed all 227 assertions. Source fingerprints and red/green results are
 saved in [failure-path evidence](evidence/R3b1-failure-path-2026-10-01.json).
 
-**Exact next action:** run the complete core gate on the checkpointed reader
-source before accepting R3b.1; no test is running at this checkpoint. Then
-finish R3b.2's shared current-evidence eligibility and
+The unchanged-source core gate at `a4a87fd` completed **427 tests in 260.966
+seconds, OK with two optional-SDK skips**. UTC and monotonic wrapper elapsed
+times agreed (261.147 seconds). The known SQLite finalizer warning appeared
+and remains R5; the gate did not establish its repair. R3b.1 is source/offline
+verified, with the independent reader audit still outstanding.
+
+**Exact next action:** implement R3b.2's shared current-evidence eligibility and
 explicit append-only evaluation/review revisions; legacy/public compatibility
 remains R3c and the production paired-trial controller remains R5.
 
@@ -467,9 +504,8 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Finish R3b.1 from the preserved reader: honest terminal failed-output
-   handling is repaired; run the full unchanged-source gate.
-   Then implement R3b.2 shared current-evidence eligibility and append-only
+2. R3b.1's source/offline gate passed at `a4a87fd`; do not repeat unchanged
+   tests. Implement R3b.2 shared current-evidence eligibility and append-only
    evaluation/review revisions. Validate every relevant attempt, including
    fallbacks/repairs. Finish
    R3b/R3c saved evidence, replay,

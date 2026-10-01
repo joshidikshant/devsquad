@@ -24,7 +24,7 @@ from devsquad.service import Service
 from devsquad.store import ConflictError, Store
 
 
-NOW = datetime(2026, 9, 29, 9, 0, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc)
 
 
 def profile(profile_id, model_id, *, tools=None, pool="pool-a", billing="subscription"):
@@ -159,8 +159,11 @@ class ProfileLifecycleTest(unittest.TestCase):
         self.store = Store(self.database, self.artifacts)
         self.incumbent = profile("profile-a", "model-a")
         self.candidate = profile("profile-b", "model-b")
+        self.runtime_fixtures = []
 
     def tearDown(self):
+        for fixture in self.runtime_fixtures:
+            fixture.close()
         self.store.close()
         self.temp.cleanup()
 
@@ -170,66 +173,17 @@ class ProfileLifecycleTest(unittest.TestCase):
         experiment_id="experiment-profile-b",
         candidate_succeeds=True,
     ):
-        suffix = experiment_id.replace("experiment-", "")
-        cases = [
-            {
-                "case_id": "eval-1", "split": "evaluation",
-                "control_outcome_id": f"control-eval-{suffix}",
-                "candidate_outcome_id": f"candidate-eval-{suffix}",
-            },
-            {
-                "case_id": "hold-1", "split": "held_out",
-                "control_outcome_id": f"control-hold-{suffix}",
-                "candidate_outcome_id": f"candidate-hold-{suffix}",
-            },
-        ]
-        for case in cases:
-            verdicts = (
-                (("control", "failed"), ("candidate", "succeeded"))
-                if candidate_succeeds
-                else (("control", "succeeded"), ("candidate", "failed"))
-            )
-            for arm, verdict in verdicts:
-                outcome_id = case[f"{arm}_outcome_id"]
-                claim = self.store.claim_start(
-                    self.repo, f"run-{outcome_id}", {}, "owner",
-                )
-                self.store.connection.execute(
-                    "UPDATE runs SET state=?,phase=NULL WHERE id=?",
-                    (verdict, claim.run_id),
-                )
-                self.store.record_outcome(
-                    claim.run_id, final_outcome(outcome_id, verdict), now=NOW,
-                )
-        spec = {
-            "schema_version": 1,
-            "experiment_id": experiment_id,
-            "project_path": str(self.repo),
-            "question": "Should profile B replace profile A?",
-            "hypothesis": "Profile B improves held-out success.",
-            "evidence_availability": "tracked_fixture",
-            "variable": {
-                "kind": "profile_binding",
-                "alias": "review.deep",
-                "control_profile_id": "profile-a",
-                "candidate_profile_id": "profile-b",
-            },
-            "cases": cases,
-            "gate": {
-                "min_evaluation_pairs": 1,
-                "min_held_out_pairs": 1,
-                "noninferiority_margin": 0.0,
-                "minimum_success_gain": 1.0,
-                "max_candidate_escaped_defects": 0,
-            },
-            "budget": {
-                "max_cases": 2,
-                "max_worker_invocations": 0,
-                "wall_seconds": 60,
-            },
-            "rollback_target": {"profile_id": "profile-a", "binding_version": 7},
-        }
-        return self.store.evaluate_learning_experiment(spec, now=NOW)
+        # Positive authority comes from real workers and public completion,
+        # never SQL-terminalized empty runs. The assignment seam remains R5.
+        from experiment_runtime_fixture import ExperimentRuntimeFixture
+
+        fixture = ExperimentRuntimeFixture(
+            self.root / experiment_id, service=Service(self.root), repo=self.repo,
+            experiment_id=experiment_id, candidate_succeeds=candidate_succeeds,
+        )
+        self.runtime_fixtures.append(fixture)
+        fixture.run_all()
+        return fixture.service.policy_evaluate(fixture.spec)
 
     def qualification(self, evaluation, *, qualification_id="qualification-b"):
         return {
@@ -249,8 +203,8 @@ class ProfileLifecycleTest(unittest.TestCase):
             "budget": {
                 "max_cases": 2,
                 "used_cases": 2,
-                "max_worker_invocations": 0,
-                "worker_invocations": 0,
+                "max_worker_invocations": 4,
+                "worker_invocations": 4,
                 "max_wall_seconds": 60,
                 "wall_seconds": 5,
             },
@@ -598,7 +552,7 @@ class ProfileLifecycleTest(unittest.TestCase):
         version = self.store.connection.execute(
             "SELECT MAX(version) FROM schema_migrations",
         ).fetchone()[0]
-        self.assertEqual(version, 14)
+        self.assertEqual(version, 15)
         tables = {
             row[0] for row in self.store.connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'",

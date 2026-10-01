@@ -23,7 +23,7 @@ Regenerate with `python3 scripts/generate-core-reference.py`; verify with
 - `squad outcome [-h] {add} ...`
 - `squad outcome add [-h] --file FILE [--json] [--runtime-dir RUNTIME_DIR] run`
 - `squad policy [-h] {evaluate} ...`
-- `squad policy evaluate [-h] --experiment EXPERIMENT [--json] [--runtime-dir RUNTIME_DIR]`
+- `squad policy evaluate [-h] --experiment EXPERIMENT [--revision-id REVISION_ID] [--previous-evaluation-sha256 PREVIOUS_EVALUATION_SHA256] [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad prepare [-h] [--cwd CWD] [--model MODEL] [--effort EFFORT] [--permission {read_only,workspace_write}] [--timeout TIMEOUT] [--transport {cli_exec,native_protocol}] [--catalog-file CATALOG_FILE] --prompt PROMPT {codex,antigravity,grok}`
 - `squad profile [-h] {template-add,binding-bootstrap,qualification-add,binding-change,binding-fallback,binding-show} ...`
 - `squad profile binding-bootstrap [-h] --file FILE [--json] [--runtime-dir RUNTIME_DIR]`

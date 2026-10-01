@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "work_package": "R3b.2/R3c",
+  "status": "partial",
+  "recorded_at": "2026-10-01T21:18:00Z",
+  "baseline_revision": "a4a87fd",
+  "source_sha256": {
+    "plugin/core/src/devsquad/experiment_eligibility.py": "3f53719032bf0fbeb160b1c1c8a82378c9c7a66d8e20b95b76fb292c8bd1691d",
+    "plugin/core/src/devsquad/store.py": "a7ec8170ca06a5275ad122d27c74d566b18bf8376e4abb30905f531e33ac9151",
+    "plugin/core/src/devsquad/learning.py": "358df4f1cb4751c9cbb739439d432f82f9b9dc88389975b2fb1ebbf14771850e",
+    "plugin/core/src/devsquad/migrations/015_experiment_evaluation_revisions.sql": "b5dc3cb747d4fed29dbac615e1b84c869417bdda51d88153efd5e72677b109b4",
+    "test/core/test_experiment_eligibility.py": "59663e05da53c52d2de483bf8663ab25f4c9086efd50b5bee196946dd357570f"
+  },
+  "verification": {
+    "red": "2 tests in 10.631 seconds: stale qualification failed to raise ContractError, explicit revision errored because Service did not accept revision_id; exit 1",
+    "eligibility": "6 tests in 32.393 seconds passed: stale qualification/replay/promotion, exact completed decision replay, profile fingerprint/task context and append-only correction review",
+    "lifecycle_assignment": "14 tests in 22.413 seconds passed, including real-worker qualified promotion/regression rollback and historical schema-13 byte preservation",
+    "latest_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core python3 -m unittest test_learning test_experiment_eligibility test_experiment_saved_runs -v",
+    "latest_result": "23 tests in 91.779 seconds passed",
+    "bash": "227 assertions in 11 files passed",
+    "generated_reference": "Regenerated and --check passed",
+    "full_core": "Not run on schema-15 source; a4a87fd's prior 427-test gate is not substituted",
+    "independent_audit": "Not completed"
+  },
+  "fixture_boundary": "Positive lifecycle and learning authority now uses real offline worker/check subprocesses and public host completion. Original pair gates retained (lifecycle 1+1; learning 2+1). A test-only assignment seam and manual outcome import remain until R5; no native quality or public production trial-controller claim.",
+  "remaining": [
+    "Stale catalog-fallback and regression-rollback negative/public tests",
+    "Correction-versus-qualification transaction race proof",
+    "Revision chain, explicit CLI and upgraded historical duplicate-outcome audit proof",
+    "R3c remaining workflow coverage, full integration and bounded independent audit",
+    "R4-R6 runtime connections, old active/recoverable-run safe schema upgrade and R8 installed/live gates"
+  ],
+  "external_actions": "No provider call, API request, installation, purchase, reset, global setting change or push"
+}

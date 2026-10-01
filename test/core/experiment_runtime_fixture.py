@@ -27,13 +27,20 @@ from devsquad.store import Store, canonical_json, git_common_dir, request_hash
 
 
 class ExperimentRuntimeFixture:
-    def __init__(self, root: Path, *, with_fallback=False, fail_candidate=False):
+    def __init__(
+        self, root: Path, *, with_fallback=False, fail_candidate=False,
+        service=None, repo=None, experiment_id="saved-run-review-pair",
+        candidate_succeeds=True, case_splits=None,
+    ):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.with_fallback = with_fallback
         self.fail_candidate = fail_candidate
-        self.repo = self.root / "repo"
-        self.service = Service(self.root / "runtime")
+        self.candidate_succeeds = candidate_succeeds
+        self.experiment_id = experiment_id
+        self.case_splits = case_splits or [("eval-1", "evaluation"), ("hold-1", "held_out")]
+        self.repo = repo or self.root / "repo"
+        self.service = service or Service(self.root / "runtime")
         self.runs = {}
         self.git("init", "-q", str(self.repo), outside=True)
         self.git("config", "user.email", "test@example.invalid")
@@ -43,7 +50,7 @@ class ExperimentRuntimeFixture:
         self.git("commit", "-qm", "baseline")
         self.base = self.git("rev-parse", "HEAD").strip()
         self.targets = {}
-        for case_id in ("eval-1", "hold-1"):
+        for case_id, _ in self.case_splits:
             (self.repo / "README").write_text(f"candidate {case_id}\n")
             self.git("add", "README")
             self.git("commit", "-qm", f"candidate {case_id}")
@@ -67,19 +74,19 @@ class ExperimentRuntimeFixture:
             self.policy["roles"]["reviewer"] = [{"kind": "profile", "id": fallback["id"]}]
         self.package_path, self.package_digest = self.service._freeze_package()
         cases = []
-        for case_id, split in (("eval-1", "evaluation"), ("hold-1", "held_out")):
+        for case_id, split in self.case_splits:
             identities = paired_input_identity(
                 self.declaration_snapshot(case_id, "control"),
                 role="reviewer", package_digest=self.package_digest,
             )
             cases.append({
                 "case_id": case_id, "split": split,
-                "control_outcome_id": f"control-{case_id}",
-                "candidate_outcome_id": f"candidate-{case_id}",
+                "control_outcome_id": self.outcome_id(case_id, "control"),
+                "candidate_outcome_id": self.outcome_id(case_id, "candidate"),
                 **identities,
             })
         self.spec = {
-            "schema_version": 2, "experiment_id": "saved-run-review-pair",
+            "schema_version": 2, "experiment_id": experiment_id,
             "project_path": str(self.repo),
             "question": "Does the candidate fixture improve paired acceptance?",
             "hypothesis": "Candidate outcomes improve in evaluation and held-out cases.",
@@ -96,9 +103,13 @@ class ExperimentRuntimeFixture:
                 "noninferiority_margin": 0.0, "minimum_success_gain": 1.0,
                 "max_candidate_escaped_defects": 0,
             },
-            "budget": {"max_cases": 2, "max_worker_invocations": 8 if with_fallback else 4, "wall_seconds": 600},
+            "budget": {"max_cases": len(cases), "max_worker_invocations": len(cases) * (4 if with_fallback else 2), "wall_seconds": 600},
             "rollback_target": {"profile_id": "profile-a", "binding_version": 7},
         }
+
+    def outcome_id(self, case_id, arm):
+        suffix = "" if self.experiment_id == "saved-run-review-pair" else f"-{self.experiment_id}"
+        return f"{arm}-{case_id}{suffix}"
 
     def git(self, *args, outside=False):
         command = ["git"] if outside else ["git", "-C", str(self.repo)]
@@ -165,7 +176,7 @@ class ExperimentRuntimeFixture:
             if no_attempt:
                 stack.enter_context(patch.object(self.service, "_spawn_daemon", return_value=0))
             started = self.service.start(
-                self.task(case_id, arm), f"{arm}-{case_id}",
+                self.task(case_id, arm), self.outcome_id(case_id, arm),
                 _internal_review_fixture={"verdict": "clean", "summary": "Fixture review of the frozen candidate.", "findings": []},
             )
         run_id = started["run_id"]
@@ -186,15 +197,15 @@ class ExperimentRuntimeFixture:
                 packet = claimed["handoff"]["packet"]
                 body = {
                     "schema_version": 1, "submission_id": f"finish-{arm}-{case_id}",
-                    "disposition": "accept" if arm == "candidate" else "reject",
+                    "disposition": "accept" if (arm == "candidate") == self.candidate_succeeds else "reject",
                     "reason": "Predeclared offline fixture disposition.",
                     "evidence_refs": [{"artifact_id": reference["artifact_id"], "sha256": reference["sha256"]} for reference in packet["artifacts"]],
                 }
                 completed = self.service.handoff_complete(run_id, claimed["claim"], {**body, "submission_hash": request_hash(body)})
-                verdict = "succeeded" if arm == "candidate" else "failed"
+                verdict = "succeeded" if (arm == "candidate") == self.candidate_succeeds else "failed"
                 if completed["state"] != verdict:
                     raise AssertionError(f"public fixture disposition failed: {completed}")
-        outcome = experimental_final(f"{arm}-{case_id}", verdict)
+        outcome = experimental_final(self.outcome_id(case_id, arm), verdict)
         outcome["observed_at"] = datetime.now(timezone.utc).isoformat()
         outcome["evidence_refs"] = ["receipt.json", "result-receipt.json"]
         self.service.outcome_add(run_id, outcome)

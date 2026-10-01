@@ -304,6 +304,11 @@ def command_report(args: argparse.Namespace) -> tuple[dict, int]:
 
 def command_policy_evaluate(args: argparse.Namespace) -> tuple[dict, int]:
     experiment = _read_json(args.experiment, "experiment file")
+    if args.revision_id is not None or args.previous_evaluation_sha256 is not None:
+        return envelope(data=_service(args).policy_evaluate(
+            experiment, revision_id=args.revision_id,
+            previous_evaluation_sha256=args.previous_evaluation_sha256,
+        )), 0
     return envelope(data=_service(args).policy_evaluate(experiment)), 0
 
 
@@ -503,6 +508,8 @@ def parser() -> argparse.ArgumentParser:
     policy_sub = policy.add_subparsers(dest="policy_command", required=True)
     evaluate = policy_sub.add_parser("evaluate")
     evaluate.add_argument("--experiment", required=True)
+    evaluate.add_argument("--revision-id")
+    evaluate.add_argument("--previous-evaluation-sha256")
     evaluate.add_argument("--json", action="store_true")
     evaluate.add_argument("--runtime-dir", default=runtime_default)
     evaluate.set_defaults(func=command_policy_evaluate)

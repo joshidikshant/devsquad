@@ -123,6 +123,22 @@ def experimental_final(outcome_id, verdict):
 
 
 class LearningContractTest(unittest.TestCase):
+    def runtime_fixture(self):
+        from experiment_runtime_fixture import ExperimentRuntimeFixture
+
+        temporary = tempfile.TemporaryDirectory(prefix="devsquad-learning-public-")
+        self.addCleanup(temporary.cleanup)
+        fixture = ExperimentRuntimeFixture(
+            Path(temporary.name), case_splits=[
+                ("eval-1", "evaluation"), ("eval-2", "evaluation"), ("hold-1", "held_out"),
+            ],
+        )
+        self.addCleanup(fixture.close)
+        # Retain the original two-evaluation/one-held-out acceptance threshold.
+        fixture.spec["gate"].update(min_evaluation_pairs=2, minimum_success_gain=0.5)
+        fixture.run_all()
+        return fixture
+
     def test_outcome_contract_rejects_false_success_and_mutation(self):
         normalized = validate_outcome(final_outcome(), now=NOW)
         self.assertEqual(normalized["verdict"], "succeeded")
@@ -198,53 +214,21 @@ class LearningContractTest(unittest.TestCase):
             evaluate_experiment(spec, invalid_chains, evaluated_at=NOW.isoformat())
 
     def test_experiment_evaluation_is_persisted_and_replay_safe(self):
-        with tempfile.TemporaryDirectory() as root:
-            path = Path(root)
-            repository = path / "repo"
-            subprocess.run(["git", "init", "-q", str(repository)], check=True)
-            subprocess.run(
-                ["git", "-C", str(repository), "config", "user.email", "test@example.invalid"],
-                check=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(repository), "config", "user.name", "Test"],
-                check=True,
-            )
-            (repository / "README").write_text("fixture\n")
-            subprocess.run(["git", "-C", str(repository), "add", "README"], check=True)
-            subprocess.run(["git", "-C", str(repository), "commit", "-qm", "base"], check=True)
-            store = Store(path / "state.sqlite3", path / "artifacts")
-            self.addCleanup(store.close)
-            spec = experiment(repository)
-            for case in spec["cases"]:
-                for arm, verdict in (("control", "failed"), ("candidate", "succeeded")):
-                    outcome_id = case[f"{arm}_outcome_id"]
-                    claim = store.claim_start(
-                        repository, f"run-{outcome_id}", {}, "owner",
-                    )
-                    store.connection.execute(
-                        "UPDATE runs SET state=?,phase=NULL WHERE id=?",
-                        (verdict, claim.run_id),
-                    )
-                    store.record_outcome(
-                        claim.run_id,
-                        experimental_final(outcome_id, verdict),
-                        now=NOW,
-                    )
-            first = store.evaluate_learning_experiment(spec, now=NOW)
-            replay = store.evaluate_learning_experiment(spec, now=NOW)
-            self.assertEqual(first["evaluation"]["verdict"], "promotion_proposal")
-            self.assertFalse(first["replayed"])
-            self.assertTrue(replay["replayed"])
-            changed = copy.deepcopy(spec)
-            changed["hypothesis"] = "Mutated after evaluation."
-            with self.assertRaisesRegex(ConflictError, "different specification"):
-                store.evaluate_learning_experiment(changed, now=NOW)
-            inputs = store.learning_proposal_inputs(repository, now=NOW)
-            self.assertEqual(
-                inputs["experiment"]["experiment"]["experiment_id"],
-                spec["experiment_id"],
-            )
+        fixture = self.runtime_fixture()
+        first = fixture.service.policy_evaluate(fixture.spec)
+        replay = fixture.service.policy_evaluate(fixture.spec)
+        self.assertEqual(first["evaluation"]["verdict"], "promotion_proposal")
+        self.assertFalse(first["replayed"])
+        self.assertTrue(replay["replayed"])
+        self.assertTrue(first["eligibility"]["eligible"])
+        changed = copy.deepcopy(fixture.spec)
+        changed["hypothesis"] = "Mutated after evaluation."
+        with self.assertRaisesRegex(ConflictError, "different specification"):
+            fixture.service.policy_evaluate(changed)
+        store = fixture.store()
+        self.addCleanup(store.close)
+        inputs = store.learning_proposal_inputs(fixture.repo)
+        self.assertEqual(inputs["experiment"]["experiment"]["experiment_id"], fixture.spec["experiment_id"])
 
     def test_learning_proposal_is_traceable_and_never_changes_policy(self):
         project_path = "/tmp/experiment-project"
@@ -267,35 +251,15 @@ class LearningContractTest(unittest.TestCase):
             {"action": "retain_current_policy", "review_required": False},
         )
 
-        spec = experiment(Path(project_path))
-        chains = {}
-        for case in spec["cases"]:
-            chains[case["control_outcome_id"]] = {
-                "final": experimental_final(case["control_outcome_id"], "failed"),
-                "late_corrections": [],
-            }
-            chains[case["candidate_outcome_id"]] = {
-                "final": experimental_final(case["candidate_outcome_id"], "succeeded"),
-                "late_corrections": [],
-            }
-        evaluation = evaluate_experiment(
-            spec, chains, evaluated_at=NOW.isoformat(),
-        )
-        spec_sha256 = hashlib.sha256(
-            canonical_json(validate_experiment(spec)).encode(),
-        ).hexdigest()
-        evaluation_sha256 = hashlib.sha256(
-            canonical_json(evaluation).encode(),
-        ).hexdigest()
-        record = {
-            "experiment": spec,
-            "spec_sha256": spec_sha256,
-            "evaluation": evaluation,
-            "evaluation_sha256": evaluation_sha256,
-            "recorded_at": NOW.isoformat(),
-        }
+        fixture = self.runtime_fixture()
+        evaluation = fixture.service.policy_evaluate(fixture.spec)
+        evaluation_sha256 = evaluation["evaluation_sha256"]
+        store = fixture.store()
+        self.addCleanup(store.close)
+        inputs = store.learning_proposal_inputs(fixture.repo)
+        report, record = inputs["report"], inputs["experiment"]
         proposal = build_learning_proposal(
-            report, record, generated_at=NOW.isoformat(),
+            report, record, generated_at=datetime.now(timezone.utc).isoformat(),
         )
         self.assertEqual(proposal["verdict"], "promotion_proposal")
         self.assertFalse(proposal["active_policy_changed"])
@@ -429,7 +393,7 @@ class LearningContractTest(unittest.TestCase):
                 store.connection.execute(
                     "SELECT MAX(version) FROM schema_migrations",
                 ).fetchone()[0],
-                14,
+                15,
             )
             columns = {
                 row[1] for row in store.connection.execute("PRAGMA table_info(outcomes)")

@@ -14,15 +14,15 @@
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
   "next_milestone": "M5",
-  "next_work_package": "R3b.1",
+  "next_work_package": "R3b.2",
   "partial_implementation_checkpoint": {
     "recorded_on": "2026-10-01",
     "baseline_revision": "a22b949",
     "status": "partial",
-    "artifact": "evidence/R3b1-failure-path-2026-10-01.json",
-    "scope": "Authoritative v2 saved-run reader, replay invalidation, prelaunch controlled-input guard and public offline fixture; no install or provider calls",
-    "next_action": "Terminal-failure decoding reproduced and repaired; run full core integration, then R3b.2 shared current-evidence eligibility and append-only revisions",
-    "limitations": "Full integration and independent reader audit not complete; production paired-trial controller remains R5; native Gemini worker and refreshed installed proof remain unverified"
+    "artifact": "evidence/R3b2-eligibility-partial-2026-10-01.json",
+    "scope": "Reader full gate passed at a4a87fd; schema-15 explicit revisions and shared lifecycle eligibility implemented with focused public fixtures; no install or provider calls",
+    "next_action": "Finish stale fallback/rollback, transaction race, revision/CLI and upgraded legacy public proof; audit R3 and run its complete integration gate",
+    "limitations": "Schema-15 full integration and independent audit incomplete; SQLite warning and production paired-trial controller remain R5; native Gemini worker and refreshed installed proof unverified"
   },
   "planning_checkpoint": {
     "recorded_on": "2026-10-01",
@@ -44,7 +44,7 @@
   "review_work_packages": [
     {"id": "R1", "title": "Candidate integrity through trusted checks", "status": "complete", "milestones": ["M3", "M5"], "depends_on": [], "items": ["F1"], "evidence": "evidence/R1-candidate-integrity-2026-09-29.json", "checkpoint": "Source repair verified by public regressions, mutation matrix, 330-test core gate with 2 optional-SDK skips and independent patch review. Installed refresh remains R8."},
     {"id": "R2", "title": "Observed Claude execution identity", "status": "complete", "milestones": ["M5"], "depends_on": [], "items": ["F2"], "evidence": "evidence/R2-observed-identity-2026-10-01.json", "checkpoint": "Source/offline repair verified at ef98889: final 367-test gate OK with two optional-SDK skips and stable UTC/monotonic timing; 227 Bash assertions and generated reference passed. Two independent-review findings repaired and independently rechecked. Earlier six-failure gate retained in evidence. SQLite warning remains R5; installed/live proof remains R8, not full M5 closure."},
-    {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "in_progress", "milestones": ["M6"], "depends_on": [], "items": ["F3"], "evidence": "evidence/R3b1-failure-path-2026-10-01.json", "checkpoint": "R3a remains verified at 672e383 with its complete 402-test gate. R3b.1 has a public v2 saved-run reader, changed-evidence replay rejection and controlled-input launch guard. Imported-profile mismatch and honest terminal-failure decoding were reproduced and repaired. New failure-receipt and missing-success regressions pass; full integration and independent reader audit remain incomplete. Shared eligibility and append-only revisions remain R3b.2; legacy/public compatibility remains R3c. R3 is not closed."},
+    {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "in_progress", "milestones": ["M6"], "depends_on": [], "items": ["F3"], "evidence": "evidence/R3b2-eligibility-partial-2026-10-01.json", "checkpoint": "R3a verified at 672e383; R3b.1 reader and failed-output repair passed 427-test full gate at a4a87fd. R3b.2 schema-15 explicit revisions and shared lifecycle eligibility have six new passing tests. Real public offline lifecycle/learning positives replace SQL-terminalized runs without lowering pair gates. Latest 23-test focused gate passes. Stale fallback/rollback, race, revision/CLI and upgraded legacy public proof plus full integration/independent audit remain open. R3 is not closed."},
     {"id": "R4", "title": "Normal routing, catalog lifecycle and quota", "status": "pending", "milestones": ["M6", "M7"], "depends_on": ["R1", "R2", "R3"], "items": ["F4", "G2"]},
     {"id": "R5", "title": "Public saved-run outcomes and bounded experiments", "status": "pending", "milestones": ["M6"], "depends_on": ["R3", "R4"], "items": ["G1"]},
     {"id": "R6", "title": "Normal terminal experience and readiness", "status": "pending", "milestones": ["M5", "M7"], "depends_on": ["R1", "R2", "R4", "R5"], "items": ["G3", "G4"]},

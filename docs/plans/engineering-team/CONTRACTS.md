@@ -296,3 +296,33 @@ promotion, rollback or fallback must be checked separately from historical
 read/replay. Implementation progress and remaining reader/eligibility/public
 controller work are tracked in [RESUME.md](RESUME.md), not implied by this
 contract or by pure normalized-chain unit fixtures.
+
+### Current eligibility and explicit evaluation revisions
+
+Historical evidence and present authority are distinct. One transaction-bound
+eligibility result identifies the experiment, spec SHA256, pinned evaluation
+SHA256, saved/current evidence SHA256 and concrete ineligibility reasons.
+Legacy v1 evaluations remain readable but cannot authorize a new qualification,
+promotion, regression rollback or qualification-backed catalog fallback.
+Changed final/correction/attempt evidence invalidates a prior evaluation; it
+does not rewrite it or automatically change a binding. Exact completed binding
+decision replay returns its original receipt without another mutation.
+
+R3b.2's agreed implementation contract is an explicit append-only review with
+`policy evaluate --experiment FILE --revision-id ID --previous-evaluation-sha256 SHA`.
+Both revision arguments are required together. The predecessor must be the
+latest saved evaluation, checked in the same write transaction. A revision
+uses the original frozen spec and assigned runs, never relabelled new samples.
+Schema 15 adds revision history beside the unchanged original `experiments`
+row. A repeated revision ID is idempotent only for the same experiment/spec
+and predecessor, and still checks present evidence. Responses identify the
+revision and predecessor; qualification and decision records pin the existing
+evaluation SHA256, which identifies either the original or reviewed revision.
+
+New qualifications must match the full tested candidate fingerprint and all
+assigned candidate tasks' declared role/task class. Qualification replay and
+every new binding mutation recheck current evidence within their write
+transaction. A proven bootstrap predecessor without qualification retains its
+existing explicit baseline contract. Installation of this schema remains
+gated on old active/recoverable-run upgrade safety; adding the migration does
+not establish that installation gate. Implementation status is in RESUME.md.

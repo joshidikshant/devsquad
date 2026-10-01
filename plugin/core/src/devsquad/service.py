@@ -999,11 +999,17 @@ class Service:
         finally:
             store.close()
 
-    def policy_evaluate(self, experiment: dict[str, Any]) -> dict[str, Any]:
+    def policy_evaluate(
+        self, experiment: dict[str, Any], *, revision_id: str | None = None,
+        previous_evaluation_sha256: str | None = None,
+    ) -> dict[str, Any]:
         """Evaluate and save one frozen learning experiment without promotion."""
         store = self._store()
         try:
-            return store.evaluate_learning_experiment(experiment)
+            return store.evaluate_learning_experiment(
+                experiment, revision_id=revision_id,
+                previous_evaluation_sha256=previous_evaluation_sha256,
+            )
         finally:
             store.close()
 

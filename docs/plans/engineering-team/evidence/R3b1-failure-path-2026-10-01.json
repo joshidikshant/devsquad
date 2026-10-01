@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_package": "R3b.1",
-  "status": "failure_path_repaired_full_gate_pending",
+  "status": "source_offline_verified_independent_audit_pending",
   "recorded_at": "2026-10-01T20:57:36Z",
   "baseline_revision": "bd0cf5c",
   "source_sha256": {
@@ -19,10 +19,11 @@
     "integrity_result": "6 tests passed in 9.803 seconds, exit 0",
     "bash": "bash test/run.sh: 227 assertions in 11 files passed",
     "generated_reference": "python3 scripts/generate-core-reference.py --check passed",
-    "full_core": "Pending; run on this checkpointed source",
+    "full_core": "a4a87fd unchanged source: 427 tests in 260.966 seconds, OK with 2 optional-SDK skips, exit 0; UTC elapsed 261.146617 seconds and monotonic 261.146937 seconds",
+    "full_core_warning": "Known unclosed SQLite finalizer ResourceWarning remains R5; not suppressed or counted as repaired",
     "independent_review": "Not completed; no independent audit claimed"
   },
   "fixture_boundary": "Real offline workers and public terminal completion; test-only predeclared-assignment seam, manual outcome addition and synthetic host dispositions. Not the R5 production trial controller or native quality proof.",
   "external_actions": "No provider request, installation refresh, purchase, reset, global setting change or push",
-  "next_action": "Full core regression gate, then R3b.2 shared current-evidence eligibility and explicit append-only evaluation/review revisions"
+  "next_action": "R3b.2 shared current-evidence eligibility and explicit append-only evaluation/review revisions; bounded independent reader audit remains outstanding"
 }
