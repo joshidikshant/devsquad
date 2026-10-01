@@ -23,8 +23,8 @@
   },
   "review_work_packages": [
     {"id": "R1", "title": "Candidate integrity through trusted checks", "status": "complete", "milestones": ["M3", "M5"], "depends_on": [], "items": ["F1"], "evidence": "evidence/R1-candidate-integrity-2026-09-29.json", "checkpoint": "Source repair verified by public regressions, mutation matrix, 330-test core gate with 2 optional-SDK skips and independent patch review. Installed refresh remains R8."},
-    {"id": "R2", "title": "Observed Claude execution identity", "status": "in_progress", "milestones": ["M5"], "depends_on": [], "items": ["F2"], "evidence": "evidence/R2-identity-red-baseline-2026-09-29.json", "checkpoint": "Source repair and public identity/failure/fallback/replay regressions implemented; two independent-review findings fixed and retested. Last full gate: 367 tests, six failures, two optional-SDK skips with observed wall-clock budget jumps. All six failures passed unchanged on October 1 with stable UTC/monotonic timing. Final complete gate and evidence checkpoint remain; installed/live proof stays open."},
-    {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "pending", "milestones": ["M6"], "depends_on": [], "items": ["F3"]},
+    {"id": "R2", "title": "Observed Claude execution identity", "status": "complete", "milestones": ["M5"], "depends_on": [], "items": ["F2"], "evidence": "evidence/R2-observed-identity-2026-10-01.json", "checkpoint": "Source/offline repair verified at ef98889: final 367-test gate OK with two optional-SDK skips and stable UTC/monotonic timing; 227 Bash assertions and generated reference passed. Two independent-review findings repaired and independently rechecked. Earlier six-failure gate retained in evidence. SQLite warning remains R5; installed/live proof remains R8, not full M5 closure."},
+    {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "pending", "milestones": ["M6"], "depends_on": [], "items": ["F3"], "checkpoint": "Next implementation: R3a provenance contract and reused-evidence regression, then R3b shared current-evidence eligibility and R3c public/legacy/correction proof. Source mapping is in SOL-REVIEW-FOLLOWUP.md; no R3 implementation is claimed."},
     {"id": "R4", "title": "Normal routing, catalog lifecycle and quota", "status": "pending", "milestones": ["M6", "M7"], "depends_on": ["R1", "R2", "R3"], "items": ["F4", "G2"]},
     {"id": "R5", "title": "Public saved-run outcomes and bounded experiments", "status": "pending", "milestones": ["M6"], "depends_on": ["R3", "R4"], "items": ["G1"]},
     {"id": "R6", "title": "Normal terminal experience and readiness", "status": "pending", "milestones": ["M5", "M7"], "depends_on": ["R1", "R2", "R4", "R5"], "items": ["G3", "G4"]},
@@ -233,7 +233,8 @@
       "depends_on": ["M3"],
       "status": "in_progress",
       "acceptance_section": "M5 — Deliver a bounded engineering change",
-      "open_review_items": ["F2", "G4"],
+      "open_review_items": ["G4"],
+      "review_resolution": "F1/R1 and F2/R2 source/offline repairs are verified; R6 check coverage and R8 installed/live proof remain open.",
       "evidence": [
         {
           "kind": "implementation_checkpoint",
@@ -290,7 +291,7 @@
           "availability": "tracked_tests"
         }
       ],
-      "blocker": "R1 source repair is verified; independent R2/R6 repairs remain available. The later genuine Claude-to-Codex delivery gate also requires normal Claude login; fixtures cannot substitute for that receipt."
+      "blocker": "R1/R2 source repairs are verified; independent R6 normal-command check coverage remains. The genuine installed Claude-to-Codex delivery gate also requires normal Claude login; fixtures cannot substitute for that receipt."
     },
     {
       "id": "M6",

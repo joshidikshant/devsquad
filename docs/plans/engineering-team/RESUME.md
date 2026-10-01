@@ -6,7 +6,7 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Review correction and next action
 
-R2 implementation is preserved after `3612942`: strict native result parsing,
+R2 source/offline repair is verified at `ef98889`: strict native result parsing,
 v2 import evidence, actual-model independence and durable failed diagnostics.
 The 16 original worker regressions, 12 import/parser regressions, 19 existing
 delivery tests and nine public native delivery/fallback/cancellation/legacy
@@ -21,15 +21,22 @@ failures and two skips**, not a pass. Four failures show budget expiration or
 15–17 minute UTC jumps during a 231-second monotonic suite. On October 1, all
 six failed cases passed unchanged in 18.998 seconds; per-test UTC and monotonic
 elapsed measurements agreed. This supports an environmental timing explanation,
-but does not erase the failed gate. A clean complete rerun remains the next
-verification step; do not weaken budget or identity enforcement. The recurring
-SQLite cleanup warning remains assigned to R5. **R2 is not closed yet.**
+but does not erase the failed gate. The final unchanged-source rerun completed
+**367 tests in 215.886 seconds, OK with two optional-SDK skips**; its wrapper
+measured 216.021 UTC seconds and 216.020 monotonic seconds. The SQLite cleanup
+warning still appeared and remains assigned to R5. All 227 Bash assertions
+and the generated-reference check passed. **R2 source/offline closure is
+recorded; installed/live closure remains R8.** See
+[R2 evidence](evidence/R2-observed-identity-2026-10-01.json). No gate is running.
 
 No live provider call, installed refresh or global provider-setting change
 occurred. The original red baseline is retained in
 [R2 baseline evidence](evidence/R2-identity-red-baseline-2026-09-29.json).
-Once R2's final gate is green and recorded, continue R3 rather than retrying
-blocked authentication. R3's two-outcome/three-case promotion bug was reproduced
+The latest user request was to create a plan and feedback for SOL. This
+checkpoint updates the canonical handoff and verification records only; no
+new implementation was added. SOL should begin **R3a** in
+[SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), not redo R2 or retry blocked
+authentication. R3's two-outcome/three-case promotion bug was reproduced
 again without modifying production code; it still needs provenance repair.
 
 R1's source repair is verified after `399d93d`: the public regression first
@@ -49,16 +56,16 @@ is verified with installed refresh pending; M4 retains its real-Claude-host gate
 independent repairs and integration work; C1 remains pending full-delivery
 scope. R1 is the first implemented repair; do not confuse it with full closure.
 
-Execute [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), starting at **R2**:
-repair Claude identity using native `modelUsage`, keeping effective effort
-unknown when unreported. The plan contains the bounded local/primary-source
-investigation; no live Claude generation was used. Continue with
-independent experiment evidence (R3), routing/catalog/quota (R4), learning
+Execute [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), starting at **R3**:
+bind independent experiment evidence to saved runs, frozen assignments,
+profiles and paired inputs; protect replay and future qualification decisions
+against stale or unverified evidence. The plan contains bounded source-review
+feedback and acceptance tests. Continue with routing/catalog/quota (R4), learning
 runtime connections (R5), and normal terminal/readiness/check discovery (R6).
 R7 covers C1 and R8 covers installed/live closure. Authentication and the Jev
 key block their specific live subgates, not the independent engineering work.
 
-Fresh review verification ran 317 Python tests successfully (2 optional-SDK
+The original September 29 review ran 317 Python tests successfully (2 optional-SDK
 skips), 227 Bash assertions, generated-reference validation and an installed
 payload comparison. An unclosed SQLite `ResourceWarning` still appeared and
 is assigned to R5. Existing live receipts remain evidence of their exact runs,
@@ -340,10 +347,10 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Implement R2 against the saved 16-test failing Claude-identity baseline;
-   add strict import, actual-model independence and durable failure/replay
-   public regressions. Then execute R3 and R4–R6 in dependency order. Preserve
-   the verified R1 repair,
+2. Begin R3a: add the two-outcome/three-case regression and strict frozen
+   experiment provenance contract. Finish R3b/R3c saved evidence, replay,
+   qualification/promotion/rollback/catalog-fallback eligibility and historical
+   compatibility, then execute R4–R6 in dependency order. Preserve R1/R2,
    explicit check `output_paths` contract and historical receipts. Do not
    rewrite the architecture or reset completed work.
 3. Keep Claude and Grok live probes paused until normal login is restored.

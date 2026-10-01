@@ -3,26 +3,28 @@
 M5 is **in progress with independent repairs available**. The September 29
 review at `f4fa657` reopened candidate integrity (F1), observed Claude identity
 (F2) and complete normal-command check coverage (G4). F1/R1 is now repaired
-and verified offline; execute R2/R6 in
+and verified offline; R2 is also source/offline verified at `ef98889`. Execute R6 in
 [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md). The genuine Claude-to-Codex
 live gate additionally remains blocked on normal Claude login.
 
-R2 now has a preserved red baseline: 16 fake-CLI worker tests ran with 39
-assertion/subtest failures and 4 errors against unchanged production source
-at `6848f11`. See [baseline evidence](evidence/R2-identity-red-baseline-2026-09-29.json).
-Parser repair, strict imported evidence, public independent-review acceptance
-and durable failure/replay regressions remain unfinished. This checkpoint
-does not establish a green core suite or a corrected Claude live receipt.
+R2 now enforces native reported model identity, strict imported evidence bound
+to the actual attempt, independent-review acceptance and durable failure/
+fallback/cancellation/legacy replay. Its 37 added regressions are included in
+the final 367-test suite (OK, two optional-SDK skips); 227 Bash assertions and
+the generated-reference check passed. The SQLite cleanup warning remains R5.
+See [R2 evidence](evidence/R2-observed-identity-2026-10-01.json); the
+[red baseline](evidence/R2-identity-red-baseline-2026-09-29.json) is retained as
+history. This is not a corrected installed Claude live receipt or full M5 closure.
 
 | Requirement | Planned evidence | Status |
 |---|---|---|
-| Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | argv conformance verified at `d96e9e4`; observed identity reopened under R2 |
+| Claude headless adapter | Manifest/argv conformance, exact model and effort validation, structured result faults, bounded permission/tool surface, recursion guard and installed-wheel contents | argv conformance verified at `d96e9e4`; R2 observed-model evidence verified offline; unreported effort remains unknown |
 | Isolated implementation | Run-owned detached delivery worktree at the frozen target, one active writer and original checkout/index/HEAD preservation | verified offline at `0e88d73` |
 | Scoped local candidate | Out-of-scope and symlink-escape rejection; intentional untracked capture; local candidate commit and patch/hash artifacts; no merge, push or remote mutation | verified offline at `0e88d73` |
-| Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | reopened under R2; prior fixtures do not detect fabricated observed identity; live proof pending |
+| Independent reviewer | Different verified model identity is mandatory and a different harness is preferred when qualified; unknown/same identity cannot count | R2 public host/headless identity gates verified offline; installed/live proof pending |
 | Candidate-bound review/checks | Read-only review and separate check worktree bind to the exact candidate; changed candidate invalidates prior evidence | R1 check-mutation repair verified offline; R6 normal-command check coverage remains |
 | Bounded correction/fallback | Seeded defect causes revise to implementation, then new review/checks; rate-limit fallback retains permissions and all finite budgets | correction/budgets verified at `4c76887`; same-permission delivery fallback verified at `b7d90cc` |
-| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | R1 candidate integrity now enforced; R2 identity repair remains |
+| Non-overridable disposition | Missing implementation/invalid review/mandatory failing check block acceptance regardless of lead prose | R1 candidate integrity and R2 actual-model identity enforced offline; installed/live proof pending |
 | Complete result history | Receipt retains every implementer/reviewer/lead attempt, failed fallback, repair, revision, candidate and evidence hash | success, repair, fallback, failure and cancellation history verified offline at `b7d90cc` |
 | Crash recovery | Killing a live implementation supervisor cannot create a duplicate writer on resume | prelaunch and live revised-writer recovery verified offline at `f199cd2` |
 | Live acceptance | One bounded issue completes across at least two authenticated subscription harnesses with different verified models | pending repairs and normal Claude CLI login |
