@@ -123,6 +123,7 @@ class CliTest(unittest.TestCase):
             checks=(("python3", "-m", "unittest"),), check_timeout=600,
             review_mode="standard", review_focus=None,
             claude_model="sonnet", claude_effort="high",
+            role_bindings={}, pinned_roles=("reviewer",),
         )
         service.assert_not_called()
 
@@ -183,6 +184,7 @@ class CliTest(unittest.TestCase):
             check_timeout=600, review_mode="adversarial",
             review_focus="state transitions",
             claude_model="claude-sonnet-exact", claude_effort="high",
+            role_bindings={}, pinned_roles=("reviewer", "implementer"),
         )
 
     def test_normal_entry_rejects_waiting_for_a_dry_run(self):

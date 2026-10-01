@@ -21,7 +21,7 @@ from .codex_protocol import (
 )
 from .contracts import ContractError
 from .store import canonical_json
-from .validation import validate_task
+from .validation import validate_profile, validate_task
 
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
@@ -31,6 +31,8 @@ CORE_ROOT = (
     else Path(sys.prefix) / "share" / "devsquad"
 )
 MAX_USER_CHECKS = 12
+NORMAL_POLICY = {"id": "managed-normal-entry", "version": 1}
+NORMAL_ALIASES = {"implementer": "implement.balanced", "reviewer": "review.deep"}
 
 
 def _git(repo: Path, *arguments: str) -> str:
@@ -193,6 +195,8 @@ def _managed_routing(
     *,
     claude_model: str,
     claude_effort: str,
+    role_bindings: dict[str, Any],
+    pinned_roles: set[str],
 ) -> dict[str, Any]:
     reviewer = {
         "id": "managed-codex-reviewer",
@@ -202,29 +206,19 @@ def _managed_routing(
         "effort": {"value": codex["effort"], "transport": "native"},
         "required_tools": ["read"],
         "permission_policy": "read_only",
-        "account_pool_id": "codex-subscription",
+        "account_pool_id": codex.get("account_pool_id", "codex-subscription"),
         "billing_mode": "subscription",
         "quality_status": "trial",
         "evidence_refs": [
             f"runtime-catalog:{codex['harness_version']}:{codex['model_id']}",
         ],
     }
-    profiles = [reviewer]
-    roles: dict[str, list[dict[str, str]]] = {
-        "reviewer": [{"kind": "profile", "id": reviewer["id"]}],
-    }
-    account_pools: dict[str, dict[str, Any]] = {
-        "codex-subscription": {
-            "allowed_billing_modes": ["subscription"],
-            "max_concurrency": 1,
-            "unknown_capacity_policy": "allow_bounded",
-        },
-    }
+    trial_profiles = {"reviewer": reviewer}
     if workflow == "issue-delivery":
         implementer = {
             "id": "managed-claude-implementer",
             "harness": "claude",
-            "model_family": "claude-sonnet",
+            "model_family": next((f"claude-{family}" for family in ("sonnet", "opus", "haiku") if family in claude_model.lower()), "claude"),
             "model_id": claude_model,
             "effort": {"value": claude_effort, "transport": "native"},
             "required_tools": ["read", "write"],
@@ -234,25 +228,57 @@ def _managed_routing(
             "quality_status": "trial",
             "evidence_refs": ["verified-claude-cli-2.1.220"],
         }
-        profiles.insert(0, implementer)
-        roles["implementer"] = [
-            {"kind": "profile", "id": implementer["id"]},
-        ]
-        account_pools["claude-subscription"] = {
+        trial_profiles = {"implementer": implementer, **trial_profiles}
+    profiles = []
+    bindings = {}
+    overrides = {}
+    roles = {}
+    for role, profile in trial_profiles.items():
+        # A catalog/default/pin change must not reuse a concrete profile ID
+        # with different bytes or overwrite an approved incumbent.
+        digest = hashlib.sha256(canonical_json(profile).encode()).hexdigest()
+        profile["id"] += f"-{digest[:16]}"
+        profiles.append(profile)
+        alias = NORMAL_ALIASES[role]
+        approved = role_bindings.get(role)
+        if approved is not None:
+            if (not isinstance(approved, dict) or approved.get("alias") != alias
+                    or type(approved.get("version")) is not int or approved["version"] < 1):
+                raise ContractError("normal role binding identity is invalid")
+            incumbent = json.loads(canonical_json(approved.get("profile")))
+            validate_profile(incumbent)
+            if (incumbent["harness"] != profile["harness"]
+                    or incumbent["permission_policy"] != profile["permission_policy"]
+                    or incumbent["billing_mode"] != "subscription"
+                    or incumbent["quality_status"] != "proven"):
+                raise ContractError("normal role binding exceeds the supported role contract")
+            if incumbent["id"] == profile["id"] and incumbent != profile:
+                raise ContractError("normal role binding conflicts with the trial profile")
+            if incumbent["id"] != profile["id"]:
+                profiles.append(incumbent)
+            bindings[alias] = {"profile_id": incumbent["id"], "version": approved["version"]}
+        else:
+            bindings[alias] = {"profile_id": profile["id"], "version": 1}
+        roles[role] = [{"kind": "alias", "id": alias}]
+        if role in pinned_roles:
+            overrides[role] = {"profile_id": profile["id"], "fallback": "none"}
+    account_pools = {
+        profile["account_pool_id"]: {
             "allowed_billing_modes": ["subscription"],
             "max_concurrency": 1,
             "unknown_capacity_policy": "allow_bounded",
         }
+        for profile in profiles
+    }
     return {
         "profiles": {
             "schema_version": 1,
             "profiles": profiles,
-            "bindings": {},
+            "bindings": bindings,
         },
         "policy": {
             "schema_version": 1,
-            "id": "managed-normal-entry",
-            "version": 1,
+            **NORMAL_POLICY,
             "roles": roles,
             "task_classes": {
                 "managed-review" if workflow == "branch-review"
@@ -264,6 +290,7 @@ def _managed_routing(
             "experiment_budget": {},
             "decision_helper": {"schema_version": 1, "mode": "off"},
         },
+        **({"overrides": overrides} if overrides else {}),
     }
 
 
@@ -338,9 +365,14 @@ def build_managed_task(
     review_focus: str | None = None,
     claude_model: str = "sonnet",
     claude_effort: str = "high",
+    role_bindings: dict[str, Any] | None = None,
+    pinned_roles: Iterable[str] = (),
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if workflow not in {"branch-review", "issue-delivery"}:
         raise ContractError("normal entry workflow is unsupported")
+    if role_bindings is not None and not isinstance(role_bindings, dict):
+        raise ContractError("normal role bindings must be an object")
+    pins = set(pinned_roles)
     if not isinstance(goal, str) or not goal.strip():
         raise ContractError("goal must be non-empty")
     if type(check_timeout) is not int or not 1 <= check_timeout <= 3600:
@@ -356,7 +388,8 @@ def build_managed_task(
         "harness", "harness_version", "model_id", "model_family", "effort",
     }
     if (not isinstance(codex_identity, dict)
-            or set(codex_identity) != required_identity
+            or set(codex_identity) - (required_identity | {"account_pool_id"})
+            or required_identity - set(codex_identity)
             or codex_identity.get("harness") != "codex"
             or not all(
                 isinstance(codex_identity[field], str)
@@ -384,7 +417,11 @@ def build_managed_task(
         codex_identity,
         claude_model=claude_model,
         claude_effort=claude_effort,
+        role_bindings={} if role_bindings is None else role_bindings,
+        pinned_roles=pins,
     )
+    if pins - set(routing["policy"]["roles"]):
+        raise ContractError("normal pin names an unsupported role")
     task_class = "managed-review" if workflow == "branch-review" else "managed-fix"
     task: dict[str, Any] = {
         "schema_version": 1,
@@ -439,19 +476,21 @@ def build_managed_task(
         task["review"]["focus"] = review_focus.strip()
     validate_task(task, require_existing_repo=True)
     task_sha256 = hashlib.sha256(canonical_json(task).encode()).hexdigest()
-    roles = {
-        role: {
+    profiles_by_id = {p["id"]: p for p in routing["profiles"]["profiles"]}
+    roles = {}
+    for role in routing["policy"]["roles"]:
+        alias = NORMAL_ALIASES[role]
+        override = routing.get("overrides", {}).get(role)
+        profile = profiles_by_id[(override or routing["profiles"]["bindings"][alias])["profile_id"]]
+        roles[role] = {
             "profile_id": profile["id"],
             "harness": profile["harness"],
+            "model_id": profile["model_id"],
             "effort": profile["effort"]["value"],
             "permission": profile["permission_policy"],
+            "alias": alias,
+            "selection_mode": "pinned" if override else "approved_alias" if profile["quality_status"] == "proven" else "bounded_trial",
         }
-        for role, profile in (
-            ("implementer", next((p for p in routing["profiles"]["profiles"] if p["harness"] == "claude"), None)),
-            ("reviewer", next((p for p in routing["profiles"]["profiles"] if p["harness"] == "codex"), None)),
-        )
-        if profile is not None
-    }
     return task, {
         "workflow": workflow,
         "task_sha256": task_sha256,
@@ -460,7 +499,8 @@ def build_managed_task(
         "target_oid": target_oid,
         "planned_roles": roles,
         "selection_reason": (
-            "one runtime-discovered subscription profile per required role; "
+            "stable policy aliases; explicit pins are fixed, approved incumbents "
+            "are retained, otherwise a bounded trial is used; "
             "different-harness review is mandatory for delivery"
         ),
         "scope": task["scope"],

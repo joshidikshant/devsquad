@@ -75,6 +75,41 @@ class Service:
     def _store(self) -> Store:
         return Store(self.database, self.artifacts)
 
+    def normal_entry_bindings(self, workflow: str, *, pinned_roles: tuple[str, ...] = ()) -> dict[str, Any]:
+        """Read policy-matched approved incumbents before native discovery."""
+        from .lifecycle import profile_fingerprint, profile_template_violation
+        from .task_entry import NORMAL_ALIASES, NORMAL_POLICY
+
+        if workflow not in {"branch-review", "issue-delivery"}:
+            raise ContractError("normal entry workflow is unsupported")
+        task_class = "managed-review" if workflow == "branch-review" else "managed-fix"
+        roles = ("reviewer",) if workflow == "branch-review" else ("implementer", "reviewer")
+        store = self._store()
+        try:
+            store.connection.execute("BEGIN")
+            result = {}
+            for role in roles:
+                if role in pinned_roles:
+                    continue
+                record = store.profile_binding(NORMAL_ALIASES[role])
+                if record is None or record["template"]["policy"] != NORMAL_POLICY:
+                    continue
+                template = record["template"]
+                profile = record["profile"]
+                if (profile_fingerprint(profile) != record["profile_sha256"]
+                        or hashlib.sha256(canonical_json(template).encode()).hexdigest() != record["template_sha256"]
+                        or profile_template_violation(profile, template) is not None
+                        or task_class not in template["allowed_task_classes"]
+                        or profile["quality_status"] != "proven"):
+                    raise ContractError("normal alias incumbent is not approved for this task")
+                if record["qualification_id"] is not None:
+                    store._require_current_qualification(record["qualification_id"], now=datetime.now(timezone.utc))
+                result[role] = record
+            store.connection.execute("COMMIT")
+            return result
+        finally:
+            store.close()
+
     def _preparation_failure_artifacts(
         self,
         store: Store,

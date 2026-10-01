@@ -79,6 +79,37 @@ native Codex R3 audit against the frozen `672e383` → current range in a privat
 runtime. This is not an updated-installation or Claude-delivery proof. Retain
 the exact reviewer/check artifacts and any findings; do not claim completion
 without reviewing them. No paid fallback or global configuration change.
+
+### Independent R3 audit — findings open; R4 alias slice partial
+
+The real read-only Codex 0.159.2 / `gpt-6.1-sol` high review completed against
+`672e383` → `9334190` in private runtime
+`/Users/Dikshant/.devsquad/private-probes/r3-independent-audit-20261001`, run
+`80fdd336-07e2-445c-8a08-5877cd6534df`. It reports **R3-001 (high)**: delivery
+implementation/reviewer imports are optional and stdout is not semantically
+validated; **R3-002 (medium)**: submitted latency/usage ratios are not bound to
+saved measurements. Both require reproductions and repairs. The normal Bash
+check exited 0 but was correctly invalidated after creating undeclared Python
+bytecode. The host rejected the packet and the run is terminal `failed`, version
+22. No clean audit or installed proof is claimed. Native usage was reported
+as 1,642,079 input / 10,733 output tokens, one worker invocation; internal model
+request count is unknown. Do not repeat this broad audit. Re-review only the
+bounded repairs when ready.
+
+In-flight R4 work adds normal stable aliases, explicit pin provenance and
+policy-matched incumbent lookup before discovery. Two red tests reproduced the
+old concrete-role bypass/missing binding API. The 29-test task-entry/CLI gate
+passes in 5.073 seconds. A new public promotion-to-normal-entry fixture fails
+early because its synthetic declaration lacks native adapter evidence for its
+Codex profiles; this is a test-helper issue, not a passing public chain. The
+new fixture parameters and test are deliberately checkpointed as **partial**;
+do not weaken native experiment provenance to make them pass.
+
+**Exact next action:** repair the two independent R3 findings, with truthful
+delivery success/failure evidence and measured-or-unknown ratio regressions;
+fix check bytecode generation without weakening candidate integrity. Then
+finish R4's public normal-entry proof, scoped catalog/quota, R5/R6 and the safe
+R8 installation/Claude/Grok/Gemini gates. Installed release remains unchanged.
 The shared gate audit and bounded independent review remain required for R3
 closure. Preserve the original evaluations and completed decisions. Do
 not install schema 15 before the old active/recoverable-run upgrade test; R4–R6

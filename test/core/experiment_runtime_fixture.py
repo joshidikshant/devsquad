@@ -31,6 +31,7 @@ class ExperimentRuntimeFixture:
         self, root: Path, *, with_fallback=False, fail_candidate=False,
         service=None, repo=None, experiment_id="saved-run-review-pair",
         candidate_succeeds=True, case_splits=None, profiles=None, workflow="branch-review",
+        policy=None, task_class=None,
     ):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
@@ -39,6 +40,7 @@ class ExperimentRuntimeFixture:
         self.candidate_succeeds = candidate_succeeds
         self.experiment_id = experiment_id
         self.workflow = workflow
+        self.task_class = task_class
         self.role = "implementer" if workflow == "issue-delivery" else "reviewer"
         self.case_splits = case_splits or [("eval-1", "evaluation"), ("hold-1", "held_out")]
         self.repo = repo or self.root / "repo"
@@ -69,7 +71,7 @@ class ExperimentRuntimeFixture:
             "schema_version": 1, "profiles": list(self.profiles.values()),
             "bindings": {"review.deep": {"profile_id": self.profiles["control"]["id"], "version": 7}},
         }
-        self.policy = routing_policy()
+        self.policy = copy.deepcopy(policy) if policy is not None else routing_policy()
         if workflow == "issue-delivery":
             for value in self.profiles.values():
                 value.update(permission_policy="workspace_write", required_tools=["read", "write"])
@@ -143,6 +145,8 @@ class ExperimentRuntimeFixture:
             "cwd": ".", "timeout_seconds": 10, "required_to_pass": True,
         }]
         task["budget"]["wall_seconds"] = 120
+        if self.task_class is not None:
+            task["task_class"] = self.task_class
         if self.with_fallback:
             task["budget"].update(max_worker_invocations=2, max_fallbacks_per_step=1)
         if self.workflow == "issue-delivery":

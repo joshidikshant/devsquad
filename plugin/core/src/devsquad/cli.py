@@ -215,14 +215,21 @@ def _command_normal_entry(
     if args.dry_run and args.wait:
         raise ContractError("--wait cannot be combined with --dry-run")
     repo = resolve_repository(args.project_dir)
+    reviewer_model = args.model if workflow == "branch-review" else args.review_model
+    reviewer_effort = args.effort if workflow == "branch-review" else args.review_effort
+    pins = tuple(role for role, explicit in (
+        ("reviewer", reviewer_model is not None or reviewer_effort is not None),
+        ("implementer", workflow == "issue-delivery" and (args.implementer_model is not None or args.implementer_effort is not None)),
+    ) if explicit)
+    bindings = (
+        _service(args).normal_entry_bindings(workflow, pinned_roles=pins)
+        if (Path(args.runtime_dir) / "state.sqlite3").is_file() else {}
+    )
+    incumbent = bindings.get("reviewer", {}).get("profile", {})
     codex_identity = discover_codex_identity(
         repo,
-        requested_model=(
-            args.model if workflow == "branch-review" else args.review_model
-        ),
-        requested_effort=(
-            args.effort if workflow == "branch-review" else args.review_effort
-        ),
+        requested_model=reviewer_model or incumbent.get("model_id"),
+        requested_effort=reviewer_effort or incumbent.get("effort", {}).get("value"),
     )
     if workflow == "branch-review":
         mode = args.mode
@@ -240,8 +247,9 @@ def _command_normal_entry(
         focus = args.review_focus
         goal = args.issue
         write_paths = tuple(args.write_path or ())
-        claude_model = args.implementer_model
-        claude_effort = args.implementer_effort
+        incumbent = bindings.get("implementer", {}).get("profile", {})
+        claude_model = args.implementer_model or incumbent.get("model_id", "sonnet")
+        claude_effort = args.implementer_effort or incumbent.get("effort", {}).get("value", "high")
     task, summary = build_managed_task(
         workflow=workflow,
         project_dir=repo,
@@ -256,6 +264,8 @@ def _command_normal_entry(
         review_focus=focus,
         claude_model=claude_model,
         claude_effort=claude_effort,
+        role_bindings=bindings,
+        pinned_roles=pins,
     )
     idempotency_key = args.idempotency_key or (
         f"normal-{workflow}-{summary['task_sha256']}"
@@ -470,8 +480,8 @@ def parser() -> argparse.ArgumentParser:
         default="standard",
     )
     fix.add_argument("--review-focus")
-    fix.add_argument("--implementer-model", default="sonnet")
-    fix.add_argument("--implementer-effort", default="high")
+    fix.add_argument("--implementer-model")
+    fix.add_argument("--implementer-effort")
     fix.add_argument("--idempotency-key")
     fix.add_argument("--dry-run", action="store_true")
     fix.add_argument("--wait", action="store_true")
