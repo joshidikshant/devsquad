@@ -6,7 +6,7 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Review correction and next action
 
-R3a is now implemented after `b3de5c6`: global outcome-reuse rejection,
+R3a is source/offline verified at `672e383`: global outcome-reuse rejection,
 versioned profile/input/assignment contracts, separate corpus-versus-pair
 fingerprints, schema-14 prelaunch assignment persistence under the preparation
 fence, and strict normalized v2 chain evaluation. The original five reuse
@@ -15,7 +15,13 @@ learning and lifecycle gate currently passes 47 tests; nine targeted migration
 checks, including installed-wheel upgrades, also passed. Bounded review found
 omitted tested-role fallback policy and native execution identity; both now
 have regressions and fixes, including predeclared per-arm execution hashes.
-Independent follow-up and the full integration gate remain pending here.
+The independent two-test follow-up passed with no remaining concrete finding
+in the fixes. The full unchanged-source gate ran **402 tests in 213.208 seconds,
+OK with two optional-SDK skips**; UTC/monotonic wrapper timing agreed at
+213.376 seconds. The known SQLite finalizer warning remains R5. All 227 Bash
+assertions and the generated-reference check passed. See
+[R3a evidence](evidence/R3a-provenance-contract-2026-10-01.json). No test is
+still running; begin R3b without repeating this unchanged gate.
 
 **R3 remains in progress.** The v2 saved-run outcome reader is not wired into
 `Store.evaluate_learning_experiment` yet, so public v2 evaluation fails closed
@@ -366,8 +372,11 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Complete R3a's pending independent review/integration gate, then implement
-   the R3b saved-run v2 outcome reader and current-evidence eligibility. Finish
+2. Implement the R3b saved-run v2 outcome reader and current-evidence
+   eligibility. Join `experiment_specs` / `experiment_assignments` to actual
+   role attempts and final/correction outcome rows; recompute original input
+   and per-arm execution fingerprints from the immutable preparation witness.
+   Validate every relevant attempt, including fallbacks/repairs. Finish
    R3b/R3c saved evidence, replay,
    qualification/promotion/rollback/catalog-fallback eligibility and historical
    compatibility, then execute R4–R6 in dependency order. Preserve R1/R2,

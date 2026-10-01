@@ -29,10 +29,13 @@ open under R5; this is not a warning-free or installed/live pass. See
 [R2 evidence](evidence/R2-observed-identity-2026-10-01.json). Start at **R3**.
 R3–R8, C1 and affected installed/live proofs remain open.
 
-R3a continuation after `b3de5c6`: outcome uniqueness, the v2 provenance
+R3a source/offline checkpoint at `672e383`: outcome uniqueness, the v2 provenance
 contract, separate corpus/pair hashes, schema-14 fenced prelaunch assignments
-and normalized-chain checks are implemented. Focused tests pass; full gate
-and independent patch review are pending. The saved-run v2 outcome reader and
+and normalized-chain checks are verified by 47 focused tests, migration checks,
+the 402-test complete gate (two optional-SDK skips) and bounded independent
+review/follow-up. The SQLite warning remains R5. See
+[R3a evidence](evidence/R3a-provenance-contract-2026-10-01.json).
+The saved-run v2 outcome reader and
 shared lifecycle eligibility are still R3b; do not describe this partial
 checkpoint as trustworthy end-to-end qualification or a public trial runner.
 
@@ -50,8 +53,9 @@ CRLF native output retains its exact byte hash. The original
 Preserve the verification history: a prior 367-test run failed six cases;
 all six passed unchanged with stable clocks, and the final full run passed
 with UTC and monotonic elapsed times agreeing. Do not erase the failed run or
-weaken budgets to make tests pass. The current request is a planning handoff:
-no additional implementation, installation or provider call was performed.
+weaken budgets to make tests pass. The planning handoff at `b3de5c6` made no
+implementation, installation or provider call; subsequent R3a source work is
+recorded above. No installation or provider call was needed for that slice.
 
 | Next slice | Deliverable | Gate before claiming completion |
 |---|---|---|
@@ -465,7 +469,7 @@ permission to claim routing improvement.
 ## First action for Sol
 
 Read the recovery files and verify current Git state. Preserve `ef98889` and
-later work. Finish R3a's pending review/full gate, then implement **R3b**'s
+later work. R3a's review and full gate are verified; implement **R3b**'s
 saved-run evidence reader and shared current-evidence gate. Complete R3c before R4.
 Preserve R1's check-integrity gate and R2's actual-attempt/native-identity gate.
 Continue R3–R6 without waiting on the Claude login or Jev key. Retain R7/R8

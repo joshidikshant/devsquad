@@ -11,10 +11,13 @@ separate measurement; it does not block this engineering work.
 R3a now rejects reused outcomes and adds v2 concrete-profile/paired-input
 contracts, a stable corpus identity distinct from runtime context, strict
 normalized evidence chains and schema-14 prelaunch assignment persistence.
-The focused 47-test learning/lifecycle/experiment gate passes. This is partial:
+The focused 47-test gate and complete 402-test gate (two optional-SDK skips)
+pass at `672e383`, with bounded independent follow-up and 227 Bash assertions.
+The SQLite cleanup warning remains R5. This is partial:
 the saved-run v2 reader, shared lifecycle eligibility, historical compatibility
-audit and public trial execution are not complete. See RESUME for the current
-review/full-gate status; do not treat legacy helper fixtures as public proof.
+audit and public trial execution are not complete. See
+[R3a evidence](evidence/R3a-provenance-contract-2026-10-01.json);
+do not treat legacy helper fixtures as public proof.
 
 | Requirement | Planned evidence | Status |
 |---|---|---|
