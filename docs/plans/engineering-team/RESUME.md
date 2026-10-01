@@ -4,6 +4,34 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ## Current position — October 1, 2026
 
+### Latest continuation — Claude launch/stream repair, Grok and Gemini proof
+
+The installed G4 delivery attempt at `ea113d4`, run
+`8a8a4548-13c1-4a2f-9190-870112f63ef2`, failed before implementation, version
+13, with zero native reported tokens. The real cause is the variadic Claude
+`--tools` option consuming a trailing prompt. Both launch paths now add `--`;
+two red regressions reproduced the problem before repair. The tool-free native
+smoke succeeds with that framing, but current Claude reports auxiliary Haiku
+usage alongside the Sonnet writer. Strict stream evidence now requires all
+top-level assistant messages to identify one concrete model under the final
+session, retains all auxiliary usage, and revalidates on import. Usage-only
+multi-model JSON still fails closed. Contracts updated; **62 focused tests pass
+in 70.381s**, 227 Bash assertions and generated reference/whitespace pass.
+Next: checkpoint, bounded independent Claude framing/identity review plus one
+frozen full gate; refresh to these repairs before retrying G4 under a new run.
+The actual installed release is still `674889018f98` and predates this repair.
+
+Grok 0.2.111 was refused with HTTP 426. The user explicitly authorized its
+normal local update; 1.0.46 stable is installed with the old executable backed
+up privately. Native `grok-4.7-build` actually called DevSquad status through
+MCP and observed the exact failed run/version 13. Two bounded successful status
+smokes are recorded, not hidden; no API fallback/settings changes. Gemini
+3.8 Flash Low via Antigravity 1.2.13 also actually called the same updated
+installation's MCP status and observed that exact run/version. Its first
+unitless timeout was rejected at argument parsing; the corrected 120s call
+succeeded. IDE UI remains permission-denied, distinct from CLI/MCP proof.
+These proofs are in [installed workflow evidence](evidence/R8-installed-workflows-2026-10-01.json).
+
 ### Latest continuation — upgrade review passed, full-gate clock fixture repair
 
 The actual local installation is now safely refreshed to

@@ -1,7 +1,8 @@
 """Bounded Claude result evidence; requested settings are never observations.
 
-The tested CLI result attributes usage to model IDs, not individual writer
-messages. Only a single concrete reported model can establish writer identity.
+Legacy JSON results need a single concrete usage model. Native streams can
+identify a unique writer through correlated assistant-message model reports,
+while retaining separately reported auxiliary usage without guessing its role.
 Pricing aliases are metadata. Effective effort and serving revision are unknown.
 """
 
@@ -138,7 +139,42 @@ def model_usage(raw: Any) -> dict[str, Any]:
     return result
 
 
-def native_result(document: Any) -> tuple[str, dict[str, Any]]:
+def decode_native_result(payload: bytes | str) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Decode strict legacy JSON or a bounded, session-correlated native stream."""
+    try:
+        document = strict_json(payload)
+    except ContractError:
+        encoded = payload.encode("utf-8") if isinstance(payload, str) else payload
+        if not isinstance(encoded, bytes) or len(encoded) > MAX_OUTPUT_BYTES:
+            raise ContractError("Claude stream exceeds its bound")
+        records = [strict_json(line) for line in encoded.splitlines() if line.strip()]
+        if not 1 <= len(records) <= 8192 or any(not isinstance(item, dict) for item in records):
+            raise ContractError("Claude stream records are invalid")
+        terminals = [item for item in records if item.get("type") == "result"]
+        if len(terminals) != 1 or records[-1] is not terminals[0]:
+            raise ContractError("Claude stream requires one final result")
+        document = terminals[0]
+        session = _session(document.get("session_id"))
+        models = []
+        for item in records:
+            if item.get("type") != "assistant":
+                continue
+            message = item.get("message")
+            if (item.get("session_id") != session or item.get("parent_tool_use_id") is not None
+                    or not isinstance(message, dict) or message.get("role") != "assistant"):
+                raise ContractError("Claude writer message is not session-correlated")
+            models.append(_model(message.get("model")))
+        if not models:
+            if document.get("is_error") is True:
+                return document, None
+            raise ContractError("Claude stream has no reported writer messages")
+        return document, {"session_id": session, "models": sorted(set(models)), "message_count": len(models)}
+    if not isinstance(document, dict):
+        raise ContractError("Claude result must be an object")
+    return document, None
+
+
+def native_result(document: Any, writer_messages: dict[str, Any] | None = None) -> tuple[str, dict[str, Any]]:
     if (not isinstance(document, dict) or document.get("type") != "result"
             or document.get("subtype") != "success"
             or document.get("is_error") is not False
@@ -149,27 +185,45 @@ def native_result(document: Any) -> tuple[str, dict[str, Any]]:
     if len(summary) > 20_000:
         raise ContractError("Claude summary exceeds its limit")
     return summary, {
-        "schema_version": 1, "type": "result", "subtype": "success",
+        "schema_version": 1 if writer_messages is None else 2, "type": "result", "subtype": "success",
         "is_error": False, "session_id": _session(document.get("session_id")),
         "model_usage": model_usage(document.get("modelUsage")),
         "top_level_model": _model(document["model"]) if "model" in document else None,
         "usage": reported_usage(document.get("usage")),
+        **({"writer_messages": writer_messages} if writer_messages is not None else {}),
     }
 
 
 def observed_identity(native: Any, adapter: dict[str, Any],
                       profile: dict[str, Any]) -> dict[str, Any]:
-    _exact(native, _NATIVE_FIELDS)
-    if (type(native["schema_version"]) is not int or native["schema_version"] != 1
+    if not isinstance(native, dict):
+        raise ContractError("Claude native identity envelope is invalid")
+    version = native.get("schema_version")
+    _exact(native, _NATIVE_FIELDS | ({"writer_messages"} if version == 2 else set()))
+    if (type(version) is not int or version not in {1, 2}
             or native["type"] != "result" or native["subtype"] != "success"
             or native["is_error"] is not False):
         raise ContractError("Claude native identity envelope is invalid")
     _session(native["session_id"])
     _usage_evidence(native["usage"])
     models = model_usage(native["model_usage"])
-    if models != native["model_usage"] or len(models) != 1:
-        raise ContractError("Claude result cannot identify a unique writer model")
-    model = next(iter(models))
+    if models != native["model_usage"]:
+        raise ContractError("Claude native model usage is inconsistent")
+    if version == 1:
+        if len(models) != 1:
+            raise ContractError("Claude result cannot identify a unique writer model")
+        model = next(iter(models))
+        model_source = "claude.result.modelUsage"
+    else:
+        messages = _exact(native["writer_messages"], {"session_id", "models", "message_count"})
+        if (messages["session_id"] != native["session_id"]
+                or type(messages["message_count"]) is not int or not 1 <= messages["message_count"] <= 8192
+                or not isinstance(messages["models"], list) or len(messages["models"]) != 1):
+            raise ContractError("Claude stream cannot identify a unique correlated writer model")
+        model = _model(messages["models"][0])
+        if model not in models:
+            raise ContractError("Claude stream writer is missing from terminal model usage")
+        model_source = "claude.stream.assistant.message.model"
     if model in _ALIASES:
         raise ContractError("Claude reported identity is an unresolved alias")
     requested = _model(profile.get("model_id"))
@@ -187,8 +241,7 @@ def observed_identity(native: Any, adapter: dict[str, Any],
             or profile.get("harness") != "claude"
             or profile.get("permission_policy") != "workspace_write"):
         raise ContractError("Claude identity does not match the frozen adapter")
-    provider = models[model].get("provider")
-    if provider is not None and provider != adapter["model_provider"]:
+    if any(entry.get("provider", adapter["model_provider"]) != adapter["model_provider"] for entry in models.values()):
         raise ContractError("Claude reported provider contradicts the frozen adapter")
     return {
         "harness": "claude", "harness_version": adapter["harness_version"],
@@ -196,7 +249,7 @@ def observed_identity(native: Any, adapter: dict[str, Any],
         "effort": None, "backing_revision": None,
         "permission_policy": "workspace_write", "verification": "verified",
         "verification_scope": "reported_model",
-        "model_source": "claude.result.modelUsage",
+        "model_source": model_source,
         "alias_resolution": {"requested": requested, "reported": model} if alias else None,
         "native_evidence": native,
     }

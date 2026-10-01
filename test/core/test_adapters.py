@@ -60,6 +60,7 @@ class ClaudeAdapterTest(unittest.TestCase):
         self.assertIn("Read,Glob,Grep", spec.argv)
         self.assertIn('{"mcpServers":{}}', spec.argv)
         self.assertIn("Fix src/My Parser.ts without delegating.", spec.argv)
+        self.assertEqual(spec.argv[-2:], ("--", "Fix src/My Parser.ts without delegating."))
         self.assertNotIn("--dangerously-skip-permissions", spec.argv)
         self.assertNotIn("Agent", ",".join(spec.argv))
         self.assertNotIn("Bash", ",".join(spec.argv))

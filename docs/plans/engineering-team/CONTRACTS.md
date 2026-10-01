@@ -83,11 +83,16 @@ Install-time discovery reports supported values and evidence (`documented`, `pro
 
 Claude implementation evidence v2 keeps the frozen requested profile separate
 from `observed_identity`. The tested native result must have a success envelope,
-bounded session ID and a single concrete `modelUsage` entry. Its model key is
-the reported serving identity; `canonicalModel` is pricing metadata only.
+bounded session ID and a concrete reported writer identity. Legacy native JSON
+requires a single `modelUsage` entry; its key is the reported identity. Native
+stream evidence v2 instead requires all top-level assistant messages to report
+one concrete model under the final result's session, with that model also
+present in terminal usage. Auxiliary usage entries remain visible and cannot
+substitute for the writer; `canonicalModel` is pricing metadata only.
 Tested family aliases may resolve to a reported concrete member of that family,
-without hardcoded current revisions. Multiple entries cannot identify a unique
-writer and fail closed. Effective effort and backing revision remain null when
+without hardcoded current revisions. Multiple usage-only entries, missing or
+contradictory stream model/session reports, nested delegated messages and a
+writer absent from terminal usage fail closed. Effective effort and backing revision remain null when
 the result does not report them; `verification_scope: reported_model` does not
 claim that these unknown settings were verified. Native session, typed usage,
 alias resolution and the normalized result evidence are retained and validated

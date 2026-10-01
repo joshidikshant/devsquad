@@ -163,7 +163,7 @@ def prepare_cli(
         if effort:
             args += ["--effort", effort]
         args.extend(permission_args)
-        args += [prompt]
+        args += ["--", prompt]
         permission_args = ()
     else:
         raise ContractError(f"no argv builder for adapter: {manifest.name}")

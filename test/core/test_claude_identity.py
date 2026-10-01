@@ -206,6 +206,72 @@ class ClaudeImplementationIdentityTest(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.run_document(document)
 
+    def stream_records(self):
+        document = self.document()
+        document["modelUsage"]["claude-haiku-4-5-20251001"] = self.model_usage()
+        return [{
+            "type": "assistant", "session_id": document["session_id"],
+            "parent_tool_use_id": None,
+            "message": {"role": "assistant", "model": self.MODEL},
+        }, document]
+
+    def run_stream(self, records, *, requested_model=None):
+        self.output.write_text("\n".join(json.dumps(item) for item in records) + "\n")
+        return run_claude_implementer(self.snapshot(requested_model))
+
+    def test_correlated_stream_identifies_writer_and_retains_auxiliary_usage(self):
+        evidence = self.run_stream(self.stream_records(), requested_model="sonnet")
+        attempt = evidence["attempt"]
+        observed = attempt["observed_identity"]
+        self.assertEqual(observed["model_id"], self.MODEL)
+        self.assertEqual(observed["model_source"], "claude.stream.assistant.message.model")
+        native = observed["native_evidence"]
+        self.assertEqual(native["schema_version"], 2)
+        self.assertEqual(native["writer_messages"], {
+            "session_id": "session-identity-fixture", "models": [self.MODEL], "message_count": 1,
+        })
+        self.assertEqual(len(native["model_usage"]), 2)
+        self.assertIsNone(observed["effort"])
+        self.assertIsNone(observed["backing_revision"])
+
+    def test_stream_cannot_guess_writer_from_usage_or_requested_settings(self):
+        import copy
+        original = self.stream_records()
+        mutations = []
+        for path, value in (
+            ((0, "session_id"), "unrelated-session"),
+            ((0, "parent_tool_use_id"), "delegated-tool"),
+            ((0, "message", "model"), "claude-other"),
+            ((0, "message", "role"), "user"),
+            ((0, "message", "model"), None),
+            ((1, "modelUsage"), {"claude-haiku-4-5-20251001": self.model_usage()}),
+        ):
+            records = copy.deepcopy(original)
+            target = records
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            mutations.append(records)
+        contradictory = copy.deepcopy(original[0])
+        contradictory["message"]["model"] = "claude-haiku-4-5-20251001"
+        mutations += [original[1:], [original[0], contradictory, original[1]],
+                      [*original, original[1]], [*original, {"type": "system"}]]
+        for index, records in enumerate(mutations):
+            with self.subTest(case=index), self.assertRaises(ContractError):
+                self.run_stream(records)
+
+    def test_stream_session_model_proof_is_revalidated_on_import(self):
+        import copy
+        from devsquad.workflows import validate_implementation_evidence
+        snapshot = self.snapshot()
+        evidence = self.run_stream(self.stream_records())
+        for field, value in (("session_id", "other"), ("models", [self.MODEL, "claude-haiku"]),
+                             ("message_count", True), ("message_count", 0)):
+            changed = copy.deepcopy(evidence)
+            changed["attempt"]["observed_identity"]["native_evidence"]["writer_messages"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ContractError):
+                validate_implementation_evidence(changed, snapshot)
+
     def test_family_alias_resolves_only_to_reported_concrete_model(self):
         evidence = self.run_document(self.document(), requested_model="sonnet")
         attempt = evidence["attempt"]

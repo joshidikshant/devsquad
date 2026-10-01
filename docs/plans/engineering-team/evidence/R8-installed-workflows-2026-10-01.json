@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "installed_regressions_pass_live_workflows_pending",
+  "status": "grok_gemini_pass_claude_launch_repairs_pending_full_gate",
   "source_checkpoint": "c7ccc02",
   "installation": {
     "previous_release": "0.1.0-py31214-9e5cdea2aa99-mcp-a26bc88afbef",
@@ -17,9 +17,10 @@
     "setup": {"hosts": ["antigravity", "claude-code", "codex", "grok"], "matching": 4, "changed": 0},
     "sdk_tests": {"tests": 22, "seconds": 5.585, "skips": 0, "result": "pass"}
   },
-  "delivery": {"status": "pending", "scope": "G4 exact-target check discovery and inclusion of Python core regressions"},
+  "delivery": {"status": "initial_attempt_failed_before_implementation", "run_id": "8a8a4548-13c1-4a2f-9190-870112f63ef2", "state": "failed", "version": 13, "worker_invocations": 1, "reported_tokens": 0, "cause": "Claude variadic --tools consumes the final positional prompt without an explicit -- separator", "scope": "G4 exact-target check discovery and inclusion of Python core regressions"},
+  "claude_compatibility_repair": {"status": "targeted_pass_full_and_independent_pending", "red": {"tests": 2, "failures": 1, "errors": 1}, "focused": {"tests": 62, "seconds": 70.381, "result": "pass"}, "repair": "Explicit argv separator in both launch paths; strict native stream parsing validates one session-correlated top-level writer model, retains auxiliary usage, and rejects contradictory, delegated, missing or uncorrelated identity. Legacy usage-only multiple-model results still reject.", "live_tool_free_smoke": {"result": "success", "writer_model": "claude-sonnet-5", "auxiliary_model": "claude-haiku-4-5-20251001", "stream_sha256": "db3231c624023e7dc3ed8e809e3e42c0687b266d7a8fb710d11c3f1e6dc94f13", "scope": "native format evidence, not managed delivery acceptance"}},
   "claude_handoff": {"status": "pending"},
-  "grok_operation": {"status": "pending"},
-  "gemini_antigravity": {"status": "pending", "ide_ui": "computer_use_permission_denied_do_not_bypass"},
+  "grok_operation": {"status": "pass", "old_version_blocker": "HTTP 426: 0.2.111 rejected, requires 1.0.13 or later", "user_authorized_update": true, "updated_version": "1.0.46 (2765805b9442) [stable]", "old_executable_backup": "private_probe_directory", "native_model": "grok-4.7-build", "tool": "devsquad__squad_status", "observed": {"run_id": "8a8a4548-13c1-4a2f-9190-870112f63ef2", "state": "failed", "version": 13}, "stdout_sha256": "bc031b922e8c36b3cdfff5c7c717916a27019a19d650f67cd7402b832544bfdd", "stderr_sha256": "1be68163f727c0712fefcd45b80d5f1d383ee995ff8f61f7da601fe82ee4a9b3", "usage": {"input_tokens": 34088, "cache_read_input_tokens": 69888, "output_tokens": 434, "reasoning_tokens": 285, "total_tokens": 104410, "turns": 3}, "extra_bounded_smoke": {"result": "pass", "stdout_sha256": "cbc772baa3dabf93b833cf9843c5a873bb72cbebf9fb8ddf7d9b5ae7f12a8f43", "total_tokens": 103523}, "scope": "native Grok Build MCP operation, not a verified implementation/reviewer adapter"},
+  "gemini_antigravity": {"status": "pass_cli_mcp", "version": "1.2.13", "native_model": "gemini-3.8-flash-low", "tool": "devsquad/squad_status", "permission": "existing project-scoped status grant, plan mode and sandbox", "schema_discovery": "read only DevSquad squad_status tool schema", "observed": {"run_id": "8a8a4548-13c1-4a2f-9190-870112f63ef2", "state": "failed", "version": 13}, "seconds": 10.62698745902162, "stdout_sha256": "8781e538501b3553c100ca754d2880c8f45a011062eddd5fd3b108cf0878181d", "usage": {"input_tokens": 33060, "output_tokens": 220, "thinking_tokens": 0, "cache_read_tokens": 44852, "total_tokens": 33280}, "initial_probe": "Argument parser rejected unitless print timeout before generation; corrected to 120s", "ide_ui": "computer_use_permission_denied_do_not_bypass"},
   "limitations": ["R4 catalog/quota, R5 public trials/outcomes, remaining R6 UX and R7 Council are separate open scope", "Jev runtime remains off and its one-request allowance is spent", "No paid API fallback, purchases, resets, global AI settings, push or external messages"]
 }

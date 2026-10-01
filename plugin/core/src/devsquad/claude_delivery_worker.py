@@ -157,11 +157,11 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         snapshot.get("revision_request"),
     )
     argv = [
-        str(binary), "--print", "--output-format", "json", "--safe-mode",
+        str(binary), "--print", "--output-format", "stream-json", "--verbose", "--safe-mode",
         "--disable-slash-commands", "--no-session-persistence",
         "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
         "--no-chrome", "--model", model, "--effort", effort,
-        *adapter["permission_args"], prompt,
+        *adapter["permission_args"], "--", prompt,
     ]
     timeout_seconds = snapshot["task"]["budget"]["wall_seconds"]
     try:
@@ -203,8 +203,9 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         error_code = "CLI_ERROR"
     provider_document = None
     try:
-        provider_document = strict_json(stdout)
-        summary, native = native_result(provider_document)
+        from .claude_identity import decode_native_result
+        provider_document, writer_messages = decode_native_result(stdout)
+        summary, native = native_result(provider_document, writer_messages)
         observed = observed_identity(native, adapter, profile)
     except ContractError as exc:
         safe_document = provider_document if isinstance(provider_document, dict) else {}
