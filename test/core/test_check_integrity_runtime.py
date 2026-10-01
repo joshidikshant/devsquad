@@ -159,10 +159,15 @@ class PublicCheckIntegrityTest(unittest.TestCase):
         return {**body, "submission_hash": request_hash(body)}
 
     def receipt(self, run_id):
-        artifact = next(
-            item for item in self.service.result(run_id)["artifacts"]
+        result = self.service.result(run_id)
+        artifact = next((
+            item for item in result["artifacts"]
             if item["name"] == "receipt.json"
-        )
+        ), None)
+        self.assertIsNotNone(artifact, {
+            "status": self.service.status(run_id),
+            "artifact_names": [item["name"] for item in result["artifacts"]],
+        })
         return json.loads(Path(artifact["path"]).read_text())
 
     def snapshot(self, run_id):

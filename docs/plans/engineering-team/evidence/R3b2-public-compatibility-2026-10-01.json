@@ -23,7 +23,9 @@
     "revision_and_wheel": "2 tests in 8.102 seconds passed: revision arguments/predecessor checks and installed-wheel current schema-15 content/migration",
     "bash": "227 assertions in 11 files passed",
     "generated_reference_and_whitespace": "Both checks passed",
-    "full_core": "Pending on this source; do not substitute earlier R3b.1 or partial source results",
+    "full_core": "At 5de6655: 441 tests in 372.506 seconds FAILED (1 missing-receipt error, 2 optional-SDK skips); UTC elapsed 372.689586 and monotonic 372.691304 seconds. Not a passing gate",
+    "failed_case_recheck": "The exact headless delivery check-integrity case passed unchanged (1 test in 2.760 seconds); all 9 check-integrity cases passed in 19.194 seconds. Cause remains unproven; added status/artifact-name diagnostics",
+    "sqlite_cleanup": "Found installer test transaction context that did not close its SQLite connection; replaced with contextlib.closing. Active-release test passed in 6.837 seconds under ResourceWarning=error, forced collection and zero unraisable exceptions; complete-suite warning recheck pending",
     "independent_audit": "Not completed"
   },
   "remaining": [

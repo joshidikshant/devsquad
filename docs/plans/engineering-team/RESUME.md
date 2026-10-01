@@ -44,8 +44,22 @@ seconds; the packaged wheel contains/applies schema 15. All 227 Bash assertions
 and generated-reference/whitespace checks passed. This does not prove an old
 active daemon can survive a schema change.
 
-**Exact next action:** run one full unchanged-source integration gate on the checkpointed schema-15
-source. No full gate on this source or independent audit is claimed yet.
+The full unchanged-source run at `5de6655` completed **441 tests in 372.506
+seconds, FAILED with one error and two optional-SDK skips**. The headless
+delivery mutation test could not find `receipt.json`; its temporary runtime
+was cleaned before diagnosis. That case passes unchanged (1 test, 2.760
+seconds), and all nine check-integrity tests pass together (19.194 seconds).
+This does not erase the failed integration gate or establish its cause. The
+test now reports saved status/artifact names if the missing receipt recurs.
+The SQLite finalizer warning has a concrete test-owned candidate: the installer
+survival test used a SQLite transaction context without closing the connection.
+It now uses `contextlib.closing`; its targeted active-release test passes in
+6.837 seconds with ResourceWarning promoted to error, forced collection and
+zero unraisable exceptions. The complete suite must still confirm no warning.
+
+**Exact next action:** run one full unchanged-source integration gate on the
+checkpointed schema-15 source. All 227 Bash assertions pass. No
+passing full gate on this source or independent audit is claimed yet.
 The shared gate audit and bounded independent review remain required for R3
 closure. Preserve the original evaluations and completed decisions. Do
 not install schema 15 before the old active/recoverable-run upgrade test; R4–R6

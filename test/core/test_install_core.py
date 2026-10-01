@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 import os
 from pathlib import Path
 import re
@@ -426,7 +427,7 @@ print(json.dumps(Service(Path(sys.argv[2])).start(
             launcher, "result", started["run_id"], "--runtime-dir", str(runtime),
         )
         self.assertTrue(result["data"]["ready"])
-        with sqlite3.connect(runtime / "state.sqlite3") as connection:
+        with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
             package_path, package_digest = connection.execute(
                 "SELECT package_path, package_digest FROM runs WHERE id=?",
                 (started["run_id"],),
