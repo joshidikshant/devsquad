@@ -1768,7 +1768,10 @@ class Store:
 
         spec = validate_experiment(experiment)
         project_path = Path(spec["project_path"]).resolve(strict=True)
-        spec = {**spec, "project_path": str(project_path)}
+        # V2 hashes the exact predeclared specification. Resolving a symlink
+        # for project lookup must not rewrite that declaration after launch.
+        if spec["schema_version"] == 1:
+            spec = {**spec, "project_path": str(project_path)}
         spec_json = canonical_json(spec)
         spec_sha256 = hashlib.sha256(spec_json.encode()).hexdigest()
         current = _authoritative_now(now)
@@ -1780,11 +1783,11 @@ class Store:
                 "FROM experiments WHERE experiment_id=?",
                 (spec["experiment_id"],),
             ).fetchone()
-            if existing is not None:
-                if existing["spec_json"] != spec_json:
-                    raise ConflictError(
-                        "experiment id was already used with a different specification",
-                    )
+            if existing is not None and existing["spec_json"] != spec_json:
+                raise ConflictError(
+                    "experiment id was already used with a different specification",
+                )
+            if existing is not None and spec["schema_version"] == 1:
                 self.connection.execute("COMMIT")
                 return {
                     "experiment": spec,
@@ -1797,33 +1800,64 @@ class Store:
                 "SELECT id FROM projects WHERE git_common_dir=?", (str(common_dir),),
             ).fetchone()
             project_id = project["id"] if project is not None else None
-            records = []
-            if project_id is not None:
-                records = self.connection.execute(
-                    "SELECT o.payload_json FROM outcomes o "
-                    "JOIN runs r ON r.id=o.run_id WHERE r.project_id=? "
-                    "ORDER BY o.observed_at,o.id",
-                    (project_id,),
-                ).fetchall()
             chains: dict[str, dict[str, Any]] = {}
-            corrections: dict[str, list[dict[str, Any]]] = {}
-            for record in records:
-                outcome = json.loads(record["payload_json"])
-                if outcome["kind"] == "final":
-                    chains[outcome["outcome_id"]] = {
-                        "final": outcome,
-                        "late_corrections": [],
-                    }
-                else:
-                    corrections.setdefault(
-                        outcome["corrects_outcome_id"], [],
-                    ).append(outcome)
-            for outcome_id, history in corrections.items():
-                if outcome_id in chains:
-                    chains[outcome_id]["late_corrections"] = history
+            if spec["schema_version"] == 2:
+                from .experiment_evidence import read_experiment_chains
+
+                chains = read_experiment_chains(
+                    self.connection, spec=spec, project_id=project_id,
+                    project_common_dir=str(common_dir), evaluated_at=current.isoformat(),
+                )
+            else:
+                # Historical v1 decoding remains separate from v2 authority.
+                records = []
+                if project_id is not None:
+                    records = self.connection.execute(
+                        "SELECT o.payload_json FROM outcomes o "
+                        "JOIN runs r ON r.id=o.run_id WHERE r.project_id=? "
+                        "ORDER BY o.observed_at,o.id",
+                        (project_id,),
+                    ).fetchall()
+                corrections: dict[str, list[dict[str, Any]]] = {}
+                for record in records:
+                    outcome = json.loads(record["payload_json"])
+                    if outcome["kind"] == "final":
+                        chains[outcome["outcome_id"]] = {
+                            "final": outcome, "late_corrections": [],
+                        }
+                    else:
+                        corrections.setdefault(
+                            outcome["corrects_outcome_id"], [],
+                        ).append(outcome)
+                for outcome_id, history in corrections.items():
+                    if outcome_id in chains:
+                        chains[outcome_id]["late_corrections"] = history
             evaluation = evaluate_experiment(
                 spec, chains, evaluated_at=current.isoformat(),
+                project_common_dir=str(common_dir),
             )
+            if existing is not None:
+                try:
+                    saved = json.loads(existing["evaluation_json"])
+                except (ValueError, TypeError) as exc:
+                    raise ContractError("saved experiment evaluation is invalid") from exc
+                if (not isinstance(saved, dict)
+                        or saved.get("evaluated_at") != existing["recorded_at"]
+                        or hashlib.sha256(existing["evaluation_json"].encode()).hexdigest()
+                        != existing["evaluation_sha256"]):
+                    raise ContractError("saved experiment evaluation hash/identity is invalid")
+                # Receipts are immutable. Corrections or changed run evidence
+                # require an explicit revision, never a silently updated replay.
+                if canonical_json({**evaluation, "evaluated_at": saved["evaluated_at"]}) != canonical_json(saved):
+                    raise ContractError(
+                        "experiment evidence changed; saved evaluation is stale and requires explicit review/revision",
+                    )
+                self.connection.execute("COMMIT")
+                return {
+                    "experiment": spec, "evaluation": saved,
+                    "evaluation_sha256": existing["evaluation_sha256"],
+                    "recorded_at": existing["recorded_at"], "replayed": True,
+                }
             evaluation_json = canonical_json(evaluation)
             evaluation_sha256 = hashlib.sha256(evaluation_json.encode()).hexdigest()
             recorded_at = current.isoformat()
@@ -2776,6 +2810,16 @@ class Store:
                 raise ConflictError("run already has a supervisor claim")
             if not run["worktree_path"]:
                 raise ContractError("run has no canonical worktree identity")
+            from .experiment_evidence import verify_prelaunch_snapshot
+
+            try:
+                current_snapshot = json.loads(run["mutable_snapshot"] or "{}")
+            except (TypeError, ValueError) as exc:
+                raise ContractError("frozen run snapshot is invalid") from exc
+            verify_prelaunch_snapshot(
+                self.connection, run_id=run_id, snapshot=current_snapshot,
+                package_digest=package_digest,
+            )
             self._enforce_attempt_budget(run_id, run)
             if account_pool_id is not None:
                 if not isinstance(account_pool_id, str) or not account_pool_id:

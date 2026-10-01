@@ -6,7 +6,42 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Review correction and next action
 
-Latest requested action was a review and execution plan for SOL. The October 1
+Interrupted R3b.1 work newer than the planning checkpoint is now preserved as
+an explicitly **partial** saved-run reader. `experiment_evidence.py` joins
+immutable assignments, preparation fences, actual attempts, stream/artifact
+hashes and outcomes; `Store.evaluate_learning_experiment` uses it for v2 and
+rejects changed-evidence replay without rewriting the old receipt.
+`Store.reserve_attempt` checks assigned trials against the frozen controlled
+input before launch. The public fixture uses real offline workers and host
+dispositions, with a test-only predeclared-assignment preparation seam; it is
+not a production paired-trial controller or native model-quality proof.
+
+The imported-profile regression first failed (`ContractError not raised`)
+and passed after semantic profile binding was added. Earlier focused tests
+passed 59 cases in 43.570 seconds; the additional prelaunch-mutation test
+passed separately. The current combined gate and checkpoint details are in
+[R3b.1 partial evidence](evidence/R3b1-reader-partial-2026-10-01.json).
+No full Python integration gate, installed refresh or provider call has run
+for this reader slice. The independent follow-up review hit its usage limit;
+do not claim an independent reader audit passed.
+
+**Exact next action:** reproduce the reader's handling of an honest terminal
+failed reviewer whose output metadata has no `failure` key. The present
+successful-review stdout decoder is guarded by that key and may incorrectly
+decode failed non-JSON output. This is an open inspection concern, not yet a
+reproduced/fixed regression. Resolve it and run the complete core gate before
+accepting R3b.1. Then finish R3b.2's shared current-evidence eligibility and
+explicit append-only evaluation/review revisions; legacy/public compatibility
+remains R3c and the production paired-trial controller remains R5.
+
+Gemini/Antigravity's September 29 live `squad_status` receipt proves read-only
+MCP observation of the same terminal-created saved run. It does not prove
+Gemini implementation/review worker execution or the updated installation.
+No extra Gemini login action is currently recorded; keep the normal session
+signed in. Claude requires normal login; Grok's last verified authentication
+was expired. The optional Jev key is separate from normal operation.
+
+The earlier requested action was a review and execution plan for SOL. The October 1
 planning pass inspected `b766f9e` / source `672e383` and updated
 [SOL-REVIEW-FOLLOWUP.md](SOL-REVIEW-FOLLOWUP.md), without runtime changes,
 installation or provider calls. Start with **R3b.1** (saved-run reader), then
@@ -44,11 +79,10 @@ assertions and the generated-reference check passed. See
 [R3a evidence](evidence/R3a-provenance-contract-2026-10-01.json). No test is
 still running; begin R3b without repeating this unchanged gate.
 
-**R3 remains in progress.** The v2 saved-run outcome reader is not wired into
-`Store.evaluate_learning_experiment` yet, so public v2 evaluation fails closed
-rather than accepting outcome labels as provenance. R3b must join immutable
-assignments, actual attempts and outcomes, then enforce one current-evidence
-gate for replay/qualification/promotion/rollback/catalog fallback. Audit/read
+**R3 remains in progress.** The partial reader above now connects v2 saved-run
+evaluation, but its complete integration gate and failure-path audit remain
+open. R3b must enforce one current-evidence gate for
+replay/qualification/promotion/rollback/catalog fallback. Audit/read
 compatibility for unsafe legacy v1 proposals and public realistic fixtures
 remain R3c; the public paired-trial controller remains R5. Do not count current
 legacy positive fixtures as proof of that integration. No live providers,
@@ -393,11 +427,11 @@ provider paths must not be advertised as verified.
 
 1. Check Git status and recent commits, preserving work newer than this note.
    Continue `codex/engineering-team`; do not restart from `main` or redo M1/M2.
-2. Implement the R3b saved-run v2 outcome reader and current-evidence
-   eligibility. Join `experiment_specs` / `experiment_assignments` to actual
-   role attempts and final/correction outcome rows; recompute original input
-   and per-arm execution fingerprints from the immutable preparation witness.
-   Validate every relevant attempt, including fallbacks/repairs. Finish
+2. Finish R3b.1 from the preserved partial reader: reproduce/repair honest
+   terminal failed-output handling and run the full unchanged-source gate.
+   Then implement R3b.2 shared current-evidence eligibility and append-only
+   evaluation/review revisions. Validate every relevant attempt, including
+   fallbacks/repairs. Finish
    R3b/R3c saved evidence, replay,
    qualification/promotion/rollback/catalog-fallback eligibility and historical
    compatibility, then execute R4–R6 in dependency order. Preserve R1/R2,

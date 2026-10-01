@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "work_package": "R3b.1",
+  "status": "partial",
+  "recorded_at": "2026-10-01T19:58:04Z",
+  "baseline_revision": "a22b949",
+  "implementation": [
+    "Read v2 evidence from immutable preparation assignments and actual saved runs inside one ledger transaction",
+    "Validate preparation/event/attempt/profile/package/outcome identities and captured artifact bytes",
+    "Reject changed-evidence v2 replay while preserving historical evaluation bytes",
+    "Check controlled inputs and selected execution before reserving an assigned trial attempt"
+  ],
+  "source_sha256": {
+    "plugin/core/src/devsquad/store.py": "b474a0771150f4a38ba953a2fe13869fdaa7f60fb85ec15b0420e7a6d20ed847",
+    "plugin/core/src/devsquad/experiment_evidence.py": "d8c756fd18bdfdd77f3096385b09c872f7cf12a9d4dd66dda393f2eff3679d65",
+    "test/core/experiment_runtime_fixture.py": "eb653e4f60466bee52fbf33ffeb95353a79cdddc0f3c637f5b16a5186d0d32ed",
+    "test/core/test_experiment_saved_runs.py": "df6c0ac8f7e2b398727291945eab05a798ac1eceaacf4090890d62767fdbf507",
+    "test/core/test_experiment_evidence_integrity.py": "834d58e4827e96cafa1cc7053098fd11ed42fcb795fcad001f5b64cedbf77483"
+  },
+  "verification": {
+    "public_reader_red": "One public evaluator test errored before integration after four real offline arms completed; missing saved-project identity; 5.527 seconds",
+    "imported_profile_red": "One deterministic test failed before semantic artifact binding: ContractError not raised; 1.505 seconds",
+    "earlier_focused_green": "59 tests passed in 43.570 seconds; extra prelaunch guard case then passed separately",
+    "checkpoint_focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core python3 -m unittest test_experiment_evidence_integrity test_experiment_saved_runs test_experiment_reuse test_experiment_provenance test_experiment_assignment_store test_experiment_v2_evaluation test_learning test_lifecycle -v",
+    "checkpoint_focused_result": "60 tests passed in 46.206 seconds, exit 0; process access enabled for cancellation and cleanup",
+    "bash_command": "bash test/run.sh",
+    "bash_result": "11 files, 227 assertions passed, exit 0; process access enabled",
+    "generated_reference": "python3 scripts/generate-core-reference.py --check passed",
+    "full_core_gate": "Not run for this partial reader source",
+    "independent_reader_review": "Incomplete; a bounded review raised an execution-binding concern but its follow-up hit a usage limit. No passed independent audit is claimed.",
+    "unavailable_earlier_handle": "A prior 50-test handle disappeared during a model switch; its result is unavailable and is not counted as a pass"
+  },
+  "fixture_boundary": {
+    "positive_runs": "Public Service start, real offline worker/check subprocesses, host claim/complete and manual outcome addition",
+    "predeclaration": "A test-only preparation resolver seam attaches the frozen assignment before real complete_preparation; production paired-trial entry remains R5",
+    "metrics": "Synthetic host accept/reject dispositions; not native model-quality evidence",
+    "sql_tampering": "Negative corruption cases only; positive terminal runs are not fabricated with SQL"
+  },
+  "open_findings": [
+    {
+      "status": "inspection_concern_not_yet_reproduced",
+      "description": "Branch-review stdout validation currently treats absent output_metadata.failure as success. An honest terminal failed worker may lack that key and emit non-JSON output.",
+      "next_action": "Add a real offline terminal failed-reviewer regression; distinguish successful imported review evidence from opaque failed output, preserving failed exposure and diagnostics"
+    }
+  ],
+  "remaining": [
+    "Resolve the terminal-failure concern and run full core integration before accepting R3b.1",
+    "R3b.2 shared eligibility for replay, qualification, promotion, rollback and catalog fallback",
+    "Explicit append-only evaluation/review revisions after new corrections",
+    "R3c public historical/legacy compatibility and realistic failure/repair proof",
+    "R5 production paired-trial controller and automatic terminal-outcome projection",
+    "R8 updated install and provider/surface acceptance"
+  ],
+  "gemini_antigravity_status": {
+    "evidence": "M7-installed-runtime-2026-09-29.json",
+    "verified": "Real read-only squad_status through Antigravity observed the terminal-created saved run",
+    "not_verified": "Gemini implementation/review worker execution and operation against the newly repaired installed runtime",
+    "user_action": "No additional Gemini login action currently recorded; preserve normal signed-in session"
+  },
+  "external_actions": "No provider generation, API request, installation refresh, global settings change, purchase, reset redemption or push during this reader slice"
+}
