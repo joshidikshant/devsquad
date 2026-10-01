@@ -97,6 +97,9 @@ the result does not report them; `verification_scope: reported_model` does not
 claim that these unknown settings were verified. Native session, typed usage,
 alias resolution and the normalized result evidence are retained and validated
 again on coordinator import, before candidate finalization.
+The tested Claude 2.1.220 transport label `firstParty` maps to Anthropic only
+for that verified harness version; the original label remains in evidence.
+Unknown or contradictory provider labels still block identity verification.
 
 New delivery review imports and acceptance require verified different reported
 model IDs, regardless of requested aliases, family labels or harness names.

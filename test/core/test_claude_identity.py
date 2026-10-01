@@ -272,6 +272,23 @@ class ClaudeImplementationIdentityTest(unittest.TestCase):
             with self.subTest(field=field, value=value), self.assertRaises(ContractError):
                 validate_implementation_evidence(changed, snapshot)
 
+    def test_native_first_party_transport_label_is_version_bound_not_a_provider_override(self):
+        from devsquad.claude_identity import observed_identity
+        records = self.stream_records()
+        for entry in records[-1]["modelUsage"].values():
+            entry["provider"] = "firstParty"
+        snapshot = self.snapshot()
+        observed = self.run_stream(records)["attempt"]["observed_identity"]
+        self.assertEqual(observed["model_provider"], "anthropic")
+        self.assertEqual(observed["native_evidence"]["model_usage"][self.MODEL]["provider"], "firstParty")
+        with self.assertRaisesRegex(ContractError, "provider"):
+            observed_identity(observed["native_evidence"],
+                              {**snapshot["implementation_adapter"], "harness_version": "unverified-version"},
+                              snapshot["routing"]["roles"]["implementer"]["selected"]["profile"])
+        records[-1]["modelUsage"]["claude-haiku-4-5-20251001"]["provider"] = "other-provider"
+        with self.assertRaisesRegex(ContractError, "implementation failed"):
+            self.run_stream(records)
+
     def test_family_alias_resolves_only_to_reported_concrete_model(self):
         evidence = self.run_document(self.document(), requested_model="sonnet")
         attempt = evidence["attempt"]

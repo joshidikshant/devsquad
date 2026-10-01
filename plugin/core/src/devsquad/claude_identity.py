@@ -241,7 +241,12 @@ def observed_identity(native: Any, adapter: dict[str, Any],
             or profile.get("harness") != "claude"
             or profile.get("permission_policy") != "workspace_write"):
         raise ContractError("Claude identity does not match the frozen adapter")
-    if any(entry.get("provider", adapter["model_provider"]) != adapter["model_provider"] for entry in models.values()):
+    # Native 2.1.220 uses a transport label, not a model-provider ID. Retain
+    # the raw field and map only the label observed under this verified CLI.
+    allowed_providers = {adapter["model_provider"]}
+    if adapter["harness_version"] == "2.1.220 (Claude Code)":
+        allowed_providers.add("firstParty")
+    if any(entry.get("provider", adapter["model_provider"]) not in allowed_providers for entry in models.values()):
         raise ContractError("Claude reported provider contradicts the frozen adapter")
     return {
         "harness": "claude", "harness_version": adapter["harness_version"],

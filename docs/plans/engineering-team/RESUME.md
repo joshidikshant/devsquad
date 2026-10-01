@@ -6,6 +6,29 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Latest continuation — Claude launch/stream repair, Grok and Gemini proof
 
+The frozen stream/framing gate at `3555a91` passes **458 tests in 467.018s**,
+two optional-SDK skips, zero errors/failures/unraisable diagnostics. Independent
+native Codex review is clean with all three declared checks passed. A real
+Claude Code MCP lead claimed, renewed and completed that saved review run
+`b9501b55-1c65-4b32-a03f-1087cca8fefc`: **succeeded, version 23**. Earlier
+probe failures are retained: empty builtins left MCP pending; a later model
+falsely alleged a hash mismatch. Exact machine comparison confirmed all refs
+matched before the successful fenced completion. ToolSearch plus only the
+three scoped MCP tools works, without file/shell/delegation access.
+
+The real native stream additionally labels provider `firstParty`. It now maps
+to Anthropic only for verified Claude 2.1.220, preserving its raw label and
+rejecting other/unverified provider labels. The **63-test focused gate passes
+in 70.391s**, 227 Bash assertions/reference/diff pass, and the saved real stream
+now decodes to verified Sonnet 5 with Haiku usage retained. This mapping follows
+the 458-test gate; the mandatory full suite on the upcoming genuine G4 candidate
+must include it, and that independent delivery review will inspect the mapping.
+Next: checkpoint, refresh the actual installation to these tested launch
+repairs, retry G4 in a new saved run, and finish candidate review/checks plus
+host disposition. Do not repeat Grok/Gemini or the completed Claude handoff.
+Those live MCP proofs used the first refreshed release; MCP service source is
+unchanged in the subsequent Claude worker repairs. Broader R4–R7 remain open.
+
 The installed G4 delivery attempt at `ea113d4`, run
 `8a8a4548-13c1-4a2f-9190-870112f63ef2`, failed before implementation, version
 13, with zero native reported tokens. The real cause is the variadic Claude
