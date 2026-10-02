@@ -6,6 +6,31 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Active continuation — managed delivery failure remains unresolved
 
+### Passing managed gate — final combined review / integration remains
+
+Current active full-combined branch review: **`ba14b743-9473-46fe-9e1f-d5b79fb032d4`**,
+exact base `1781b89` → target **`af994e948eb38764884d27fd61665efa776cb47b`**,
+read scope limited to the five changed files. Its diff/Bash/affected-wheel and
+task-entry checks are mandatory; no duplicate full gate is declared.
+
+Managed delivery **`33c64397-3a57-42e7-82d5-773d50f466ee`** is now awaiting
+host/version 23 with **accept_allowed true**. Actual Claude Sonnet 5 writer
+and independent native gpt-6.1-sol/low reviewer are verified, review clean.
+All three checks pass with unchanged/verified candidate integrity: diff,
+227 Bash assertions, **475 core tests in 460.153s**, two optional-SDK skips,
+zero errors/failures/unraisable diagnostics (UTC/monotonic ~460.516s agree).
+The explicit build interpreter caused installed-wheel gates to run. All
+operator README/symlink/Unicode cases pass. This is a genuine model workflow,
+not fixture substitution. It is not terminal until fenced host acceptance.
+
+Next: inspect combined review's exact baseline/target and all required checks;
+accept both saved runs only if clean/passing, then apply the prepared full G4
+diff from 1781b89 to af994 (five files) to the main project checkout, verify
+blob hashes against the accepted candidate, affected/Bash gates and checkpoint.
+Refresh the stable installation safely, verify drift/idempotence/doctor/SDK,
+then one Gemini CLI/MCP status recheck against the final installed launcher.
+Earlier failures below remain history; broader R4–R7 remain open.
+
 **Current active run: `33c64397-3a57-42e7-82d5-773d50f466ee`**, launched via
 the installed stable `squad fix`, original base `1781b89`, retained target
 `6375955f66ce87a541fdfbf60db6eb0fcd30a55e`. Claude is repairing NUL-safe
