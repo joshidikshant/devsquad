@@ -18,6 +18,16 @@ immutable scope/checks were not widened. The full check explicitly sets
 so wheel gates run, not silently skip. Keep check HOME isolation and identity
 validation strict. No API fallback/settings/reset changes.
 
+The writer finished candidate **`af994e948eb38764884d27fd61665efa776cb47b`**,
+SHA-256 `efb502a38972a97aba89cce371b398e2ac7e7dd1b6dd9b0a8fa83a51d98d9f5c`,
+five changed paths exactly as authorized. Unicode/README/symlink operator
+fixtures now all pass. Native reviewer/check worker is running version 13.
+The final full-combined review can use a prelaunch public branch-review task
+with read scope limited to those five files, exact base 1781b89 → final target,
+mandatory Bash plus affected tests with explicit offline build interpreter,
+and no duplicate full gate. Do not broaden a frozen task or claim finished
+checks before the saved packet exists.
+
 The prior corrective run `288ee6f9…` completed a verified native Codex clean
 review, explicitly reporting inspection of the complete G4 diff from 1781b89,
 although its frozen comparison remains 5cb9eab → 6375955. Bash/diff checks
