@@ -76,6 +76,7 @@ class NativeCatalogCache:
     def __init__(self, directory: Path, scope: str, version: str):
         self.directory, self.scope, self.version = directory, scope, version
         self.path = directory / (hashlib.sha256(scope.encode()).hexdigest() + ".json")
+        self.failure_path = self.path.with_suffix(".failure.json")
 
     def _read(self) -> dict[str, Any] | None:
         if not self.path.exists():
@@ -97,15 +98,16 @@ class NativeCatalogCache:
         except (TypeError, ValueError):
             return False
 
-    def _write(self, value: dict[str, Any]) -> None:
-        temporary = self.path.with_suffix(f".tmp-{uuid.uuid4().hex}")
+    def _write(self, value: dict[str, Any], path: Path | None = None) -> None:
+        destination = path or self.path
+        temporary = destination.with_suffix(f".tmp-{uuid.uuid4().hex}")
         try:
             with temporary.open("x", encoding="utf-8") as output:
                 os.chmod(temporary, 0o600)
                 output.write(canonical_json(value) + "\n")
                 output.flush()
                 os.fsync(output.fileno())
-            os.replace(temporary, self.path)
+            os.replace(temporary, destination)
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -123,6 +125,14 @@ class NativeCatalogCache:
                 return previous
             try:
                 previous = self._read()
+                if previous is None and self.failure_path.exists():
+                    try:
+                        failure = json.loads(self.failure_path.read_bytes())
+                        backing_off = self._recent(failure["at"], current, REFRESH_BACKOFF)
+                    except (ValueError, KeyError, TypeError):
+                        raise ContractError("native discovery backoff evidence is invalid") from None
+                    if backing_off:
+                        raise ContractError("native discovery is backing off; retry shortly")
                 if previous is not None and (
                     self._recent(previous["fetched_at"], current, CATALOG_TTL)
                     or self._recent(previous["last_refresh"]["at"], current, REFRESH_BACKOFF)
@@ -135,6 +145,7 @@ class NativeCatalogCache:
                     models = normalize_models("codex", self.version, raw_models)
                 except (ContractError, EOFError, OSError, TimeoutError):
                     if previous is None:
+                        self._write({"at": current.isoformat(), "status": "error"}, self.failure_path)
                         raise ContractError("native discovery failed with no scoped last-good catalog") from None
                     previous["last_refresh"] = {"at": current.isoformat(), "status": "error", "error": "discovery_failed"}
                     self._write(previous)
@@ -147,6 +158,7 @@ class NativeCatalogCache:
                 }
                 value["catalog_change"] = analyze_catalog_drift(previous, value)
                 self._write(value)
+                self.failure_path.unlink(missing_ok=True)
                 return value
             finally:
                 fcntl.flock(lease, fcntl.LOCK_UN)

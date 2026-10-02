@@ -775,16 +775,24 @@ class ManagedTaskEntryTest(unittest.TestCase):
         process.poll.return_value = None
         runtime = Path(self.temp.name) / "runtime"
         second_repo = self._init_repo()
+        (second_repo / "README.md").write_text("Second project\n")
+        self._commit(second_repo, "second project")
+        real_popen = subprocess.Popen
+        def native_popen(argv, *positional, **keywords):
+            return process if argv[:2] == ["/fixture/codex", "app-server"] else real_popen(argv, *positional, **keywords)
         reset = int((datetime.now(timezone.utc) + timedelta(days=2)).timestamp())
         account = {"type": "chatgpt", "email": "fixture@example.invalid", "planType": "plus"}
+        failed_limits = False
         def reply(peer, request_id, **unused):
+            if request_id == 1000 and failed_limits:
+                raise TimeoutError("private provider quota diagnostic")
             return {"result": {1: {}, 2: {"account": account}, 3: {"config": {"provider": "native"}},
                 1000: {"rateLimits": {"primary": {"usedPercent": 5, "windowDurationMins": 300, "resetsAt": reset},
                     "secondary": {"usedPercent": 100, "windowDurationMins": 10080, "resetsAt": reset}}}}[request_id]}
         with (
             mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
             mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
-            mock.patch("devsquad.task_entry.subprocess.Popen", return_value=process),
+            mock.patch("devsquad.task_entry.subprocess.Popen", side_effect=native_popen),
             mock.patch("devsquad.task_entry.JsonLinePeer", return_value=mock.Mock()),
             mock.patch("devsquad.task_entry.receive_response", side_effect=reply),
             mock.patch("devsquad.task_entry.discover_models", return_value=[{"id": "gpt-fixture", "supportedReasoningEfforts": ["low"]}]) as discovery,
@@ -793,6 +801,15 @@ class ManagedTaskEntryTest(unittest.TestCase):
             second = discover_codex_identity(second_repo, runtime=runtime)
             discovery.assert_called_once()
             self.assertEqual(first, second)
+            with mock.patch.object(Service, "_spawn_daemon") as spawn:
+                for project in (self.repo, second_repo):
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        self.assertEqual(cli.main(["review", "--base", "HEAD", "--project-dir", str(project), "--runtime-dir", str(runtime), "--json"]), 0)
+                    started = json.loads(output.getvalue())["data"]
+                    self.assertEqual(started["state"], "failed")
+                    self.assertEqual(started["service"]["error"]["error"], "CAPABILITY_UNAVAILABLE")
+                spawn.assert_not_called()
             service = Service(runtime)
             store = service._store()
             try:
@@ -800,10 +817,22 @@ class ManagedTaskEntryTest(unittest.TestCase):
                 self.assertEqual(store.capacity_snapshot(first["account_pool_id"], target=target)["status"], "exhausted")
             finally:
                 store.close()
+            failed_limits = True
+            discover_codex_identity(self.repo, runtime=runtime)
+            store = service._store()
+            try:
+                self.assertEqual(store.capacity_snapshot(first["account_pool_id"], target=target)["status"], "exhausted")
+            finally:
+                store.close()
             account["email"] = "another@example.invalid"
             other = discover_codex_identity(self.repo, runtime=runtime)
             self.assertNotEqual(first["account_pool_id"], other["account_pool_id"])
             self.assertEqual(discovery.call_count, 2)
+            store = service._store()
+            try:
+                self.assertEqual(store.capacity_snapshot(other["account_pool_id"], target=target)["status"], "unknown")
+            finally:
+                store.close()
         self.assertNotIn("fixture@example.invalid", "".join(path.read_text() for path in (runtime / "catalogs").glob("*.json")))
 
     def test_normal_alias_rejects_account_or_catalog_change_without_mutating_binding(self):

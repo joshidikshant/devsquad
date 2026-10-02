@@ -151,9 +151,11 @@ def discover_codex_identity(
             try:
                 limits = read_native(1000, "account/rateLimits/read")
             except (ContractError, EOFError, OSError, TimeoutError):
-                limits = {}
+                # A failed query is not evidence that a still-fresh exhausted
+                # window disappeared. Retain prior observations until expiry.
+                limits = None
             service = Service(runtime)
-            for observation in normalize_codex_limits(limits, pool_id):
+            for observation in (normalize_codex_limits(limits, pool_id) if limits is not None else []):
                 service.capacity_observe(observation)
     except (EOFError, OSError, TimeoutError) as exc:
         raise ContractError("Codex model discovery did not complete") from exc

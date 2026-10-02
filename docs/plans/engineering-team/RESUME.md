@@ -6,20 +6,29 @@ remain recoverable in Git; detailed receipts and failed gates stay in evidence.
 
 ## Current checkpoint — October 2, 2026
 
-Continuation: R3c final independent closure audit is next, against immutable
-`39b95f1` and the existing 477-test full gate. No required R3/R4 acceptance is
-being silently waived. A coherent **partial R4** source slice is checkpointed:
+R3c is now **accepted** at immutable `39b95f1`: native independent audit is
+clean; mandatory diff/Bash/51 focused tests pass with unchanged integrity.
+The R3 source blobs exactly match the prior accepted 477-test full candidate.
+See `evidence/R3-closure-2026-10-02.json` for the requirement/proof matrix.
+A coherent **partial R4** source slice is checkpointed:
 native normal commands now call account/config/model/quota read-only RPCs;
 scoped private last-good catalogs use a 24-hour TTL, OS refresh lease and
 two-minute failure backoff. Native windows enter the shared typed capacity
 ledger. Alias account/config/catalog mismatches block for requalification;
 explicit pins remain trials. No login, reset-credit or API fallback calls.
 New cache/concurrency/privacy/window and two-project discovery tests are added.
+Latest stable-source focused gate: **79 tests passed in 14.696s**. Public CLI
+entry for two committed projects proves fresh weekly exhaustion prevents any
+worker launch; failed quota queries preserve still-fresh prior exhaustion.
+R3c independent saved review **`f0a4f86b-b305-4839-88a2-cb5fed8739ab`** is
+**succeeded/version 22**, accepted against immutable `39b95f1`; all mandatory
+checks and artifact hashes are verified. No active native audit remains.
+R4 partial evidence: `evidence/R4-native-scoped-partial-2026-10-02.json`.
 Focused/full/independent package closure and fresh-install proof are still
 required before R4 is closed. One real non-generating native discovery probe
 verified gpt-6.1-sol/low, scoped pool/catalog fingerprint and two quota windows;
-reported capacity was unknown (not guessed available). Continue R3c audit,
-then R4 public preflight/lease/identity acceptance, R5, R6 and R7/C1.
+reported capacity was unknown (not guessed available). Continue R4 full and
+independent package/installed acceptance, then R5, R6 and R7/C1.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.

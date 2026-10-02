@@ -68,7 +68,10 @@ def validate_catalog_change(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def model_fingerprint(harness: str, version: str | None, model: dict[str, Any]) -> str:
-    stable = {"harness": harness, "version": version, "model": model}
+    # Provider ordering/default hints are not capability or serving revisions.
+    # Their movement must not invalidate an explicitly approved alias.
+    capabilities = {key: value for key, value in model.items() if key not in {"isDefault", "is_default"}}
+    stable = {"harness": harness, "version": version, "model": capabilities}
     return hashlib.sha256(json.dumps(stable, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 

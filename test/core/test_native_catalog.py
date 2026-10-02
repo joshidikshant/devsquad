@@ -81,6 +81,14 @@ class NativeCatalogTest(unittest.TestCase):
         other = NativeCatalogCache(Path(self.temp.name), "scope-b", "v-test")
         with self.assertRaises(ContractError):
             other.refresh(lambda: (_ for _ in ()).throw(TimeoutError()), now=NOW)
+        with self.assertRaisesRegex(ContractError, "backing off"):
+            other.refresh(lambda: self.fail("initial failure backoff ignored"), now=NOW + timedelta(seconds=1))
+
+    def test_provider_default_hint_does_not_change_capability_fingerprint(self):
+        first = self.cache.refresh(lambda: [{**MODELS[0], "isDefault": True}], now=NOW)
+        changed = self.cache.refresh(lambda: [{**MODELS[0], "isDefault": False}], now=NOW + timedelta(days=2))
+        self.assertEqual(first["models"][0]["fingerprint"], changed["models"][0]["fingerprint"])
+        self.assertEqual(changed["catalog_change"]["changed_model_ids"], [])
 
     def test_weekly_limit_blocks_available_primary_and_null_is_unknown(self):
         payload = {"rateLimitsByLimitId": {"codex": {
