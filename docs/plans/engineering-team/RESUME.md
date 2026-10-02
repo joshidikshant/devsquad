@@ -77,7 +77,12 @@ no errors/skips/unraisable: a headless integrity test requested a terminal
 receipt during a transient handoff transition. Isolated reproduction passed;
 the test now waits for terminal state in headless mode while retaining every
 integrity assertion. **66 integrity/outcome/review/delivery tests pass in
-125.322s**. No test/native process remains active at this checkpoint. Next:
+125.322s**. Frozen bf3de086 fail-fast full invocation stopped at **188 tests /
+274.410s**, one remaining stale schema-four upgrade assertion (15 versus actual
+16); zero errors/skips/unraisable, UTC/monotonic ~274.50s. Only its expected
+current schema changed; the direct migration regression passes in 0.090s and
+other migration assertions were audited without changing historical versions.
+No test/native process remains active at this checkpoint. Next:
 one full core gate with explicit offline Python 3.12 build interpreter, then
 schema-16 safe installer/installed transport recheck and R5
 closure. Current production installation/ledger is still the
@@ -85,6 +90,15 @@ accepted R4 **schema 15**; never open it with source Service while schema-16
 work is incomplete. Preserve failed red/intermediate probes truthfully.
 Continue R6 UX/readiness/generated-reference checks, R7/C1 and final R8
 acceptance after R5; whole-plan completion is not claimed.
+
+R6 terminal and doctor slices are delegated in isolated attached worktrees
+`r6-terminal` and `r6-readiness` at bf3de086. R7 Council is implementing in
+isolated `r7-council` from the same baseline. They must not alter this frozen
+candidate or production installation. Integrate their checkpoint commits
+only after this R5 gate; preserve their work if interrupted. macOS default-
+deny sandbox probe establishes own-evidence access with peer/ledger denial,
+not native Council compatibility or acceptance. No new native Council call
+has been made.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.

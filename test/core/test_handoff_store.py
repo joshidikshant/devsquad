@@ -197,7 +197,7 @@ class HandoffStoreTest(unittest.TestCase):
         self.addCleanup(upgraded.close)
         self.assertEqual(
             upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],
-            15,
+            16,
         )
         tables = {
             row[0]
