@@ -36,7 +36,8 @@ Antigravity externally updated to **1.2.14**: current doctor correctly labels
 its adapter unverified; the old 1.2.13 live status receipt is not a new-version
 proof. Recheck this during R6/R8 without broad MCP listings or UI bypass.
 
-**R5 is source-in-progress**, not accepted/installed. The new schema-16
+**R5 is now accepted and installed** at source **dfe9976**, schema **16**.
+Closure matrix: `evidence/R5-closure-2026-10-02.json`. The new
 projection outbox opts in new public runs without rewriting legacy history.
 Terminal transitions and targeted status/result/report/evaluation replay
 generate one final outcome; failures, repairs, findings, fenced lead
@@ -45,57 +46,38 @@ does not block unrelated runs. The explicit public `trial` / `trial_start`
 path now uses the schema-14 assignment fence; the fixture no longer patches
 preparation or manually imports finals. Experiment reservations share a
 durable all-attempt call cap and a declaration-time wall deadline; automatic
-experimentation stays off. 88 affected outcome/service/CLI/store tests passed
-in 61.236s (before the added deadline test/lead-repair attribution refinement).
+experimentation stays off.
 Public concurrent-budget and promotion → new-run binding → held-out regression
 → rollback tests pass. See `evidence/R5-public-integration-partial-2026-10-02.json`.
 
-The frozen learning/lifecycle affected gate finished: **71 tests/233.881s**,
-two stale schema-15 assertion failures, no behavioral errors. The two direct
-assertion checks and another 22 migration/capacity/decision tests passed after
-updating expectations, not removing them. Initial independent native R5 audit
-**`5a70f3db-91a8-4606-9809-c0b993b988b1`** rejected exact `14b3a391`:
-medium pending-projection nested read transaction and high reservation-only
-experiment deadline. Diff/Bash/16 public tests/reference checks had passed;
-that does not supersede the findings. Controlled active-worker reproduction
-confirmed 7.274s work against a 3s experiment cap. The root full gate was
-explicitly SIGINT-stopped (PID 77765/exit 130) to repair this known rejected
-candidate, not counted as a pass. That interruption bypassed unittest cleanup,
-producing TemporaryDirectory/SQLite finalizer warnings; normal complete gates
-must still prove no warnings/unraisable. No scoped leftover process was found.
+Initial native R5 audit rejected two real defects. Project projection now
+precedes the consistent proposal read; launch/active-worker deadlines include
+the shared experiment deadline. Exact repair follow-up
+**e046a174-55ce-4496-973e-2fc97c68a493** is clean/accepted, succeeded/22;
+diff/Bash/13 public tests/reference checks pass with unchanged integrity.
+The 54 repaired-path and 66 integrity/outcome/review/delivery tests pass.
+Final frozen **504-test full gate passes in 511.241s**, two optional SDK skips,
+zero errors/failures/unraisable, UTC/monotonic ~511.32s. Later revisions change
+only test observations/schema expectations and documents, not reviewed code.
 
-Repairs now move project projection before the consistent proposal read,
-clip launch timeouts to the experiment deadline and poll remaining budget in
-the gated runner for active work. A generic fixture timeout's native TIMEOUT
-field is preserved and projected, not rewritten. Three new red public tests
-reproduced the defects (1 failure/2 errors/14.842s); **54 affected outcome,
-trial, store, supervisor and M2 gate tests now pass in 48.572s**. Exact native
-repair follow-up **e046a174-55ce-4496-973e-2fc97c68a493** is clean and accepted,
-succeeded/22; diff/Bash/13 public tests/reference checks passed with unchanged
-integrity. The next full fail-fast gate stopped at 17 tests/10.494s, one failure,
-no errors/skips/unraisable: a headless integrity test requested a terminal
-receipt during a transient handoff transition. Isolated reproduction passed;
-the test now waits for terminal state in headless mode while retaining every
-integrity assertion. **66 integrity/outcome/review/delivery tests pass in
-125.322s**. Frozen bf3de086 fail-fast full invocation stopped at **188 tests /
-274.410s**, one remaining stale schema-four upgrade assertion (15 versus actual
-16); zero errors/skips/unraisable, UTC/monotonic ~274.50s. Only its expected
-current schema changed; the direct migration regression passes in 0.090s and
-other migration assertions were audited without changing historical versions.
-No test/native process remains active at this checkpoint. Next:
-one full core gate with explicit offline Python 3.12 build interpreter, then
-schema-16 safe installer/installed transport recheck and R5
-closure. Current production installation/ledger is still the
-accepted R4 **schema 15**; never open it with source Service while schema-16
-work is incomplete. Preserve failed red/intermediate probes truthfully.
-Continue R6 UX/readiness/generated-reference checks, R7/C1 and final R8
-acceptance after R5; whole-plan completion is not claimed.
+Safe offline installation selected `0.1.0-py31214-90f1e87fb9ac-mcp-a26bc88afbef`;
+zero active production runs, lazy migration to 16, zero retroactive objective
+jobs. Reinstall no-op, payload drift false, pip check pass, four registrations
+matching. **Nine actual installed SDK tests pass in 2.674s without skips.**
+Installed normal review dry-run still resolves gpt-6.1-sol/low bounded trial,
+without creating a run. Full installer tests include actual old-schema active
+deferral, cancellation/recovery and migration to current16. Failed red tests,
+rejected audit and interrupted/failed full gates remain in partial evidence;
+do not repeat accepted proofs. No test/native process is active here.
+Next: integrate/test R6 terminal/readiness, R7/C1 and final R8 acceptance;
+whole-plan completion is not claimed.
 
 R6 terminal and doctor slices are delegated in isolated attached worktrees
 `r6-terminal` and `r6-readiness` at bf3de086. R7 Council is implementing in
 isolated `r7-council` from the same baseline. They must not alter this frozen
-candidate or production installation. Integrate their checkpoint commits
-only after this R5 gate; preserve their work if interrupted. macOS default-
+candidate or production installation. Readiness checkpoint `dd709804` needs
+a root-review follow-up for a SIGTERM-ignoring descendant after parent exit.
+Integrate only clean checkpoint commits; preserve work if interrupted. macOS default-
 deny sandbox probe establishes own-evidence access with peer/ledger denial,
 not native Council compatibility or acceptance. No new native Council call
 has been made.
@@ -151,8 +133,8 @@ use git-safety checkpoints, never stash. No goal is currently active.
 ## Current local installation and host proof
 
 Stable launcher: /Users/Dikshant/.local/bin/squad.
-Selected release: `0.1.0-py31214-3631f1737bc9-mcp-a26bc88afbef`.
-Python 3.12.14/MCP 2.2.0, schema 15; previous releases and private pre-upgrade
+Selected release: `0.1.0-py31214-90f1e87fb9ac-mcp-a26bc88afbef`.
+Python 3.12.14/MCP 2.2.0, schema 16; previous releases and private pre-upgrade
 SQLite backup retained. Source/plugin/installed payload drift is false.
 Upgrade defers for old active/recoverable runs, swaps without migration under
 the lock, then lazily migrates with old-client write guards.
