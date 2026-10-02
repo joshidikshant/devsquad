@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 import time
 from pathlib import Path
@@ -35,6 +36,7 @@ WAIT_EXIT_CODES = {
     "cancelled": 4,
 }
 WAIT_ACTIVE_STATES = {"queued", "running", "cancelling"}
+HUMAN_COMMANDS = {"review", "fix", "status", "result", "doctor", "setup", "finish", "resume", "cancel"}
 
 
 def manifests() -> list[tuple[Path, AdapterManifest]]:
@@ -145,11 +147,24 @@ def _wait_for_run(
         while True:
             status = service.status(run_id)
             state = status.get("state")
+            version = status.get("version")
+            if (state == "awaiting_host"
+                    and status.get("next_action") == "continue_headless_lead"):
+                if type(version) is int and version not in resumed_versions:
+                    resumed_versions.add(version)
+                    try:
+                        service.resume(run_id)
+                    except ConflictError:
+                        # The detached owner may have continued the same
+                        # headless handoff between observation and resume.
+                        if service.status(run_id).get("version") == version:
+                            raise
+                time.sleep(WAIT_POLL_SECONDS)
+                continue
             if state in WAIT_EXIT_CODES:
                 return envelope(data=status), WAIT_EXIT_CODES[state]
             if state not in WAIT_ACTIVE_STATES:
                 raise RuntimeError(f"service returned unsupported run state: {state!r}")
-            version = status.get("version")
             if (resume_candidate_review
                     and state == "queued"
                     and status.get("next_action") == "resume_candidate_review"
@@ -297,6 +312,8 @@ def _command_normal_entry(
         else (envelope(data=started), 0)
     )
     service_data = run["data"]
+    if not args.json:
+        service_data = _display_status(service, service_data)
     return envelope(data=_normal_entry_result(
         summary, idempotency_key, service_data,
     )), code
@@ -372,13 +389,41 @@ def command_profile_binding_show(args: argparse.Namespace) -> tuple[dict, int]:
     return envelope(data=_service(args).profile_binding_status(args.alias)), 0
 
 
-def command_status(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).status(args.run)), 0
+def _selected_run(args: argparse.Namespace, service: Service) -> str:
+    return args.run if args.run is not None else service.resolve_run_id(None, Path(args.project_dir))
+
+
+def _display_status(service: Service, data: dict[str, Any]) -> dict[str, Any]:
+    if data.get("state") == "awaiting_host" and (data.get("handoff") or {}).get("status") == "open":
+        try:
+            view = service.handoff_view(data["run_id"])
+        except ConflictError as exc:
+            # A live headless lead can advance while its status is rendered.
+            return {**data, "handoff_view_error": str(exc)}
+        if view["version"] == data.get("version"):
+            return {**data, "handoff_view": view}
+    return data
+
+
+def command_status(args: argparse.Namespace) -> tuple[dict, int]:
+    service = _service(args)
+    data = service.status(_selected_run(args, service))
+    return envelope(data=data if args.json else _display_status(service, data)), 0
 def command_events(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).events(args.run, args.after, args.limit)), 0
-def command_result(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).result(args.run)), 0
+def command_result(args: argparse.Namespace) -> tuple[dict, int]:
+    service = _service(args)
+    return envelope(data=service.result(_selected_run(args, service))), 0
 def command_cancel(args: argparse.Namespace) -> tuple[dict, int]: return envelope(data=_service(args).cancel(args.run)), 0
 def command_resume(args: argparse.Namespace) -> tuple[dict, int]:
     recovery = _read_json(args.recovery_file, "recovery file") if args.recovery_file else None
     return envelope(data=_service(args).resume(args.run, recovery)), 0
+
+
+def command_finish(args: argparse.Namespace) -> tuple[dict, int]:
+    service = _service(args)
+    return envelope(data=service.finish(
+        _selected_run(args, service), args.disposition, args.reason,
+    )), 0
 
 
 def command_handoff_claim(args: argparse.Namespace) -> tuple[dict, int]:
@@ -512,9 +557,20 @@ def parser() -> argparse.ArgumentParser:
     trial.add_argument("--runtime-dir", default=runtime_default)
     trial.set_defaults(func=command_trial)
     for name, fn in (("status",command_status),("result",command_result),("cancel",command_cancel),("resume",command_resume)):
-        cmd=sub.add_parser(name); cmd.add_argument("run"); cmd.add_argument("--json",action="store_true"); cmd.add_argument("--runtime-dir",default=runtime_default)
+        cmd=sub.add_parser(name); cmd.add_argument("run", nargs="?" if name in {"status", "result"} else None); cmd.add_argument("--json",action="store_true"); cmd.add_argument("--runtime-dir",default=runtime_default)
+        if name in {"status", "result"}: cmd.add_argument("--project-dir", default=str(Path.cwd()))
         if name == "resume": cmd.add_argument("--recovery-file")
         cmd.set_defaults(func=fn)
+    finish = sub.add_parser("finish", help="decide the current host handoff without decision JSON")
+    finish.add_argument("run", nargs="?")
+    disposition = finish.add_mutually_exclusive_group(required=True)
+    for value in ("accept", "reject", "revise"):
+        disposition.add_argument(f"--{value}", dest="disposition", action="store_const", const=value)
+    finish.add_argument("--reason", required=True)
+    finish.add_argument("--project-dir", default=str(Path.cwd()))
+    finish.add_argument("--json", action="store_true")
+    finish.add_argument("--runtime-dir", default=runtime_default)
+    finish.set_defaults(func=command_finish)
     events=sub.add_parser("events"); events.add_argument("run"); events.add_argument("--after",type=int,default=0); events.add_argument("--limit",type=int,default=100); events.add_argument("--json",action="store_true"); events.add_argument("--runtime-dir",default=runtime_default); events.set_defaults(func=command_events)
     capacity = sub.add_parser("capacity")
     capacity_sub = capacity.add_subparsers(dest="capacity_command", required=True)
@@ -598,22 +654,132 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
+def _next_command(data: dict[str, Any]) -> str:
+    run_id = data.get("run_id", "RUN")
+    action = data.get("next_action")
+    if action == "claim_handoff":
+        owner = (data.get("handoff") or {}).get("claimed_by")
+        if owner:
+            return f"complete or renew the saved claim in {owner}; this handoff already has an owner"
+        return f'squad finish {run_id} --accept --reason "your assessment of the saved evidence" (or --reject / --revise)'
+    if action in {"continue_headless_lead", "resume_candidate_review", "handoff_submission_saved"}:
+        return f"squad resume {run_id}"
+    if action == "recovery_file_required":
+        return f"squad status {run_id} --json; inspect the recovery evidence before squad resume {run_id} --recovery-file FILE"
+    if data.get("state") in {"succeeded", "failed", "cancelled"}:
+        return f"squad result {run_id}"
+    if isinstance(action, str) and action:
+        return action.removesuffix(" --json")
+    return f"squad status {run_id}"
+
+
+def _handoff_lines(data: dict[str, Any]) -> list[str]:
+    view = data.get("handoff_view")
+    if not view:
+        return [f"Evidence unavailable: {data['handoff_view_error']}"] if data.get("handoff_view_error") else []
+    review = view["review"]
+    lines = [f"Review: {review['verdict']} — {review['summary']}"]
+    for finding in review.get("findings", []):
+        lines.append(f"  {finding['severity']}: {finding['title']} ({finding['path']}:{finding['start_line']})")
+    for check in view["checks"]:
+        lines.append(f"Check {check['id']}: {check['status']}")
+    lines.append(f"Evidence {view['report']['name']}: {view['report']['path']}")
+    return lines
+
+
+def _human_response(command: str, response: dict[str, Any]) -> str:
+    if not response["ok"]:
+        error = response["error"]
+        return f"{error['code']}: {error['message']}\nThe command did not complete. Existing runs remain saved; inspect squad status RUN."
+    data = response["data"]
+    lines = []
+    if command == "doctor":
+        lines.append(f"DevSquad {data.get('core_version', __version__)}: {'ready' if data.get('ready') else 'needs attention'}")
+        for row in data.get("adapters", []):
+            auth = row.get("authentication", {})
+            verified = row.get("operation_verified")
+            lines.append(
+                f"{row['adapter']}: {row.get('version') or 'not installed'}; "
+                f"adapter {row.get('status', 'unknown')}; "
+                f"authentication {auth.get('status', 'unknown')}; "
+                f"operation {'verified' if verified is True else 'unverified' if verified is False else 'unknown'}"
+            )
+            if auth.get("next_action"):
+                lines.append(f"  Next: {auth['next_action']}")
+        for workflow, row in data.get("supported_workflows", {}).items():
+            lines.append(f"{workflow}: {'ready' if row.get('ready') else 'unavailable' if not row.get('supported') else 'needs attention'}")
+        for row in data.get("local_apps", []):
+            lines.append(f"{row.get('id', 'app')} registration: {row.get('status', 'unknown')}")
+        lines.append("Next: squad setup --dry-run" if not data.get("ready") else "Next: squad review --base main --dry-run")
+    elif command == "setup":
+        lines.append(f"Setup {'preview' if data.get('dry_run') else 'completed' if data.get('completed') else 'needs attention'}")
+        for row in data.get("hosts", []):
+            lines.append(f"{row.get('id', 'app')}: {row.get('action', 'unknown')}; registration {'ready' if row.get('ready') else 'needs attention'}")
+        lines.append("Next: squad setup" if data.get("dry_run") and data.get("completed") else "Next: squad doctor")
+    elif command in {"review", "fix"}:
+        lines.append(f"{data.get('workflow', command)}: {data.get('state', 'unknown')}")
+        if data.get("run_id"):
+            lines.append(f"Run: {data['run_id']}")
+        lines.append(f"Project: {data.get('project', 'unknown')}")
+        lines.append(f"Commits: {data.get('base_oid', '')} → {data.get('target_oid', '')}")
+        for role, row in data.get("planned_roles", {}).items():
+            lines.append(f"{role}: {row.get('harness', 'unknown')} {row.get('model_id', '')} / {row.get('effort', 'unknown')} ({row.get('selection_mode', 'unknown')})")
+        if data.get("selection_reason"):
+            lines.append(f"Selection: {data['selection_reason']}")
+        scope = data.get("scope", {})
+        lines.append(f"Read scope: {', '.join(scope.get('read_paths', []))}; write scope: {', '.join(scope.get('write_paths', [])) or 'none'}")
+        for check in data.get("check_plan", []):
+            lines.append(f"Check {check['id']}: {shlex.join(check['argv'])} ({'required' if check['required_to_pass'] else 'report only'})")
+        if not data.get("check_plan"):
+            lines.append(f"Checks: {', '.join(data.get('checks', []))}")
+        next_data = data.get("service") or data
+        lines.extend(_handoff_lines(next_data))
+        lines.append(f"Next: {_next_command(next_data)}")
+    else:
+        run_id = data.get("run_id", "unknown")
+        lines.append(f"Run {run_id}: {data.get('state', 'unknown')}")
+        if data.get("phase"):
+            lines.append(f"Progress: {data['phase']}")
+        if command == "result":
+            if not data.get("ready"):
+                lines.append("Result is not ready; the run is saved.")
+            for artifact in data.get("artifacts", []):
+                lines.append(f"{artifact['name']}: {artifact['path']}")
+        if data.get("active_attempt"):
+            lines.append(f"Worker: {data['active_attempt'].get('status', 'unknown')}")
+        lines.extend(_handoff_lines(data))
+        if data.get("disposition"):
+            lines.append(f"Disposition: {data['disposition']}")
+        if command == "cancel" and data.get("state") == "cancelling":
+            lines.append("Cancellation is saved; worker cleanup is still running.")
+        if command != "result" or not data.get("ready"):
+            lines.append(f"Next: {_next_command(data)}")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    command = arguments[0] if arguments else ""
+    def emit(response):
+        if command in HUMAN_COMMANDS and "--json" not in arguments:
+            print(_human_response(command, response))
+        else:
+            print(json.dumps(response, sort_keys=True))
     try:
-        args = parser().parse_args(argv)
+        args = parser().parse_args(arguments)
         if hasattr(args, "stream_func"):
             return args.stream_func(args)
         response, code = args.func(args)
-        print(json.dumps(response, sort_keys=True))
+        emit(response)
         return code
     except (ConflictError, SchemaVersionError) as exc:
-        print(json.dumps(envelope(error=error_payload(exc.code, str(exc))), sort_keys=True))
+        emit(envelope(error=error_payload(exc.code, str(exc))))
         return 75
     except ContractError as exc:
-        print(json.dumps(envelope(error=error_payload(exc.code, str(exc))), sort_keys=True))
+        emit(envelope(error=error_payload(exc.code, str(exc))))
         return 64
     except Exception as exc:
-        print(json.dumps(envelope(error=error_payload("INTERNAL_ERROR", str(exc))), sort_keys=True))
+        emit(envelope(error=error_payload("INTERNAL_ERROR", str(exc))))
         return 1
 
 

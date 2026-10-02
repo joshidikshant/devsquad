@@ -1292,6 +1292,7 @@ class Service:
                         "resume_candidate_review"
                         if snapshot.get("task", {}).get("workflow") == "issue-delivery"
                         and isinstance(snapshot.get("candidate"), dict)
+                        and (handoff is None or handoff.status != "open")
                         else None
                     )
                 except ConflictError:
@@ -1316,6 +1317,102 @@ class Service:
                 result["decision_helper"] = decision_observations
             return result
         finally: store.close()
+
+    def resolve_run_id(self, run_id: str | None, project: Path) -> str:
+        """Only infer a run when this canonical Git project has one saved choice."""
+        if run_id is not None:
+            return run_id
+        store = self._store()
+        try:
+            choices = store.runs_for_project(project)
+        finally:
+            store.close()
+        if not choices:
+            raise ContractError("No saved runs for this Git project. Start with squad review --base main or squad fix \"the bounded issue\".")
+        if len(choices) == 1:
+            return choices[0]["run_id"]
+        listed = "; ".join(f"{item['run_id']} ({item['state']})" for item in choices[:20])
+        more = "; additional runs omitted" if len(choices) > 20 else ""
+        raise ConflictError(f"Multiple saved runs for this Git project; specify RUN: {listed}{more}")
+
+    def handoff_view(self, run_id: str) -> dict[str, Any]:
+        """Read the current validated review and its portable human report."""
+        from .reports import handoff_report_names
+
+        store = self._store()
+        try:
+            run, _, handoff = store.status_snapshot(run_id)
+            if handoff is None or handoff.status != "open":
+                raise ConflictError("run has no current open handoff to inspect")
+            packet = validate_saved_review_handoff(handoff.packet, self._review_snapshot(run))
+            report = store.artifact_named(run_id, handoff_report_names(handoff.sequence)[1])
+            if report is None:
+                raise ConflictError("saved handoff report is missing")
+            try:
+                content = Path(report["path"]).read_bytes()
+            except OSError as exc:
+                raise ConflictError("saved handoff report is missing") from exc
+            if (len(content) != report["byte_size"]
+                    or hashlib.sha256(content).hexdigest() != report["sha256"]):
+                raise ConflictError("saved handoff report is corrupt")
+            return {
+                "version": run["version"], "packet_sha256": handoff.packet_sha256,
+                "candidate_sha256": packet["candidate_sha256"],
+                "review": packet["review"], "checks": packet["checks"],
+                "report": report,
+            }
+        finally:
+            store.close()
+
+    def finish(self, run_id: str, disposition: str, reason: str) -> dict[str, Any]:
+        """Guided terminal host disposition over the existing fenced handoff gates."""
+        if disposition not in {"accept", "reject", "revise"}:
+            raise ContractError("finish disposition is invalid")
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise ContractError("finish requires a non-empty reason of at most 2000 characters")
+        store = self._store()
+        try:
+            run, _, handoff = store.status_snapshot(run_id)
+            if (run["state"] != "awaiting_host" or run["phase"] is not None
+                    or handoff is None or handoff.status != "open"):
+                raise ConflictError("run has no current open handoff to finish; inspect squad status RUN")
+            snapshot = self._review_snapshot(run)
+            if snapshot.get("task", {}).get("lead", {}).get("mode") != "host":
+                raise ConflictError("headless lead owns this handoff; run squad resume RUN")
+            packet = validate_saved_review_handoff(handoff.packet, snapshot)
+            for reference in packet["artifacts"]:
+                artifact = store.artifact_named(run_id, reference["name"])
+                if (artifact is None or artifact["id"] != reference["artifact_id"]
+                        or artifact["sha256"] != reference["sha256"]):
+                    raise ConflictError("current handoff evidence reference is invalid")
+                try:
+                    content = Path(artifact["path"]).read_bytes()
+                except OSError as exc:
+                    raise ConflictError("current handoff evidence is missing") from exc
+                if (len(content) != artifact["byte_size"]
+                        or hashlib.sha256(content).hexdigest() != reference["sha256"]):
+                    raise ConflictError("current handoff evidence is corrupt")
+            body = {
+                "schema_version": 1,
+                "submission_id": f"terminal-{handoff.handoff_id}",
+                "disposition": disposition,
+                "reason": reason.strip(),
+                "evidence_refs": [
+                    {"artifact_id": ref["artifact_id"], "sha256": ref["sha256"]}
+                    for ref in packet["artifacts"]
+                ],
+            }
+            decision = {**body, "submission_hash": request_hash(body)}
+            # Invalid decisions do not acquire a lease. Claim and completion
+            # still independently recheck their version and evidence fences.
+            self._review_gate(store, run_id, handoff, snapshot, decision)
+            version = run["version"]
+        finally:
+            store.close()
+        claimed = self.handoff_claim(
+            run_id, version, "terminal-operator", _initial_only=True,
+        )
+        return self.handoff_complete(run_id, claimed["claim"], decision)
 
     def events(self, run_id: str, after: int = 0, limit: int = 100) -> dict[str, Any]:
         store = self._store()
@@ -1387,6 +1484,8 @@ class Service:
         expected_version: int,
         owner: str,
         prior_claim: dict[str, Any] | None = None,
+        *,
+        _initial_only: bool = False,
     ) -> dict[str, Any]:
         if type(expected_version) is not int or expected_version < 1:
             raise ContractError("handoff expected version is invalid")
@@ -1405,7 +1504,9 @@ class Service:
                 raise ConflictError(
                     "headless review does not accept a host claim"
                 )
-            claim = store.claim_handoff(run_id, expected_version, owner, decoded)
+            claim = store.claim_handoff(
+                run_id, expected_version, owner, decoded, initial_only=_initial_only,
+            )
             snapshot = store.handoff_snapshot(run_id)
             if snapshot is None:  # Defensive: claim_handoff just verified it.
                 raise ConflictError("claimed handoff is missing")

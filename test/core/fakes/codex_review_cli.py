@@ -34,6 +34,17 @@ for line in sys.stdin:
         }), flush=True)
     elif method == "initialized":
         initialized = True
+    elif method == "account/read":
+        print(json.dumps({"id": request_id, "result": {
+            "account": {"type": "chatgpt", "id": "offline-fixture-account", "planType": "plus"},
+            "requiresOpenaiAuth": True,
+        }}), flush=True)
+    elif method == "config/read":
+        print(json.dumps({"id": request_id, "result": {
+            "config": {"model_provider": "openai"},
+        }}), flush=True)
+    elif method == "account/rateLimits/read":
+        print(json.dumps({"id": request_id, "result": {"rateLimits": None}}), flush=True)
     elif method == "model/list":
         if not initialized:
             print(json.dumps({

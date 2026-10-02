@@ -4,6 +4,7 @@ import contextlib
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -642,6 +643,37 @@ class ManagedTaskEntryTest(unittest.TestCase):
             ],
         )
 
+    def test_generated_reference_gate_follows_committed_regular_target_and_deduplicates(self):
+        repo = self._init_repo()
+        for directory in ("test/core", "plugin/core/src/devsquad", "scripts"):
+            (repo / directory).mkdir(parents=True)
+        (repo / "test/run.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+        (repo / "test/core/test_sample.py").write_text("# fixture test\n")
+        (repo / "plugin/core/src/devsquad/__init__.py").write_text("")
+        (repo / "scripts/run-core-tests.py").write_text("# fixture runner\n")
+        generator = repo / "scripts/generate-core-reference.py"
+        generator.write_text("# fixture generator\n")
+        target = self._commit(repo, "required project gates")
+        generator.unlink()
+        generator.symlink_to("run-core-tests.py")
+        symlink_target = self._commit(repo, "generator becomes a symlink")
+        for oid, expected in ((target, 1), (symlink_target, 0)):
+            with self.subTest(target=oid):
+                task, _ = build_managed_task(
+                    workflow="issue-delivery", project_dir=repo, base_ref=oid,
+                    target_ref=oid, goal="Keep generated contracts current.",
+                    codex_identity=self.codex,
+                    checks=parse_checks(["python3 scripts/generate-core-reference.py --check"] if expected else []),
+                )
+                references = [check for check in task["checks"] if check["argv"] == [
+                    "python3", "scripts/generate-core-reference.py", "--check",
+                ]]
+                self.assertEqual(len(references), expected)
+                self.assertTrue(all(check["required_to_pass"] for check in task["checks"]))
+                self.assertIn("detected-core-tests", [check["id"] for check in task["checks"]])
+                if expected:
+                    self.assertEqual(references[0]["id"], "generated-core-reference")
+
     def test_check_discovery_deduplicates_supplied_argv_matching_detected(self):
         repo = self._init_repo()
         (repo / "test").mkdir()
@@ -730,7 +762,10 @@ class ManagedTaskEntryTest(unittest.TestCase):
         with (
             mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
             mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
-            mock.patch("devsquad.task_entry.subprocess.Popen", return_value=process),
+            mock.patch("devsquad.task_entry.subprocess.Popen", return_value=process) as spawn,
+            mock.patch("devsquad.task_entry.capture_probe_identity", return_value="fixture-native-start") as capture,
+            mock.patch("devsquad.task_entry.close_probe") as close,
+            mock.patch.dict(os.environ, {"HOME": self.temp.name, "USER": "offline-test", "PATH": "/fixture/bin", "OPENAI_API_KEY": "synthetic-denied", "ANTHROPIC_API_KEY": "synthetic-denied", "CODEX_HOME": "/fixture/alternate-home"}),
             mock.patch("devsquad.task_entry.JsonLinePeer", return_value=mock.Mock()),
             mock.patch("devsquad.task_entry.receive_response", return_value={"result": {}}),
             mock.patch("devsquad.task_entry.discover_models", return_value=[]),
@@ -748,13 +783,17 @@ class ManagedTaskEntryTest(unittest.TestCase):
             "model_family": "gpt-6",
             "effort": "xhigh",
         })
-        process.terminate.assert_called_once_with()
-        process.wait.assert_called_once_with(timeout=3)
+        capture.assert_called_once_with(process)
+        close.assert_called_once_with(process, start_identity="fixture-native-start")
+        self.assertEqual(spawn.call_args.kwargs["env"], {"HOME": self.temp.name, "USER": "offline-test", "PATH": "/fixture/bin"})
+        self.assertTrue(spawn.call_args.kwargs["start_new_session"])
 
         with (
             mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
             mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
             mock.patch("devsquad.task_entry.subprocess.Popen", return_value=process),
+            mock.patch("devsquad.task_entry.capture_probe_identity", return_value="fixture-native-start"),
+            mock.patch("devsquad.task_entry.close_probe"),
             mock.patch("devsquad.task_entry.JsonLinePeer", return_value=mock.Mock()),
             mock.patch("devsquad.task_entry.receive_response", return_value={"result": {}}),
             mock.patch("devsquad.task_entry.discover_models", return_value=[]),
@@ -766,6 +805,83 @@ class ManagedTaskEntryTest(unittest.TestCase):
                     requested_model="gpt-requested",
                     requested_effort="ultra",
                 )
+
+    def test_native_discovery_does_not_read_protocol_without_owned_identity(self):
+        manifest = mock.Mock(verified_versions=("codex-cli fixture",))
+        manifest.resolve_binary.return_value = "/fixture/codex"
+        process = mock.Mock(stdin=io.StringIO(), stdout=io.StringIO())
+        with (
+            mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
+            mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
+            mock.patch("devsquad.task_entry.subprocess.Popen", return_value=process),
+            mock.patch("devsquad.task_entry.capture_probe_identity", return_value=None),
+            mock.patch("devsquad.task_entry.close_probe") as close,
+            mock.patch("devsquad.task_entry.JsonLinePeer") as peer,
+        ):
+            with self.assertRaisesRegex(ContractError, "ownership is unavailable"):
+                discover_codex_identity(self.repo)
+        peer.assert_not_called()
+        close.assert_called_once_with(process, start_identity=None)
+
+    def test_native_discovery_cleans_owned_child_after_provider_parent_exits(self):
+        ready = Path(self.temp.name) / "native-child.json"
+        child_code = (
+            "import json,os,signal,sys,time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "with open(sys.argv[1], 'w') as handle: json.dump({'pid':os.getpid()},handle)\n"
+            "while True: time.sleep(1)\n"
+        )
+        provider_code = (
+            "import json,os,subprocess,sys,time\n"
+            f"subprocess.Popen([sys.executable, '-c', {child_code!r}, {str(ready)!r}], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+            f"while not os.path.exists({str(ready)!r}): time.sleep(.01)\n"
+            "for line in sys.stdin:\n"
+            "    item=json.loads(line)\n"
+            "    if item.get('method') == 'initialize':\n"
+            "        print(json.dumps({'id':item['id'],'result':{}}),flush=True)\n"
+            "    elif item.get('method') == 'model/list':\n"
+            "        print(json.dumps({'id':item['id'],'result':{'data':[{'id':'gpt-fixture','supportedReasoningEfforts':[{'reasoningEffort':'low'}]}],'nextCursor':None}}),flush=True)\n"
+            "        os._exit(0)\n"
+        )
+        manifest = mock.Mock(verified_versions=("codex-cli fixture",))
+        manifest.resolve_binary.return_value = "/fixture/codex"
+        real_popen = subprocess.Popen
+        spawned = {}
+        def native_popen(argv, *positional, **keywords):
+            if argv[:2] != ["/fixture/codex", "app-server"]:
+                return real_popen(argv, *positional, **keywords)
+            process = real_popen([sys.executable, "-c", provider_code], *positional, **keywords)
+            spawned["process"] = process
+            return process
+        from devsquad.task_entry import discover_models as real_discover_models
+        def discover_then_confirm_parent_exit(*arguments, **keywords):
+            models = real_discover_models(*arguments, **keywords)
+            self.assertEqual(spawned["process"].wait(timeout=2), 0)
+            return models
+        try:
+            with (
+                mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
+                mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
+                mock.patch("devsquad.task_entry.subprocess.Popen", side_effect=native_popen),
+                mock.patch("devsquad.task_entry.discover_models", side_effect=discover_then_confirm_parent_exit),
+            ):
+                identity = discover_codex_identity(self.repo)
+            self.assertEqual(identity["model_id"], "gpt-fixture")
+            child = json.loads(ready.read_text())["pid"]
+            observed = subprocess.run(["/bin/ps", "-p", str(child), "-o", "stat="],
+                                      text=True, capture_output=True, timeout=1).stdout.strip()
+            self.assertTrue(not observed or observed.startswith("Z"), f"owned child {child} survives: {observed}")
+        finally:
+            process = spawned.get("process")
+            if process is not None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=2)
+                for stream in (process.stdin, process.stdout, process.stderr):
+                    if stream is not None:
+                        stream.close()
 
     def test_normal_native_discovery_caches_across_projects_and_ingests_shared_quota(self):
         from datetime import datetime, timedelta, timezone
@@ -795,6 +911,8 @@ class ManagedTaskEntryTest(unittest.TestCase):
             mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
             mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
             mock.patch("devsquad.task_entry.subprocess.Popen", side_effect=native_popen),
+            mock.patch("devsquad.task_entry.capture_probe_identity", return_value="fixture-native-start"),
+            mock.patch("devsquad.task_entry.close_probe"),
             mock.patch("devsquad.task_entry.JsonLinePeer", return_value=mock.Mock()),
             mock.patch("devsquad.task_entry.receive_response", side_effect=reply),
             mock.patch("devsquad.task_entry.discover_models", return_value=[{"id": "gpt-fixture", "supportedReasoningEfforts": ["low"]}]) as discovery,

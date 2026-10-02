@@ -33,7 +33,7 @@ class CliTest(unittest.TestCase):
         stdout, stderr = io.StringIO(), io.StringIO()
         patcher = mock.patch.object(cli, "Service", return_value=service) if service is not None else contextlib.nullcontext()
         with patcher, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            code = cli.main(argv)
+            code = cli.main(argv if "--json" in argv else [*argv, "--json"])
         lines = stdout.getvalue().splitlines()
         self.assertEqual(len(lines), 1, stdout.getvalue())
         return code, json.loads(lines[0]), stderr.getvalue()
@@ -266,6 +266,35 @@ class CliTest(unittest.TestCase):
         self.assert_success_envelope(payload, response)
         service.capacity_observe.assert_called_once_with(observation)
 
+    def test_finish_preserves_the_json_envelope_and_forwards_a_guided_choice(self):
+        for disposition in ("accept", "reject", "revise"):
+            with self.subTest(disposition=disposition):
+                service = mock.Mock()
+                response = {"run_id": "run-1", "state": "succeeded", "disposition": disposition}
+                service.finish.return_value = response
+                code, payload, stderr = self.invoke([
+                    "finish", "run-1", f"--{disposition}", "--reason", "Exact evidence assessed.",
+                    "--runtime-dir", str(self.runtime), "--json",
+                ], service)
+                self.assertEqual((code, stderr), (0, ""))
+                self.assert_success_envelope(payload, response)
+                service.finish.assert_called_once_with("run-1", disposition, "Exact evidence assessed.")
+                service.resolve_run_id.assert_not_called()
+
+    def test_normal_doctor_default_is_readable_and_keeps_unknown_proof_unknown(self):
+        report = {"core_version": "fixture", "ready": False, "adapters": [{
+            "adapter": "claude", "status": "supported", "version": "fixture",
+            "authentication": {"status": "unauthenticated", "next_action": "claude auth login"},
+            "operation_verified": None,
+        }], "supported_workflows": {"issue-delivery": {"supported": True, "ready": False}}}
+        output = io.StringIO()
+        with mock.patch.object(cli, "build_doctor_report", return_value=report), contextlib.redirect_stdout(output):
+            code = cli.main(["doctor", "--project-dir", str(self.root)])
+        self.assertEqual(code, 1)
+        self.assertIn("authentication unauthenticated; operation unknown", output.getvalue())
+        self.assertIn("claude auth login", output.getvalue())
+        self.assertIn("issue-delivery: needs attention", output.getvalue())
+
     def test_outcome_add_and_report_dispatch(self):
         outcome = {"schema_version": 1, "outcome_id": "outcome-1"}
         outcome_file = self.root / "outcome.json"
@@ -462,7 +491,9 @@ class CliTest(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "INPUT_INVALID")
 
     def test_parser_and_json_file_failures_are_input_errors(self):
-        code, payload, _ = self.invoke(["status"])
+        service = mock.Mock()
+        service.resolve_run_id.side_effect = ContractError("No saved runs for this Git project")
+        code, payload, _ = self.invoke(["status", "--runtime-dir", str(self.runtime)], service)
         self.assertEqual(code, 64)
         self.assertEqual(payload["error"]["code"], "INPUT_INVALID")
 

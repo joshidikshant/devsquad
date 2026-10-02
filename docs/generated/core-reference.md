@@ -12,6 +12,7 @@ Regenerate with `python3 scripts/generate-core-reference.py`; verify with
 - `squad classify [-h] [--cwd CWD] [--model MODEL] [--effort EFFORT] [--permission {read_only,workspace_write}] [--timeout TIMEOUT] [--transport {cli_exec,native_protocol}] [--catalog-file CATALOG_FILE] --returncode RETURNCODE --stdout-file STDOUT_FILE --stderr-file STDERR_FILE {codex,antigravity,grok}`
 - `squad doctor [-h] [--json] [--project-dir PROJECT_DIR] [--squad-executable SQUAD_EXECUTABLE]`
 - `squad events [-h] [--after AFTER] [--limit LIMIT] [--json] [--runtime-dir RUNTIME_DIR] run`
+- `squad finish [-h] (--accept | --reject | --revise) --reason REASON [--project-dir PROJECT_DIR] [--json] [--runtime-dir RUNTIME_DIR] [run]`
 - `squad fix [-h] [--base BASE] [--target TARGET] [--project-dir PROJECT_DIR] [--write-path WRITE_PATH] [--check CHECK] [--check-timeout CHECK_TIMEOUT] [--review-model REVIEW_MODEL] [--review-effort REVIEW_EFFORT] [--review-mode {standard,adversarial}] [--review-focus REVIEW_FOCUS] [--implementer-model IMPLEMENTER_MODEL] [--implementer-effort IMPLEMENTER_EFFORT] [--idempotency-key IDEMPOTENCY_KEY] [--dry-run] [--wait] [--json] [--runtime-dir RUNTIME_DIR] issue`
 - `squad handoff [-h] {claim,complete} ...`
 - `squad handoff claim [-h] --expected-version EXPECTED_VERSION --owner OWNER [--claim-file CLAIM_FILE] [--json] [--runtime-dir RUNTIME_DIR] run`
@@ -33,12 +34,12 @@ Regenerate with `python3 scripts/generate-core-reference.py`; verify with
 - `squad profile qualification-add [-h] --file FILE [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad profile template-add [-h] --file FILE [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad report [-h] --project PROJECT [--json] [--runtime-dir RUNTIME_DIR]`
-- `squad result [-h] [--json] [--runtime-dir RUNTIME_DIR] run`
+- `squad result [-h] [--json] [--runtime-dir RUNTIME_DIR] [--project-dir PROJECT_DIR] [run]`
 - `squad resume [-h] [--json] [--runtime-dir RUNTIME_DIR] [--recovery-file RECOVERY_FILE] run`
 - `squad review [-h] [--base BASE] [--target TARGET] [--project-dir PROJECT_DIR] [--model MODEL] [--effort EFFORT] [--mode {standard,adversarial}] [--focus FOCUS] [--check CHECK] [--check-timeout CHECK_TIMEOUT] [--idempotency-key IDEMPOTENCY_KEY] [--dry-run] [--wait] [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad setup [-h] [--host {codex,claude-code,antigravity,grok}] [--dry-run] [--json] [--project-dir PROJECT_DIR] [--squad-executable SQUAD_EXECUTABLE]`
 - `squad start [-h] --task-file TASK_FILE --idempotency-key IDEMPOTENCY_KEY [--supersedes-run SUPERSEDES_RUN] [--wait] [--json] [--runtime-dir RUNTIME_DIR]`
-- `squad status [-h] [--json] [--runtime-dir RUNTIME_DIR] run`
+- `squad status [-h] [--json] [--runtime-dir RUNTIME_DIR] [--project-dir PROJECT_DIR] [run]`
 - `squad trial [-h] --experiment EXPERIMENT --case CASE --arm {control,candidate} --task-file TASK_FILE --idempotency-key IDEMPOTENCY_KEY [--wait] [--json] [--runtime-dir RUNTIME_DIR]`
 
 ## Common command examples

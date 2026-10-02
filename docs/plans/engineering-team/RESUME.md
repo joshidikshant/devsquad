@@ -72,15 +72,45 @@ do not repeat accepted proofs. No test/native process is active here.
 Next: integrate/test R6 terminal/readiness, R7/C1 and final R8 acceptance;
 whole-plan completion is not claimed.
 
-R6 terminal and doctor slices are delegated in isolated attached worktrees
-`r6-terminal` and `r6-readiness` at bf3de086. R7 Council is implementing in
-isolated `r7-council` from the same baseline. They must not alter this frozen
-candidate or production installation. Readiness checkpoint `dd709804` needs
-a root-review follow-up for a SIGTERM-ignoring descendant after parent exit.
-Integrate only clean checkpoint commits; preserve work if interrupted. macOS default-
-deny sandbox probe establishes own-evidence access with peer/ledger denial,
-not native Council compatibility or acceptance. No new native Council call
-has been made.
+R6 terminal/readiness checkpoints `dd709804`, `79f9b767`, `b785d040`,
+`d0eec55c`, shared helper `4a6bc15d` and catalog reuse `03124c79` are now
+integrated for the R6 source checkpoint in the main tree.
+The fresh temporary install reaches review/fix receipts with only provider
+binaries faked: actual normal discovery, distinct verified Claude/Codex
+identity, required seeded Python check, guided finish, original checkout
+unchanged, and project-scoped zero/one/multiple run choices. No task/decision
+JSON or internal Service.start fixture is used. Agent gates and failures are
+in `evidence/R6-terminal-readiness-partial-2026-10-02.json`; this is not yet
+an accepted or installed R6 package. Root's combined focused invocation had
+two nonexistent module names: the loader errors are not a passing gate or
+product failures. Corrected affected/full gates remain required.
+
+Readiness `79f9b767` fixes the root-reviewed exited-parent/ignoring-descendant
+cleanup defect. The same red reproduction in native catalog discovery is
+repaired by the shared bounded helper; `03124c79` has 106 affected tests/
+95.408s with no skips/warnings, Bash and reference gates. Root's integrated
+114-test gate (two optional SDK skips), 32 delivery/handoff tests and final
+27 task-entry/fresh-install tests in 25.389s pass. Independent terminal review
+found a real P1: interruption after guided finish acquires its claim but before
+completion leaves no saved claim for retry; initial-only refuses it even after
+expiry. A controlled offline reproduction confirms this, not a usage timeout.
+The terminal agent is repairing durable exact intent/claim recovery without
+app-claim takeover or changed disposition. Integrate the repair, then launch
+one frozen full gate and exact R6 audit. No native/full gate or production
+installation change has started for this candidate.
+R7 Council remains in isolated `r7-council`; its controlled stage flow is
+partial. Default-deny macOS own-evidence/peer-ledger denial and native binary
+version probes are boundary mechanics, not a live Council receipt. No new
+native Council generation has been made. Preserve all attached worktrees.
+
+Desktop control worked for scoped inspection. Claude's local Code tab selected only this
+DevSquad project on `codex/engineering-team`, with an empty prompt; no proof
+request was sent. The user clarified **Antigravity means CLI, not IDE**;
+do not treat IDE trust/UI as a required Gemini acceptance gate. An IDE folder
+chooser was inspected only: project trust, settings and MCP servers were not
+changed. The cancellation attempt returned a new TCC capture denial, so UI
+closure is unverified; do not bypass it. Recheck updated agy 1.2.14 CLI against
+the accepted final release. Unrelated servers/settings remain untouched.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.
@@ -117,13 +147,14 @@ integrity; 27 affected tests in 24.173s. Verified native Codex review is clean.
 1. The user's three requested runtime actions are verified. Do not repeat
    these accepted proofs or the unchanged full suite. Both exact packets and
    artifact hashes are verified; never edit frozen evidence.
-2. R3 and R4 are accepted by their October 2 closure matrices. Continue R5
-   public terminal outcomes/trial controller, then remaining R6 UX/readiness,
-   R7/C1 and R8 whole-delivery acceptance. Preserve the existing reader and
+2. R3/R4/R5 are accepted by their October 2 closure matrices. Finish integrated
+   R6 UX/readiness and its shared probe cleanup, then R7/C1 and R8 whole-delivery
+   acceptance. Preserve the existing reader and
    lifecycle eligibility gates; do not restart the architecture exercise.
-3. Desktop UI proofs remain separate. Antigravity IDE control is permission-
-   denied; do not bypass it or substitute a CLI receipt. Grok/Gemini MCP status
-   calls do not prove automatic writer/reviewer adapters.
+3. Claude Code-tab proof remains separate and unverified; current control
+   returned TCC denial, do not bypass it. Antigravity IDE is explicitly outside
+   the user's clarified request; Gemini acceptance uses the agy CLI. Grok/Gemini
+   MCP status calls do not prove automatic writer/reviewer adapters.
 
 Only one full core suite may run at a time; freeze source/tests while it runs.
 Use the tracked spawn-safe scripts/run-core-tests.py, never a stdin main.

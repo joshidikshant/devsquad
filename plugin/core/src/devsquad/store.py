@@ -248,6 +248,15 @@ class Store:
         self.connection.execute("INSERT INTO projects(id, git_common_dir, created_at) VALUES(?,?,?)", (project_id, key, _utc_now()))
         return project_id
 
+    def runs_for_project(self, project: Path) -> list[dict[str, Any]]:
+        """Bounded choices from this canonical Git project, without registering it."""
+        common_dir = git_common_dir(project)
+        return [dict(row) for row in self.connection.execute(
+            "SELECT r.id AS run_id,r.state,r.phase FROM runs r "
+            "JOIN projects p ON p.id=r.project_id WHERE p.git_common_dir=? "
+            "ORDER BY r.id LIMIT 21", (str(common_dir),),
+        ).fetchall()]
+
     def claim_start(self, worktree: Path, idempotency_key: str, submitted_request: Any, owner_id: str, *, objective_outcome: bool = False) -> StartClaim:
         if not idempotency_key or not owner_id:
             raise ContractError("idempotency key and owner are required")
@@ -4442,6 +4451,7 @@ class Store:
         prior_claim: HandoffClaim | None = None,
         *,
         now: datetime | None = None,
+        initial_only: bool = False,
     ) -> HandoffClaim:
         if (type(expected_version) is not int or expected_version < 1
                 or not isinstance(owner_id, str) or not owner_id):
@@ -4467,6 +4477,9 @@ class Store:
             if (row["state"] != "awaiting_host" or row["phase"] is not None
                     or row["status"] != "open" or row["version"] != expected_version):
                 raise ConflictError("handoff is not claimable at that run version")
+            if (initial_only and row["kind"] == "host"
+                    and row["claim_handoff_id"] == row["handoff_id"]):
+                raise ConflictError("handoff already has a host claim; use its saved claim to complete or renew it")
             live = bool(
                 row["kind"] == "host" and row["active"]
                 and row["claim_handoff_id"] == row["handoff_id"]

@@ -82,9 +82,14 @@ profiles and embeds the validated routing snapshot. It does not require task,
 profile or policy JSON:
 
 ```bash
-squad review --base main --wait --json
+squad doctor
+squad review --base main --dry-run
+squad review --base main --wait
 squad fix "the bounded issue to resolve" \
-  --write-path src --check "bash test/run.sh" --wait --json
+  --write-path src --wait
+squad status
+squad finish RUN_ID --accept --reason "Reviewed the saved candidate and evidence."
+squad result RUN_ID
 ```
 
 Use `--dry-run` first to inspect exact commit IDs, role/profile selections,
@@ -92,7 +97,38 @@ scope and checks without creating a run or invoking a model. `squad fix`
 defaults to repository-wide write scope when `--write-path` is omitted; narrow
 it whenever the issue permits. `--wait` automatically advances the saved
 candidate from implementation into independent review, then returns at the
-host-lead handoff. Omitting `--wait` returns the run ID immediately.
+host-lead handoff with the review summary, check results, evidence report and
+finish command. That pause exits 2; it is saved work awaiting your assessment.
+Use `--reject` or `--revise` instead of `--accept` when appropriate, with a
+reason. Finish binds every artifact from the exact current packet and applies
+the same claim, independent-review and required-check gates as the low-level
+API. It refuses terminal replays and existing host claims; use the saved claim
+for a handoff already owned by an app. The normal lead is the terminal host;
+an explicitly configured headless run follows its existing lead through a
+temporary handoff when observed with `--wait`. Omitting `--wait` returns the run
+ID immediately.
+
+Normal commands show readable output by default. Add `--json` for the versioned
+automation envelope. Omitted IDs on status, result and finish resolve only when
+the current canonical Git project has exactly one saved run. With no run, the
+command explains how to start; with multiple runs it lists IDs and states and
+requires a choice. It never selects another project's run or guesses the latest
+run. Use `--project-dir PATH` when observing from outside the project.
+
+Checks come from regular tracked files at the selected target commit. For
+DevSquad this includes the Bash suite, Python core runner and generated
+reference check. Delivery requires all three to pass; review-only checks are
+reported even when they fail. Explicit `--check` arguments add bounded approved
+commands and exact duplicates run once. A directory called `tests` is not
+enough to infer a Python suite without actual tracked Python test files.
+
+```mermaid
+flowchart LR
+  A[review or fix] --> B[Exact candidate review and checks]
+  B --> C[Saved handoff and evidence]
+  C --> D[finish with accept, reject or revise]
+  D --> E[Saved receipt or bounded revision]
+```
 
 The lower-level automation path remains available. A hand-written task must
 name an existing Git repository and committed refs. It may use either committed
@@ -135,9 +171,10 @@ returns the original run; reusing it with different content conflicts. Status
 is the authority for the current state and next action. Result artifacts and
 their SHA-256 values are authoritative; a chat summary is not.
 
-When a host-lead workflow pauses, status returns `claim_handoff` and the
-current run version. Claim and complete the saved packet without editing the
-claim:
+For terminal use, `squad finish` is the supported guided disposition command.
+Automation and app hosts can still use the low-level claim/complete protocol.
+When a host-lead workflow pauses, JSON status returns `claim_handoff` and the
+current run version. Claim and complete the saved packet without editing the claim:
 
 ```bash
 squad handoff claim RUN_ID --expected-version VERSION --owner local-operator --json > claim-response.json
@@ -160,7 +197,7 @@ Never delete the runtime database, an active release or a run-owned worktree
 to recover a job. Inspect first:
 
 ```bash
-squad status RUN_ID --json
+squad status RUN_ID
 squad events RUN_ID --after 0 --limit 100 --json
 ```
 
@@ -175,8 +212,8 @@ If status does not request recovery, do not invent a recovery decision.
 Cancellation is durable and idempotent:
 
 ```bash
-squad cancel RUN_ID --json
-squad status RUN_ID --json
+squad cancel RUN_ID
+squad status RUN_ID
 ```
 
 For installation drift, run `scripts/install-core.sh --status --json` from the
@@ -187,13 +224,14 @@ install a new source digest and retain the old directory for run evidence.
 ## Supported and deferred boundaries
 
 The current packaged contract is Python 3.11+, public JSON contract version 1,
-SQLite schema 13 and optional MCP SDK 2.2.0 exactly. Native Codex fixtures and
+SQLite schema 16 and optional MCP SDK 2.2.0 exactly. Native Codex fixtures and
 recorded live proofs cover bundled `codex-cli 0.153.4` and
 `codex-cli 0.155.0-alpha.9.2`; the latter passed a fresh native initialize and
 complete model-catalog probe. The resolver prefers that verified bundled
 binary over an older unverified PATH binary. The Claude worker adapter is
 version-scoped to CLI 2.1.220. Antigravity 1.2.13 has a live read-only MCP
-receipt; Grok 0.2.111 has matching registration but expired authentication.
+receipt; later installed CLI/MCP receipts cover Grok 1.0.46. Check the current
+doctor report rather than treating an older receipt as proof for a new version.
 Version changes are capability drift and require a fresh conformance probe;
 brand names are not a compatibility promise.
 
@@ -201,18 +239,25 @@ Implemented surfaces and evidence:
 
 | Surface | Current evidence |
 |---|---|
-| Terminal | Standalone install plus a real saved-run start and terminal cancellation |
+| Terminal | Standalone install and real saved-run cancellation; fresh installed normal review/fix/finish flow verified with offline provider binaries |
 | Codex App/CLI | Matching MCP registration and a fresh installed-runtime `squad_status` receipt on 0.155.0-alpha.9.2 |
-| Claude Code local Code tab | Matching registration; live operation blocked on normal provider login |
+| Claude Code local Code tab | Matching registration and real Claude MCP handoff; local Code-tab UI proof remains open |
 | Antigravity local IDE/CLI | Matching registration and a live Gemini `squad_status` receipt with one project-scoped grant |
-| Grok Build | Matching registration; live operation blocked on expired authentication |
+| Grok Build | Matching registration and real Grok 1.0.46 MCP status operation |
 
-The current evidence source is
+The historical installed surface evidence source is
 [`M7-installed-runtime-2026-09-29.json`](plans/engineering-team/evidence/M7-installed-runtime-2026-09-29.json).
 The installed normal-entry evidence is
 [`M7-normal-entry-2026-09-29.json`](plans/engineering-team/evidence/M7-normal-entry-2026-09-29.json).
-Claude, Grok and the installed two-model delivery remain open, so universal
-surface support is not yet claimed.
+Later verified runtime proofs, including the accepted two-model delivery,
+actual Claude handoff, Grok MCP and Gemini CLI/MCP recheck, are recorded in
+[`R8-installed-workflows-2026-10-01.json`](plans/engineering-team/evidence/R8-installed-workflows-2026-10-01.json).
+These are operation-scoped receipts; desktop UI proofs and the remaining R6/R8
+acceptance gates remain open. Doctor separates installed binaries, supported
+adapter versions, non-generating authentication checks, registrations and
+operation verification. Unknown verification stays unknown. A CLI that is
+installed but unsupported or missing subscription authentication does not make
+review/fix ready. Complete login through the named provider's normal flow.
 
 Portable task files, handoff packets, event ledgers and hashed artifacts are
 the cross-host interface. A reviewed upstream Codex integration demonstrates
@@ -221,7 +266,7 @@ expose or test that import path. It is deferred and must never be substituted
 for the portable handoff contract or described as general chat-history
 transfer.
 
-The optional Jev decision probe remains blocked until `TYPESAFE_API_KEY` is
-provided; normal routing defaults to the deterministic zero-call path. Laya is
-not installed unless the declared Jev fallback trigger fires. The optional C1
-Council extension is also deferred and does not block the core runtime.
+The one authorized Jev pilot is recorded separately and runtime classification
+remains off; normal routing uses the deterministic zero-call path. Laya is not
+installed unless its declared trigger fires. C1 Council implementation and
+acceptance remain pending in the full engineering-team delivery.

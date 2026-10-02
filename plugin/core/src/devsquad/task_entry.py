@@ -22,6 +22,7 @@ from .codex_protocol import (
     request,
 )
 from .contracts import ContractError
+from .probe_process import capture_probe_identity, close_probe, subscription_environment
 from .store import canonical_json
 from .validation import validate_profile, validate_task
 
@@ -71,16 +72,6 @@ def _resolve_commit(repo: Path, reference: str) -> str:
     return _git(repo, "rev-parse", "--verify", f"{reference}^{{commit}}")
 
 
-def _stop(process: subprocess.Popen[str]) -> None:
-    if process.poll() is None:
-        process.terminate()
-        try:
-            process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=3)
-
-
 def discover_codex_identity(
     repo: Path,
     *,
@@ -102,6 +93,7 @@ def discover_codex_identity(
         process = subprocess.Popen(
             [binary, "app-server", "--listen", "stdio://"],
             cwd=repo,
+            env=subscription_environment(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -111,7 +103,10 @@ def discover_codex_identity(
         )
     except OSError as exc:
         raise ContractError("Codex native process could not start") from exc
+    start_identity = capture_probe_identity(process)
     try:
+        if start_identity is None:
+            raise ContractError("Codex native process ownership is unavailable")
         assert process.stdin is not None and process.stdout is not None
         peer = JsonLinePeer(process.stdout, process.stdin)
         peer.send(initialize_request(1))
@@ -160,7 +155,7 @@ def discover_codex_identity(
     except (EOFError, OSError, TimeoutError) as exc:
         raise ContractError("Codex model discovery did not complete") from exc
     finally:
-        _stop(process)
+        close_probe(process, start_identity=start_identity)
     candidates = [
         model for model in models
         if model["supported_efforts"]
@@ -417,6 +412,8 @@ def _detect_tests(repo: Path, oid: str) -> list[tuple[str, ...]]:
             "python3",
             "scripts/run-core-tests.py",
         ))
+        if _is_regular_blob(repo, oid, "scripts/generate-core-reference.py"):
+            detected.append(("python3", "scripts/generate-core-reference.py", "--check"))
     return detected
 
 
@@ -441,9 +438,13 @@ def _checks(
         "timeout_seconds": min(timeout_seconds, 120),
         "required_to_pass": required,
     }]
-    seen: set[tuple[str, ...]] = set()
-    detected_ids = ("detected-tests", "detected-core-tests")
-    for check_id, argv in zip(detected_ids, _detect_tests(repo, target_oid)):
+    seen: set[tuple[str, ...]] = {tuple(checks[0]["argv"])}
+    for argv in _detect_tests(repo, target_oid):
+        check_id = (
+            "generated-core-reference" if argv == ("python3", "scripts/generate-core-reference.py", "--check")
+            else "detected-core-tests" if argv[-1] == "scripts/run-core-tests.py"
+            else "detected-tests"
+        )
         checks.append({
             "id": check_id,
             "argv": list(argv),
@@ -625,4 +626,5 @@ def build_managed_task(
         ),
         "scope": task["scope"],
         "checks": [check["id"] for check in task["checks"]],
+        "check_plan": task["checks"],
     }

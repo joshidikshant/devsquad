@@ -413,7 +413,11 @@ class MCPDoctorReportTest(unittest.TestCase):
         ]
         manager.inspect.side_effect = rows
         templates = (mock.Mock(id="codex"), mock.Mock(id="claude-code"))
-        adapters = [{"adapter": "codex", "status": "supported"}]
+        adapters = [{
+            "adapter": "codex", "status": "supported", "installed": True,
+            "supported": True, "authenticated": True, "ready": True,
+            "operation_verified": None,
+        }]
         with (
             mock.patch.object(diagnostics, "_adapter_rows", return_value=adapters),
             mock.patch.object(diagnostics, "load_integrations", return_value=templates),
