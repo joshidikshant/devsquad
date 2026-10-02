@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 import shlex
 import subprocess
 import sys
+import time
 from typing import Any, Iterable
 
 from .adapters import AdapterManifest, harness_version
@@ -18,6 +19,7 @@ from .codex_protocol import (
     initialize_request,
     initialized_notification,
     receive_response,
+    request,
 )
 from .contracts import ContractError
 from .store import canonical_json
@@ -85,6 +87,7 @@ def discover_codex_identity(
     requested_model: str | None = None,
     requested_effort: str | None = None,
     timeout_seconds: int = 15,
+    runtime: Path | None = None,
 ) -> dict[str, str]:
     """Discover one currently available exact Codex model without generating."""
 
@@ -116,13 +119,42 @@ def discover_codex_identity(
         if "error" in initialized:
             raise ContractError("Codex native initialization failed")
         peer.send(initialized_notification())
-        models = normalize_models(
-            "codex",
-            version,
-            discover_models(
-                peer, first_request_id=10, timeout_seconds=timeout_seconds,
-            ),
-        )
+        scope = None
+        if runtime is None:
+            models = normalize_models(
+                "codex", version,
+                discover_models(peer, first_request_id=10, timeout_seconds=timeout_seconds),
+            )
+        else:
+            from .native_catalog import NativeCatalogCache, native_scope, normalize_codex_limits
+            from .service import Service
+
+            deadline = time.monotonic() + timeout_seconds
+            def read_native(request_id, method, params=None):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("native discovery deadline expired")
+                peer.send(request(request_id, method, params))
+                reply = receive_response(peer, request_id, timeout_seconds=remaining)
+                if "error" in reply or not isinstance(reply.get("result"), dict):
+                    raise ContractError(f"native {method} is unavailable")
+                return reply["result"]
+
+            account = read_native(2, "account/read", {"refreshToken": False})
+            configuration = read_native(3, "config/read", {"includeLayers": False})
+            scope = native_scope(account, configuration, binary, version)
+            catalog = NativeCatalogCache(runtime / "catalogs", scope, version).refresh(
+                lambda: discover_models(peer, first_request_id=10, timeout_seconds=max(0.001, deadline - time.monotonic())),
+            )
+            models = catalog["models"]
+            pool_id = f"codex-subscription-{scope}"
+            try:
+                limits = read_native(1000, "account/rateLimits/read")
+            except (ContractError, EOFError, OSError, TimeoutError):
+                limits = {}
+            service = Service(runtime)
+            for observation in normalize_codex_limits(limits, pool_id):
+                service.capacity_observe(observation)
     except (EOFError, OSError, TimeoutError) as exc:
         raise ContractError("Codex model discovery did not complete") from exc
     finally:
@@ -159,6 +191,7 @@ def discover_codex_identity(
         "model_id": selected["id"],
         "model_family": family if isinstance(family, str) and family else "gpt",
         "effort": effort,
+        **({"account_pool_id": pool_id, "catalog_fingerprint": selected["fingerprint"]} if scope is not None else {}),
     }
 
 
@@ -211,6 +244,7 @@ def _managed_routing(
         "quality_status": "trial",
         "evidence_refs": [
             f"runtime-catalog:{codex['harness_version']}:{codex['model_id']}",
+            *([f"runtime-catalog-fingerprint:{codex['catalog_fingerprint']}"] if "catalog_fingerprint" in codex else []),
         ],
     }
     trial_profiles = {"reviewer": reviewer}
@@ -252,6 +286,11 @@ def _managed_routing(
                     or incumbent["billing_mode"] != "subscription"
                     or incumbent["quality_status"] != "proven"):
                 raise ContractError("normal role binding exceeds the supported role contract")
+            if role == "reviewer" and "catalog_fingerprint" in codex and (
+                incumbent["account_pool_id"] != codex["account_pool_id"]
+                or f"runtime-catalog-fingerprint:{codex['catalog_fingerprint']}" not in incumbent["evidence_refs"]
+            ):
+                raise ContractError("approved reviewer requires requalification for the current native account/config/catalog")
             if incumbent["id"] == profile["id"] and incumbent != profile:
                 raise ContractError("normal role binding conflicts with the trial profile")
             if incumbent["id"] != profile["id"]:
@@ -465,7 +504,7 @@ def build_managed_task(
         "harness", "harness_version", "model_id", "model_family", "effort",
     }
     if (not isinstance(codex_identity, dict)
-            or set(codex_identity) - (required_identity | {"account_pool_id"})
+            or set(codex_identity) - (required_identity | {"account_pool_id", "catalog_fingerprint"})
             or required_identity - set(codex_identity)
             or codex_identity.get("harness") != "codex"
             or not all(

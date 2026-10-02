@@ -230,6 +230,7 @@ def _command_normal_entry(
         repo,
         requested_model=reviewer_model or incumbent.get("model_id"),
         requested_effort=reviewer_effort or incumbent.get("effort", {}).get("value"),
+        runtime=Path(args.runtime_dir),
     )
     if workflow == "branch-review":
         mode = args.mode

@@ -4,7 +4,22 @@ This is the authoritative recovery entry point, not a chronological chat log.
 Compare it with Git status/recent commits and retain newer work. Earlier notes
 remain recoverable in Git; detailed receipts and failed gates stay in evidence.
 
-## Current checkpoint — October 1, 2026
+## Current checkpoint — October 2, 2026
+
+Continuation: R3c final independent closure audit is next, against immutable
+`39b95f1` and the existing 477-test full gate. No required R3/R4 acceptance is
+being silently waived. A coherent **partial R4** source slice is checkpointed:
+native normal commands now call account/config/model/quota read-only RPCs;
+scoped private last-good catalogs use a 24-hour TTL, OS refresh lease and
+two-minute failure backoff. Native windows enter the shared typed capacity
+ledger. Alias account/config/catalog mismatches block for requalification;
+explicit pins remain trials. No login, reset-credit or API fallback calls.
+New cache/concurrency/privacy/window and two-project discovery tests are added.
+Focused/full/independent package closure and fresh-install proof are still
+required before R4 is closed. One real non-generating native discovery probe
+verified gpt-6.1-sol/low, scoped pool/catalog fingerprint and two quota windows;
+reported capacity was unknown (not guessed available). Continue R3c audit,
+then R4 public preflight/lease/identity acceptance, R5, R6 and R7/C1.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.

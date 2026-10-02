@@ -303,7 +303,7 @@ class ManagedTaskEntryTest(unittest.TestCase):
             planned = json.loads(output.getvalue())["data"]["planned_roles"]["reviewer"]
             self.assertEqual(planned["model_id"], "gpt-new-default" if pin else "gpt-b")
             self.assertEqual(planned["selection_mode"], "pinned" if pin else "approved_alias")
-            discovery.assert_called_once_with(self.repo.resolve(), requested_model=planned["model_id"], requested_effort="low")
+            discovery.assert_called_once_with(self.repo.resolve(), requested_model=planned["model_id"], requested_effort="low", runtime=service.runtime)
         self.assertEqual(service.normal_entry_bindings("branch-review")["reviewer"]["version"], 8)
 
     def test_managed_delivery_runs_offline_through_review_checks_and_handoff(self):
@@ -766,6 +766,56 @@ class ManagedTaskEntryTest(unittest.TestCase):
                     requested_model="gpt-requested",
                     requested_effort="ultra",
                 )
+
+    def test_normal_native_discovery_caches_across_projects_and_ingests_shared_quota(self):
+        from datetime import datetime, timedelta, timezone
+        manifest = mock.Mock(verified_versions=("codex-cli fixture",))
+        manifest.resolve_binary.return_value = "/fixture/codex"
+        process = mock.Mock(stdin=io.StringIO(), stdout=io.StringIO())
+        process.poll.return_value = None
+        runtime = Path(self.temp.name) / "runtime"
+        second_repo = self._init_repo()
+        reset = int((datetime.now(timezone.utc) + timedelta(days=2)).timestamp())
+        account = {"type": "chatgpt", "email": "fixture@example.invalid", "planType": "plus"}
+        def reply(peer, request_id, **unused):
+            return {"result": {1: {}, 2: {"account": account}, 3: {"config": {"provider": "native"}},
+                1000: {"rateLimits": {"primary": {"usedPercent": 5, "windowDurationMins": 300, "resetsAt": reset},
+                    "secondary": {"usedPercent": 100, "windowDurationMins": 10080, "resetsAt": reset}}}}[request_id]}
+        with (
+            mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
+            mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
+            mock.patch("devsquad.task_entry.subprocess.Popen", return_value=process),
+            mock.patch("devsquad.task_entry.JsonLinePeer", return_value=mock.Mock()),
+            mock.patch("devsquad.task_entry.receive_response", side_effect=reply),
+            mock.patch("devsquad.task_entry.discover_models", return_value=[{"id": "gpt-fixture", "supportedReasoningEfforts": ["low"]}]) as discovery,
+        ):
+            first = discover_codex_identity(self.repo, runtime=runtime)
+            second = discover_codex_identity(second_repo, runtime=runtime)
+            discovery.assert_called_once()
+            self.assertEqual(first, second)
+            service = Service(runtime)
+            store = service._store()
+            try:
+                target = {key: first[key] for key in ("harness", "model_family", "model_id")}
+                self.assertEqual(store.capacity_snapshot(first["account_pool_id"], target=target)["status"], "exhausted")
+            finally:
+                store.close()
+            account["email"] = "another@example.invalid"
+            other = discover_codex_identity(self.repo, runtime=runtime)
+            self.assertNotEqual(first["account_pool_id"], other["account_pool_id"])
+            self.assertEqual(discovery.call_count, 2)
+        self.assertNotIn("fixture@example.invalid", "".join(path.read_text() for path in (runtime / "catalogs").glob("*.json")))
+
+    def test_normal_alias_rejects_account_or_catalog_change_without_mutating_binding(self):
+        identity = {**self.codex, "account_pool_id": "native-scope", "catalog_fingerprint": "a" * 64}
+        task, _ = build_managed_task(workflow="branch-review", project_dir=self.repo, base_ref="HEAD", target_ref="HEAD", goal="Bounded review", codex_identity=identity)
+        incumbent = copy.deepcopy(task["routing"]["profiles"]["profiles"][0])
+        incumbent["quality_status"] = "proven"
+        binding = {"alias": "review.deep", "version": 7, "profile": incumbent}
+        for change in ({"account_pool_id": "other-scope"}, {"catalog_fingerprint": "b" * 64}):
+            with self.assertRaisesRegex(ContractError, "requalification"):
+                build_managed_task(workflow="branch-review", project_dir=self.repo, base_ref="HEAD", target_ref="HEAD", goal="Bounded review", codex_identity={**identity, **change}, role_bindings={"reviewer": binding})
+            self.assertEqual(binding["version"], 7)
 
 
 if __name__ == "__main__":

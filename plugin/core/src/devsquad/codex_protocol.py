@@ -371,10 +371,14 @@ def receive_response(peer: JsonLinePeer, request_id: int, *, timeout_seconds: fl
 def discover_models(peer: JsonLinePeer, *, first_request_id: int = 10, timeout_seconds: float = 5, max_pages: int = 100) -> list[dict[str, Any]]:
     """Collect a complete native snapshot from an already initialized peer."""
     request_id, cursor = first_request_id, None
+    deadline = time.monotonic() + timeout_seconds
     responses: list[dict[str, Any]] = []
     for _ in range(max_pages):
         peer.send(model_list_request(request_id, cursor))
-        response = receive_response(peer, request_id, timeout_seconds=timeout_seconds)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("model/list discovery deadline expired")
+        response = receive_response(peer, request_id, timeout_seconds=remaining)
         responses.append(response)
         _, cursor = parse_model_page(response)
         if cursor is None:
