@@ -119,9 +119,16 @@ timestamp/ID/hash/reason; 19 focused tests/19.207s pass, 13 negative subcases.
 Both follow-ups are integrated; root's final 19 focused tests pass in 7.183s.
 Bash/reference/diff gates pass. Final added-hunk independent review is clean;
 one test/13 negative subcases in 0.208s, reviewed/committed blobs equivalent.
-Next freeze one full suite and exact native R6 audit, then safe install only
-after acceptance. No full/native gate has started. Production remains accepted
-R5/schema16.
+Exact immutable R6 candidate: `7130ee7689f8cc14efacb606bcbc4c05f373298c`.
+Native independent audit `44d0eecb-b5da-4c09-b1e1-c38b0d1d09ca` started
+2026-10-02 23:24 UTC from accepted installed R5: one pinned gpt-6.1-sol/low
+reviewer, host lead, 600s wall, no revisions/fallbacks, required diff/Bash/
+affected/reference checks, no duplicate full suite. Observe this saved run;
+never start another while it is live. Next launch exactly one frozen full gate:
+`env DEVSQUAD_BUILD_PYTHON=/Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3.12 PYTHONPATH=plugin/core/src:test/core PYTHONWARNINGS=error::ResourceWarning python3 scripts/run-core-tests.py --failfast`.
+Freeze root source/tests until it completes. Record its session/result before
+any interruption. Install only after full/native acceptance. Production remains
+accepted R5/schema16; this audit is its only new authorized run.
 R7 Council remains in isolated `r7-council`; its controlled stage flow is
 partial. Its source is checkpointed at `42979ba4` with 21 Council tests and
 67 shared-contract tests (two optional SDK skips), Bash/reference/diff gates.
