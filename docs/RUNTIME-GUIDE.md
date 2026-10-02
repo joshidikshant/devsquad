@@ -242,7 +242,7 @@ Implemented surfaces and evidence:
 | Terminal | Standalone install and real saved-run cancellation; fresh installed normal review/fix/finish flow verified with offline provider binaries |
 | Codex App/CLI | Matching MCP registration and a fresh installed-runtime `squad_status` receipt on 0.155.0-alpha.9.2 |
 | Claude Code local Code tab | Matching registration and real Claude MCP handoff; local Code-tab UI proof remains open |
-| Antigravity local IDE/CLI | Matching registration and a live Gemini `squad_status` receipt with one project-scoped grant |
+| Antigravity CLI (`agy`) | Matching registration and a live Gemini `squad_status` receipt with one project-scoped grant; IDE is outside the clarified request |
 | Grok Build | Matching registration and real Grok 1.0.46 MCP status operation |
 
 The historical installed surface evidence source is
@@ -252,8 +252,9 @@ The installed normal-entry evidence is
 Later verified runtime proofs, including the accepted two-model delivery,
 actual Claude handoff, Grok MCP and Gemini CLI/MCP recheck, are recorded in
 [`R8-installed-workflows-2026-10-01.json`](plans/engineering-team/evidence/R8-installed-workflows-2026-10-01.json).
-These are operation-scoped receipts; desktop UI proofs and the remaining R6/R8
-acceptance gates remain open. Doctor separates installed binaries, supported
+These are operation-scoped receipts; the Claude local Code-tab UI proof and
+remaining R6/R8 acceptance gates remain open. Antigravity acceptance uses the
+CLI, not IDE trust or UI. Doctor separates installed binaries, supported
 adapter versions, non-generating authentication checks, registrations and
 operation verification. Unknown verification stays unknown. A CLI that is
 installed but unsupported or missing subscription authentication does not make

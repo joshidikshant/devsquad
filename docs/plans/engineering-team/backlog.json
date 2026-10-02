@@ -245,7 +245,7 @@
           "availability": "portable_redacted"
         }
       ],
-      "blocker": "Claude authentication and actual CLI/MCP handoff now pass. Required desktop UI proofs remain unverified; Antigravity IDE control is permission-denied. Portable CLI proof is not substituted for desktop local Code-tab proof."
+      "blocker": "Claude authentication and actual CLI/MCP handoff now pass. Claude local Code-tab operation remains unverified. The user's October 2 clarification excludes Antigravity IDE: verify the updated agy CLI against the final accepted installation. Portable Claude CLI proof is not substituted for the local Code-tab proof."
     },
     {
       "id": "M5",
