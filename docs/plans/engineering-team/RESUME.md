@@ -24,6 +24,19 @@ R3c independent saved review **`f0a4f86b-b305-4839-88a2-cb5fed8739ab`** is
 **succeeded/version 22**, accepted against immutable `39b95f1`; all mandatory
 checks and artifact hashes are verified. No active native audit remains.
 R4 partial evidence: `evidence/R4-native-scoped-partial-2026-10-02.json`.
+R4 review **`9a12f6f6-59aa-43c0-a003-9f057f42f670`** was truthfully
+rejected (failed/version 22): discovery config/binary/version scope must not
+split one subscription-wide reservation fence. Repair now uses an opaque
+account-only pool ID, while separate native-scope and catalog-fingerprint
+evidence block incompatible approved aliases. Different-config cross-project
+reservation and fresh-exhaustion regressions pass, plus CLI runtime-argument
+expectations are updated. Initial full gate at `500d1b1` showed two CLI
+expectation failures and was SIGINT-stopped (exit 130) to apply this finding;
+it is not a completed gate. Its interrupted test setUp caused one implicit
+TemporaryDirectory ResourceWarning. Latest 30-test targeted repair gate passes
+in 2.712s; the combined **102-test** affected gate now passes in **17.610s**,
+with explicit offline wheel-build interpreter and ResourceWarnings as errors.
+Next: new frozen full integration gate and bounded pool/context repair review.
 Focused/full/independent package closure and fresh-install proof are still
 required before R4 is closed. One real non-generating native discovery probe
 verified gpt-6.1-sol/low, scoped pool/catalog fingerprint and two quota windows;
@@ -130,8 +143,8 @@ Full portable redacted record:
 ## Broader plan / constraints
 
 M1/M2 remain accepted. R1/R2 source/offline repairs are verified; R3 saved-run
-reader, eligibility/revisions, provenance/ratio and upgrade repairs have full
-and bounded evidence, but final package-level closure audit remains open.
+reader, eligibility/revisions, provenance/ratio and upgrade repairs are now
+accepted with the independent R3 closure proof above.
 Normal aliases/public promotion proof exist; this does not close R4 catalog/
 quota, R5 public trial controller/outcomes, remaining R6 UX or R7/C1 Council.
 Read backlog.json and SOL-REVIEW-FOLLOWUP.md for dependency/acceptance details;

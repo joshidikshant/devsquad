@@ -22,7 +22,7 @@ from devsquad.task_entry import (
     parse_checks,
 )
 from devsquad.router import load_routing
-from devsquad.store import Store, canonical_json
+from devsquad.store import ConflictError, Store, canonical_json
 from devsquad import cli
 
 
@@ -782,13 +782,15 @@ class ManagedTaskEntryTest(unittest.TestCase):
             return process if argv[:2] == ["/fixture/codex", "app-server"] else real_popen(argv, *positional, **keywords)
         reset = int((datetime.now(timezone.utc) + timedelta(days=2)).timestamp())
         account = {"type": "chatgpt", "email": "fixture@example.invalid", "planType": "plus"}
+        configuration = {"config": {"provider": "native"}}
+        weekly_used = 100
         failed_limits = False
         def reply(peer, request_id, **unused):
             if request_id == 1000 and failed_limits:
                 raise TimeoutError("private provider quota diagnostic")
-            return {"result": {1: {}, 2: {"account": account}, 3: {"config": {"provider": "native"}},
+            return {"result": {1: {}, 2: {"account": account}, 3: configuration,
                 1000: {"rateLimits": {"primary": {"usedPercent": 5, "windowDurationMins": 300, "resetsAt": reset},
-                    "secondary": {"usedPercent": 100, "windowDurationMins": 10080, "resetsAt": reset}}}}[request_id]}
+                    "secondary": {"usedPercent": weekly_used, "windowDurationMins": 10080, "resetsAt": reset}}}}[request_id]}
         with (
             mock.patch("devsquad.task_entry.AdapterManifest.load", return_value=manifest),
             mock.patch("devsquad.task_entry.harness_version", return_value="codex-cli fixture"),
@@ -824,24 +826,48 @@ class ManagedTaskEntryTest(unittest.TestCase):
                 self.assertEqual(store.capacity_snapshot(first["account_pool_id"], target=target)["status"], "exhausted")
             finally:
                 store.close()
+            configuration["config"]["default_model"] = "changed"
+            configured = discover_codex_identity(second_repo, runtime=runtime)
+            self.assertEqual(configured["account_pool_id"], first["account_pool_id"])
+            self.assertNotEqual(configured["native_scope"], first["native_scope"])
+            store = service._store()
+            try:
+                self.assertEqual(store.capacity_snapshot(configured["account_pool_id"], target=target)["status"], "exhausted")
+            finally:
+                store.close()
             account["email"] = "another@example.invalid"
             other = discover_codex_identity(self.repo, runtime=runtime)
             self.assertNotEqual(first["account_pool_id"], other["account_pool_id"])
-            self.assertEqual(discovery.call_count, 2)
+            self.assertEqual(discovery.call_count, 3)
             store = service._store()
             try:
                 self.assertEqual(store.capacity_snapshot(other["account_pool_id"], target=target)["status"], "unknown")
             finally:
                 store.close()
+            account["email"] = "fixture@example.invalid"
+            weekly_used, failed_limits = 5, False
+            available = discover_codex_identity(second_repo, runtime=runtime)
+            store = service._store()
+            try:
+                self.assertEqual(store.capacity_snapshot(available["account_pool_id"], target=target)["status"], "available")
+                one = store.claim_start(self.repo, "native-pool-fence-a", {"task": {}}, "fixture-a")
+                two = store.claim_start(second_repo, "native-pool-fence-b", {"task": {}}, "fixture-b")
+                store.reserve_pool_capacity(one.run_id, first["account_pool_id"], "qualification", target=target)
+                with self.assertRaises(ConflictError):
+                    store.reserve_pool_capacity(two.run_id, configured["account_pool_id"], "qualification", target=target)
+                store.cancel_preparing(one.run_id)
+                store.cancel_preparing(two.run_id)
+            finally:
+                store.close()
         self.assertNotIn("fixture@example.invalid", "".join(path.read_text() for path in (runtime / "catalogs").glob("*.json")))
 
     def test_normal_alias_rejects_account_or_catalog_change_without_mutating_binding(self):
-        identity = {**self.codex, "account_pool_id": "native-scope", "catalog_fingerprint": "a" * 64}
+        identity = {**self.codex, "account_pool_id": "native-pool", "native_scope": "scope-a", "catalog_fingerprint": "a" * 64}
         task, _ = build_managed_task(workflow="branch-review", project_dir=self.repo, base_ref="HEAD", target_ref="HEAD", goal="Bounded review", codex_identity=identity)
         incumbent = copy.deepcopy(task["routing"]["profiles"]["profiles"][0])
         incumbent["quality_status"] = "proven"
         binding = {"alias": "review.deep", "version": 7, "profile": incumbent}
-        for change in ({"account_pool_id": "other-scope"}, {"catalog_fingerprint": "b" * 64}):
+        for change in ({"account_pool_id": "other-pool"}, {"native_scope": "scope-b"}, {"catalog_fingerprint": "b" * 64}):
             with self.assertRaisesRegex(ContractError, "requalification"):
                 build_managed_task(workflow="branch-review", project_dir=self.repo, base_ref="HEAD", target_ref="HEAD", goal="Bounded review", codex_identity={**identity, **change}, role_bindings={"reviewer": binding})
             self.assertEqual(binding["version"], 7)

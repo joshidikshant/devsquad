@@ -126,7 +126,7 @@ def discover_codex_identity(
                 discover_models(peer, first_request_id=10, timeout_seconds=timeout_seconds),
             )
         else:
-            from .native_catalog import NativeCatalogCache, native_scope, normalize_codex_limits
+            from .native_catalog import NativeCatalogCache, native_account_pool, native_scope, normalize_codex_limits
             from .service import Service
 
             deadline = time.monotonic() + timeout_seconds
@@ -147,7 +147,7 @@ def discover_codex_identity(
                 lambda: discover_models(peer, first_request_id=10, timeout_seconds=max(0.001, deadline - time.monotonic())),
             )
             models = catalog["models"]
-            pool_id = f"codex-subscription-{scope}"
+            pool_id = native_account_pool(account)
             try:
                 limits = read_native(1000, "account/rateLimits/read")
             except (ContractError, EOFError, OSError, TimeoutError):
@@ -193,7 +193,7 @@ def discover_codex_identity(
         "model_id": selected["id"],
         "model_family": family if isinstance(family, str) and family else "gpt",
         "effort": effort,
-        **({"account_pool_id": pool_id, "catalog_fingerprint": selected["fingerprint"]} if scope is not None else {}),
+        **({"account_pool_id": pool_id, "native_scope": scope, "catalog_fingerprint": selected["fingerprint"]} if scope is not None else {}),
     }
 
 
@@ -247,6 +247,7 @@ def _managed_routing(
         "evidence_refs": [
             f"runtime-catalog:{codex['harness_version']}:{codex['model_id']}",
             *([f"runtime-catalog-fingerprint:{codex['catalog_fingerprint']}"] if "catalog_fingerprint" in codex else []),
+            *([f"runtime-native-scope:{codex['native_scope']}"] if "native_scope" in codex else []),
         ],
     }
     trial_profiles = {"reviewer": reviewer}
@@ -291,6 +292,7 @@ def _managed_routing(
             if role == "reviewer" and "catalog_fingerprint" in codex and (
                 incumbent["account_pool_id"] != codex["account_pool_id"]
                 or f"runtime-catalog-fingerprint:{codex['catalog_fingerprint']}" not in incumbent["evidence_refs"]
+                or ("native_scope" in codex and f"runtime-native-scope:{codex['native_scope']}" not in incumbent["evidence_refs"])
             ):
                 raise ContractError("approved reviewer requires requalification for the current native account/config/catalog")
             if incumbent["id"] == profile["id"] and incumbent != profile:
@@ -506,7 +508,7 @@ def build_managed_task(
         "harness", "harness_version", "model_id", "model_family", "effort",
     }
     if (not isinstance(codex_identity, dict)
-            or set(codex_identity) - (required_identity | {"account_pool_id", "catalog_fingerprint"})
+            or set(codex_identity) - (required_identity | {"account_pool_id", "native_scope", "catalog_fingerprint"})
             or required_identity - set(codex_identity)
             or codex_identity.get("harness") != "codex"
             or not all(

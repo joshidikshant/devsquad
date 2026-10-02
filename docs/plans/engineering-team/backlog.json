@@ -21,7 +21,7 @@
     "status": "partial",
     "artifact": "evidence/R8-installed-workflows-2026-10-01.json",
     "scope": "Installed schema-15 runtime through 6d2e0ba; accepted real Claude-to-independent-Codex 477-test delivery, complete combined review and integration, actual Claude handoff/Grok operation and final Gemini CLI/MCP recheck",
-    "next_action": "Audit R3b.2/R3c closure against SOL-REVIEW-FOLLOWUP, then continue R4 catalog/quota, R5 public trials/outcomes, remaining R6 UX and R7/C1. Do not repeat accepted runtime proofs or unchanged full gates.",
+    "next_action": "R3 is accepted by evidence/R3-closure-2026-10-02.json. Finish R4's repaired account-wide pool fence full gate, narrow independent follow-up and installed recheck, then R5 public outcomes/trials, R6 UX and R7/C1. Preserve accepted earlier runtime proofs.",
     "limitations": "Whole-plan closure is not claimed. Required desktop UI proofs remain unverified; Antigravity IDE permission is denied. Grok/Gemini MCP status does not prove automatic writer/reviewer roles. Jev remains off with its one-request allowance spent; no paid API fallback or reset use authorized."
   },
   "planning_checkpoint": {

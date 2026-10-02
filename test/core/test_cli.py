@@ -114,6 +114,7 @@ class CliTest(unittest.TestCase):
         resolve.assert_called_once_with(str(self.root))
         discover.assert_called_once_with(
             self.root, requested_model="gpt-fixture", requested_effort="low",
+            runtime=self.runtime,
         )
         build.assert_called_once_with(
             workflow="branch-review", project_dir=self.root,
@@ -175,6 +176,7 @@ class CliTest(unittest.TestCase):
         service.start.assert_called_once_with(task, "fix-1", None)
         discover.assert_called_once_with(
             self.root, requested_model="gpt-review", requested_effort="high",
+            runtime=self.runtime,
         )
         build.assert_called_once_with(
             workflow="issue-delivery", project_dir=self.root,

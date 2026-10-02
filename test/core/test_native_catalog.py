@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import ContractError
-from devsquad.native_catalog import NativeCatalogCache, native_scope, normalize_codex_limits
+from devsquad.native_catalog import NativeCatalogCache, native_account_pool, native_scope, normalize_codex_limits
 from devsquad.capacity import derive_pool_capacity
 
 
@@ -67,6 +67,9 @@ class NativeCatalogTest(unittest.TestCase):
     def test_scope_is_private_and_changes_for_account_config_binary_version(self):
         account = {"account": {"type": "chatgpt", "email": "private@example.invalid", "planType": "plus"}}
         scope = native_scope(account, {"provider": "native"}, "/binary/a", "v1")
+        pool = native_account_pool(account)
+        self.assertEqual(pool, native_account_pool({"account": {**account["account"], "planType": "pro"}}))
+        self.assertNotEqual(pool, native_account_pool({"account": {"type": "chatgpt", "email": "other@example.invalid"}}))
         for a, c, b, v in (
             ({"account": {"type": "chatgpt", "email": "other@example.invalid"}}, {}, "/binary/a", "v1"),
             (account, {"provider": "changed"}, "/binary/a", "v1"),

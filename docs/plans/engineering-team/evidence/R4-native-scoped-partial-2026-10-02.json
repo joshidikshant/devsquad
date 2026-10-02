@@ -3,6 +3,28 @@
   "recorded_on": "2026-10-02",
   "baseline_revision": "39b95f1",
   "status": "source_focused_verified_full_and_independent_gates_pending",
+  "review_finding_and_repair": {
+    "review_run_id": "9a12f6f6-59aa-43c0-a003-9f057f42f670",
+    "review_target": "500d1b1917ecbcf417af73fbfd21ae67accc45e7",
+    "state": "failed",
+    "version": 22,
+    "disposition": "reject",
+    "finding_id": "r4-account-pool-isolation",
+    "severity": "high",
+    "description": "Config/binary/version-scoped capacity pools partitioned a single subscription and bypassed max_concurrency=1",
+    "repair": "Use account-only opaque pool identity for shared observations/reservations, but keep separate account/config/binary/version native-scope and catalog-fingerprint qualification evidence",
+    "targeted_tests": {"tests": 30, "seconds": 2.712, "result": "pass"},
+    "combined_affected_tests": {"tests": 102, "seconds": 17.610, "result": "pass", "installed_wheel_build_interpreter": "explicit_offline_python3.12", "resource_warnings": "errors"},
+    "review_checks": {"focused_tests": 79, "seconds": 16.390, "result": "pass", "diff_and_bash": "pass", "integrity": "verified_unchanged"}
+  },
+  "initial_full_gate": {
+    "target_revision": "500d1b1",
+    "result": "interrupted_not_passed",
+    "exit_code": 130,
+    "known_failures": "Two CLI mock call expectations omitted the newly required runtime argument; corrected without weakening preparation checks",
+    "reason": "Stopped exact full-test PID with SIGINT after known failures and independent high-severity finding, before source repair",
+    "unraisable_note": "Interruption during test setUp produced an implicit TemporaryDirectory ResourceWarning; no clean full-gate result is claimed"
+  },
   "scope": "Normal CLI native subscription discovery, private account/config/binary/version-scoped last-good catalog, 24-hour TTL, single OS-lock refresh owner, bounded pagination deadline, two-minute failure backoff, native typed quota ingestion and affected alias requalification block",
   "verified": [
     {"gate": "native cache, normal entry, protocol and capacity", "tests": 79, "seconds": 14.696, "result": "pass"},
@@ -28,5 +50,5 @@
     "explicit_pins_preserved": true
   },
   "open_gates": ["R3c independent closure audit", "one full source integration gate", "bounded independent R4 review", "fresh installed normal-command recheck"],
-  "r3_review": {"run_id": "f0a4f86b-b305-4839-88a2-cb5fed8739ab", "target_revision": "39b95f1", "status": "running_at_checkpoint"}
+  "r3_review": {"run_id": "f0a4f86b-b305-4839-88a2-cb5fed8739ab", "target_revision": "39b95f1", "status": "succeeded", "version": 22, "closure_evidence": "R3-closure-2026-10-02.json"}
 }

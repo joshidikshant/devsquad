@@ -24,17 +24,28 @@ REFRESH_BACKOFF = timedelta(minutes=2)
 QUOTA_TTL = timedelta(seconds=60)
 
 
-def native_scope(account_result: dict[str, Any], config: dict[str, Any], binary: str, version: str) -> str:
+def _account_identity(account_result: dict[str, Any]) -> dict[str, Any]:
     account = account_result.get("account")
     if not isinstance(account, dict) or account.get("type") != "chatgpt":
         raise ContractError("normal entry requires native ChatGPT subscription authentication")
-    identity = {key: account.get(key) for key in ("type", "id", "accountId", "email", "planType")}
+    identity = {key: account.get(key) for key in ("type", "id", "accountId", "email")}
     if not any(isinstance(identity[key], str) and identity[key] for key in ("id", "accountId", "email")):
         raise ContractError("native account identity is unknown; discovery cannot be reused")
+    return identity
+
+
+def native_account_pool(account_result: dict[str, Any]) -> str:
+    """One reservation fence for one subscription, across discovery contexts."""
+    return "codex-subscription-" + hashlib.sha256(canonical_json(_account_identity(account_result)).encode()).hexdigest()
+
+
+def native_scope(account_result: dict[str, Any], config: dict[str, Any], binary: str, version: str) -> str:
+    identity = _account_identity(account_result)
     # Hash in memory only. Neither account identifiers nor effective configuration
     # (which can contain sensitive provider fields) are persisted or displayed.
     return hashlib.sha256(canonical_json({
-        "account": identity, "config": config, "binary": binary, "version": version,
+        "account": identity, "plan_type": account_result["account"].get("planType"),
+        "config": config, "binary": binary, "version": version,
     }).encode()).hexdigest()
 
 
