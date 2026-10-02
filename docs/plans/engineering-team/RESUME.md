@@ -6,71 +6,22 @@ remain recoverable in Git; detailed receipts and failed gates stay in evidence.
 
 ## Current checkpoint — October 2, 2026
 
-R3c is now **accepted** at immutable `39b95f1`: native independent audit is
-clean; mandatory diff/Bash/51 focused tests pass with unchanged integrity.
-The R3 source blobs exactly match the prior accepted 477-test full candidate.
-See `evidence/R3-closure-2026-10-02.json` for the requirement/proof matrix.
-R4 is now **accepted and installed** at source `913abc1`:
+Accepted work must not be restarted or re-tested unchanged:
 
-- Normal entry has private account/config/binary/version-scoped complete
-  last-good catalogs, 24h TTL, one OS refresh owner, bounded pagination and
-  two-minute failure backoff. Default hints do not promote or invalidate aliases.
-- Native typed quota observations share one opaque **account-only** reservation
-  pool across discovery configurations. Incompatible qualified contexts block;
-  pins remain trials. Failed queries retain still-fresh known exhaustion.
-- 102 affected tests in 17.610s; **484 full tests in 458.607s**, two optional SDK
-  skips, zero failures/errors/unraisable. Source was frozen for the full gate.
-- Initial R4 audit `9a12f6f6…` rejected a high shared-pool partition bug.
-  Exact repair audit **`f45c723b-3067-473f-9349-f1012f5548e7`** is clean,
-  succeeded/22; diff/Bash/30 targeted tests pass, one optional wheel-environment
-  skip, all integrity hashes unchanged. Initial interrupted failed full gate
-  and the fixed CLI expectations remain truthfully recorded in partial evidence.
-- Installed normal dry-run selects gpt-6.1-sol/low as a bounded trial, no run
-  creation; reinstall no-op, drift false, pip check pass, four registrations
-  matching. **Nine actual installed SDK transport tests pass in 2.743s, no skips.**
+- R3 `39b95f1`: exact native review clean, focused/public/historical evidence
+  and source-equivalent prior477 full pass. [Closure](evidence/R3-closure-2026-10-02.json).
+- R4 `913abc1`: normal catalogs, account-wide quota fences and guarded aliases;
+  repaired exact native audit accepted,484 full tests, installed SDK9 pass.
+  [Closure](evidence/R4-closure-2026-10-02.json).
+- **Current installed R5 `dfe9976`, schema16**: public outcomes/trials and
+  shared experiment budgets; repair audit `e046a174-55ce-4496-973e-2fc97c68a493`
+  accepted,504 full tests/511.241s, installed SDK9/2.674s, no drift and four
+  registrations matching. [Closure](evidence/R5-closure-2026-10-02.json).
 
-Closure matrix: `evidence/R4-closure-2026-10-02.json`. No native audit, full
-suite or nonterminal production run remains active. Earlier accepted native
-Claude/Grok/Gemini proofs below remain historical; do not repeat unchanged ones.
-Antigravity externally updated to **1.2.14**: current doctor correctly labels
-its adapter unverified; the old 1.2.13 live status receipt is not a new-version
-proof. Recheck this during R6/R8 without broad MCP listings or UI bypass.
-
-**R5 is now accepted and installed** at source **dfe9976**, schema **16**.
-Closure matrix: `evidence/R5-closure-2026-10-02.json`. The new
-projection outbox opts in new public runs without rewriting legacy history.
-Terminal transitions and targeted status/result/report/evaluation replay
-generate one final outcome; failures, repairs, findings, fenced lead
-attestations and late corrections remain separate. Corrupt pending evidence
-does not block unrelated runs. The explicit public `trial` / `trial_start`
-path now uses the schema-14 assignment fence; the fixture no longer patches
-preparation or manually imports finals. Experiment reservations share a
-durable all-attempt call cap and a declaration-time wall deadline; automatic
-experimentation stays off.
-Public concurrent-budget and promotion → new-run binding → held-out regression
-→ rollback tests pass. See `evidence/R5-public-integration-partial-2026-10-02.json`.
-
-Initial native R5 audit rejected two real defects. Project projection now
-precedes the consistent proposal read; launch/active-worker deadlines include
-the shared experiment deadline. Exact repair follow-up
-**e046a174-55ce-4496-973e-2fc97c68a493** is clean/accepted, succeeded/22;
-diff/Bash/13 public tests/reference checks pass with unchanged integrity.
-The 54 repaired-path and 66 integrity/outcome/review/delivery tests pass.
-Final frozen **504-test full gate passes in 511.241s**, two optional SDK skips,
-zero errors/failures/unraisable, UTC/monotonic ~511.32s. Later revisions change
-only test observations/schema expectations and documents, not reviewed code.
-
-Safe offline installation selected `0.1.0-py31214-90f1e87fb9ac-mcp-a26bc88afbef`;
-zero active production runs, lazy migration to 16, zero retroactive objective
-jobs. Reinstall no-op, payload drift false, pip check pass, four registrations
-matching. **Nine actual installed SDK tests pass in 2.674s without skips.**
-Installed normal review dry-run still resolves gpt-6.1-sol/low bounded trial,
-without creating a run. Full installer tests include actual old-schema active
-deferral, cancellation/recovery and migration to current16. Failed red tests,
-rejected audit and interrupted/failed full gates remain in partial evidence;
-do not repeat accepted proofs. No test/native process is active here.
-Next: integrate/test R6 terminal/readiness, R7/C1 and final R8 acceptance;
-whole-plan completion is not claimed.
+Failed/red/interrupted gates remain in each package's partial evidence. The
+remaining delivery is R6 → R7/C1 → final R8 acceptance, not architecture work.
+Antigravity is **agy CLI**, now1.2.14; its final-release operation is pending.
+The older1.2.13 receipt is historical, not proof of the updated CLI/adapter.
 
 R6 terminal/readiness checkpoints `dd709804`, `79f9b767`, `b785d040`,
 `d0eec55c`, shared helper `4a6bc15d` and catalog reuse `03124c79` are now
@@ -178,8 +129,8 @@ the accepted final release. Unrelated servers/settings remain untouched.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.
-Source runtime repairs and the accepted G4 candidate below are **integrated
-and installed at `6d2e0ba`**; all five blob hashes
+Historical runtime repairs and the accepted G4 candidate below were integrated
+and installed at `6d2e0ba` (superseded by the current R5 release); all five blob hashes
 exactly match the accepted candidate. Local affected gate: 27 tests in 18.940s,
 plus 227 Bash assertions, generated-reference and diff checks passed.
 
