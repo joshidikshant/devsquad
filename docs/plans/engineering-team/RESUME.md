@@ -6,10 +6,31 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Active continuation — managed delivery failure remains unresolved
 
+**Latest active run: `288ee6f9-f503-421a-b81a-d50ee0cf44d8`.** The prior run
+`45667697…` produced a verified Claude Sonnet 5 implementation and frozen
+candidate `5cb9eab81bf4f7ba01861ffb05193a8a67521200`, but its reviewer runner
+and child died without an exit receipt. The exact cause is unknown; stdout,
+stderr and supervisor log were empty. Both process identities are dead and
+public orphan cancellation terminalized it **cancelled/version 17**. Preserve
+that truthful receipt and candidate; no review/test pass is inferred.
+
+The operator's isolated real-Git assessment found that `_has_tracked_files`
+wrongly selects Python discovery for README-only test directories and a
+`tests` symlink. The new bounded run starts from the retained candidate, repairs
+these cases with Claude, and asks Codex to inspect the **whole** G4 diff from
+`1781b89` to the new candidate. The review focus explicitly forbids running
+tests/nested supervisors; the coordinator owns the mandatory Bash/full Python
+checks. Codex reports ordinary usage allowed, not a current quota block.
+Installed SDK transport rerun passes **9 tests in 3.191s**. Do not duplicate a
+full core gate or modify frozen runtime packages/worktrees while this runs.
+Next: inspect this run's final review/check receipts, accept only if all gates
+and the reproduced cases pass, integrate the full accepted G4 diff, checkpoint
+and refresh the final installation; then recheck Gemini CLI/MCP once.
+
 The auth repair is committed at `1781b89` and installed as
 `0.1.0-py31214-68d542f6e8ea-mcp-a26bc88afbef`; payload drift is false,
 `pip check` passes, and previous releases remain recoverable. A fresh genuine
-G4 delivery is running: **`45667697-1aa2-4a49-9737-2c4e637ebd26`**, initially
+G4 delivery was launched: **`45667697-1aa2-4a49-9737-2c4e637ebd26`**, initially
 running/version 4. It freezes the repaired source, scoped Claude Sonnet writer,
 independent Codex gpt-6.1-sol/low adversarial review, Bash check and mandatory
 spawn-safe full Python core runner (900s check timeout). Do not start a second

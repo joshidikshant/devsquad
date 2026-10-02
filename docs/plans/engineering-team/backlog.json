@@ -21,8 +21,8 @@
     "status": "partial",
     "artifact": "evidence/R3b2-eligibility-partial-2026-10-01.json",
     "scope": "Reader full gate passed at a4a87fd; schema-15 explicit revisions and shared lifecycle eligibility implemented with focused public fixtures; no install or provider calls",
-    "next_action": "Full spawn-safe integration at dc68944 passes 455 tests (two optional-SDK skips, zero errors/failures/unraisable diagnostics) after the lifecycle clock fixture repair. Bounded upgrade review is clean. Safely refresh using the existing Python 3.12/MCP wheelhouse, verify installed SDK, then prove Claude delivery/handoff, Grok and updated Gemini/Antigravity.",
-    "limitations": "R4 catalog/quota, R5 public controller/outcomes, R6 UX and R7 Council open. Installed schema 13 has no nonterminal runs but is not yet refreshed. Claude/Grok/updated Gemini live proofs pending."
+    "next_action": "Installed schema-15 runtime is refreshed through the tested Claude framing/identity and detached auth repairs. Real Claude host handoff, Grok operation and Gemini CLI/MCP pass. Genuine managed Claude implementation succeeded, but the reviewer died without a receipt. Continue the saved G4 correction run 288ee6f9-f503-421a-b81a-d50ee0cf44d8 through independent review, mandatory tests and fenced acceptance, then integrate and refresh.",
+    "limitations": "R4 catalog/quota, R5 public controller/outcomes, remaining R6 UX and R7 Council remain open. Managed implementation/review/tests acceptance is pending. Gemini CLI/MCP works; IDE UI permission is denied. Jev remains off; no paid API fallback or reset use authorized."
   },
   "planning_checkpoint": {
     "recorded_on": "2026-10-01",
