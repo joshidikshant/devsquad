@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.contracts import BudgetExhausted, ContractError
-from devsquad.store import ConflictError, SchemaVersionError, Store, git_common_dir
+from devsquad.store import ConflictError, SchemaVersionError, Store, git_common_dir, SUPPORTED_SCHEMA_VERSION
 
 
 class StoreTest(unittest.TestCase):
@@ -482,8 +482,8 @@ class StoreTest(unittest.TestCase):
             )
 
     def test_migration_records_version_and_refuses_newer_database(self):
-        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
-        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(16,'future')")
+        self.assertEqual(self.store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], SUPPORTED_SCHEMA_VERSION)
+        self.store.connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,'future')", (SUPPORTED_SCHEMA_VERSION + 1,))
         self.store.close()
         with self.assertRaises(SchemaVersionError):
             Store(self.database, self.artifacts)
@@ -498,7 +498,7 @@ class StoreTest(unittest.TestCase):
         connection.commit(); connection.close()
         upgraded = Store(old_db, self.root / "old-artifacts")
         self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], SUPPORTED_SCHEMA_VERSION)
         self.assertTrue(upgraded.connection.execute("SELECT 1 FROM sqlite_master WHERE name='attempts'").fetchone())
         attempt_columns = {
             row[1] for row in upgraded.connection.execute("PRAGMA table_info(attempts)")
@@ -515,7 +515,7 @@ class StoreTest(unittest.TestCase):
             connection.execute("INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)",(version,"fixture"))
         connection.commit(); connection.close()
         upgraded=Store(old_db,self.root/"v3-artifacts"); self.addCleanup(upgraded.close)
-        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],15)
+        self.assertEqual(upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], SUPPORTED_SCHEMA_VERSION)
         columns={row[1] for row in upgraded.connection.execute("PRAGMA table_info(runs)")}
         self.assertTrue({"package_path","package_digest","supersedes_run_id"} <= columns)
 

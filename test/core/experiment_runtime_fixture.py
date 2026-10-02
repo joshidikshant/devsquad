@@ -1,6 +1,6 @@
-"""Real offline experiment runs with a test-only preflight assignment seam.
+"""Real offline experiment runs through the explicit public trial controller.
 
-This is not a public experiment controller or native-provider quality proof.
+This is not native-provider quality proof.
 Profiles and reviews are explicit fixtures, but preparation, worker processes,
 checks, host decisions and outcomes use the actual Service/Store workflow.
 """
@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 import copy
-from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import sys
@@ -17,10 +16,9 @@ import time
 from unittest.mock import patch
 
 from test_experiment_provenance import digest, execution_digest
-from test_learning import experimental_final
 from test_lifecycle import profile, review_task, routing_policy
 
-from devsquad.experiment_provenance import assignment_for, paired_input_identity, selected_execution_fingerprint
+from devsquad.experiment_provenance import paired_input_identity, selected_execution_fingerprint
 from devsquad.codex_review_worker import freeze_codex_reviewer
 from devsquad.router import load_routing
 from devsquad.service import Service
@@ -202,18 +200,7 @@ class ExperimentRuntimeFixture:
         raise AssertionError(f"saved-run fixture did not reach a gate: {self.service.status(run_id)}")
 
     def run_arm(self, case_id, arm, *, no_attempt=False):
-        original = self.service._resolve_snapshot
-
-        def predeclared_assignment(*args, **kwargs):
-            snapshot = original(*args, **kwargs)
-            snapshot["experiment_spec"] = copy.deepcopy(self.spec)
-            snapshot["experiment_assignment"] = assignment_for(
-                self.spec, case_id, arm, project_common_dir=self.common,
-            )
-            return snapshot
-
         with ExitStack() as stack:
-            stack.enter_context(patch.object(self.service, "_resolve_snapshot", side_effect=predeclared_assignment))
             if no_attempt:
                 stack.enter_context(patch.object(self.service, "_spawn_daemon", return_value=0))
             fixture_args = {}
@@ -225,8 +212,8 @@ class ExperimentRuntimeFixture:
                 }
             if not self.native_review:
                 fixture_args["_internal_review_fixture"] = {"verdict": "clean", "summary": "Fixture review of the frozen candidate.", "findings": []}
-            started = self.service.start(
-                self.task(case_id, arm), self.outcome_id(case_id, arm),
+            started = self.service.trial_start(
+                self.spec, case_id, arm, self.task(case_id, arm), self.outcome_id(case_id, arm),
                 **fixture_args,
             )
         run_id = started["run_id"]
@@ -258,10 +245,6 @@ class ExperimentRuntimeFixture:
                 verdict = "succeeded" if (arm == "candidate") == self.candidate_succeeds else "failed"
                 if completed["state"] != verdict:
                     raise AssertionError(f"public fixture disposition failed: {completed}")
-        outcome = experimental_final(self.outcome_id(case_id, arm), verdict)
-        outcome["observed_at"] = datetime.now(timezone.utc).isoformat()
-        outcome["evidence_refs"] = ["receipt.json", "result-receipt.json"]
-        self.service.outcome_add(run_id, outcome)
         return run_id
 
     def run_all(self, *, skip=None, no_attempt=None):

@@ -20,7 +20,7 @@ from devsquad.catalog import update_last_good
 from devsquad.contracts import ContractError
 from devsquad.learning import evaluate_experiment
 from devsquad.service import Service
-from devsquad.store import ConflictError, Store, canonical_json
+from devsquad.store import ConflictError, Store, canonical_json, SUPPORTED_SCHEMA_VERSION
 
 
 class ExperimentEligibilityTest(unittest.TestCase):
@@ -377,7 +377,7 @@ class HistoricalExperimentEligibilityTest(unittest.TestCase):
         store = Store(database, runtime / "artifacts")
         self.addCleanup(store.close)
         original = dict(store.connection.execute("SELECT * FROM experiments").fetchone())
-        self.assertEqual(store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
+        self.assertEqual(store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], SUPPORTED_SCHEMA_VERSION)
         report = service.learning_report(str(repo))
         self.assertEqual(report["sample_size"], 0)
         proposal = service.learning_propose(str(repo))["proposal"]

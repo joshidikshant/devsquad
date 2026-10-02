@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "status": "source_partial_not_accepted_or_installed",
+  "base_revision": "d3f7c0b",
+  "source_schema": 16,
+  "installed_schema": 15,
+  "requirements": [
+    {"requirement": "idempotent objective final projection from preparation failure/cancel, worker failure, host/headless completion and crash replay", "proof": "test_objective_outcomes public Service transitions", "result": "focused_pass"},
+    {"requirement": "append-only late corrections, no manual public replacement final, scoped corruption isolation and public report replay", "proof": "test_objective_outcomes and test_service", "result": "focused_pass"},
+    {"requirement": "public predeclared assignments and automatic finals, not preparation monkeypatch or manual import", "proof": "ExperimentRuntimeFixture now calls Service.trial_start; public reviewer and implementer pair tests", "result": "focused_pass"},
+    {"requirement": "one shared experiment reservation cap across concurrent arms and fallback", "proof": "test_public_trials actual concurrent public resumes and fallback failure", "result": "focused_pass"},
+    {"requirement": "evaluate, qualify, reviewed promotion for a new run, held-out regression and rollback", "proof": "test_public_trials complete Service API chain with actual offline worker processes", "result": "focused_pass"},
+    {"requirement": "declaration-time experiment wall deadline and precise headless lead-repair attribution", "proof": "added regression/refinement after initial 88-test gate", "result": "affected_gate_running"}
+  ],
+  "passed_gates": [
+    {"command": "python3 -m unittest test_objective_outcomes test_public_trials test_cli test_store test_service", "tests": 88, "seconds": 61.236, "resource_warnings": "promoted_to_errors", "offline_build_interpreter": "explicit_python3.12", "result": "pass_before_final_deadline_and_lead_attribution_refinement"},
+    {"command": "python3 -m unittest test_public_trials.PublicTrialTest.test_public_outcomes_evaluate_qualify_promote_new_run_and_roll_back", "tests": 1, "seconds": 12.300, "result": "pass"}
+  ],
+  "failure_history": [
+    "Initial seven public terminal-origin tests failed because no automatic finals existed (7 failures/9.322s).",
+    "First projection implementation had wrong criterion-status and incomplete worker-failure mapping (1 failure/4 errors in 7 tests/9.356s).",
+    "Headless receipt attempts do not include IDs on successful semantic records; keyed failure lookup was corrected (1 error in 7 tests/9.472s).",
+    "Existing generic fake-runner native exit receipt lacks managed run/state fields; explicitly fixture-gated normalization now preserves that original receipt (1 error in 3 tests/15.093s).",
+    "New whole-chain test used an invalid invented template mode human_reviewed; corrected to the existing reviewed contract, not a source policy relaxation (1 error in 6 tests/6.586s).",
+    "An exploratory fixture diagnostic requested a nonexistent exit_code column and failed before printing; the corrected diagnostic used finally cleanup. This is not a passing test or a production fault."
+  ],
+  "open_gates": ["learning/lifecycle affected suite", "full core suite", "independent exact-patch review", "schema-16 safe upgrade and installed transport proof", "R6/R7/R8 separate acceptance"],
+  "policy": {"automatic_experiments": "off", "automatic_promotion": "not_enabled", "new_provider_calls_for_this_slice": 0, "paid_api_fallback": false, "legacy_outcomes_rewritten": false},
+  "limits": "Fixture outcomes demonstrate runtime/provenance behavior, not real model superiority or subscription cost savings. Installed runtime remains the accepted R4 release until acceptance gates pass."
+}

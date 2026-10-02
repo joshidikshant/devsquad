@@ -402,7 +402,7 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(current["status"], "available")
         self.assertEqual(current["windows"][0]["window_id"], "short")
 
-    def test_outcome_add_and_project_report_share_saved_ledger(self):
+    def test_objective_outcome_and_project_report_share_saved_ledger(self):
         started = self.service.start(
             self.task, "learning-report", _internal_fake_delay=.01,
         )
@@ -410,12 +410,12 @@ class ServiceTest(unittest.TestCase):
         now = datetime.now(timezone.utc)
         recorded = self.service.outcome_add(started["run_id"], {
             "schema_version": 1,
-            "outcome_id": "service-final-outcome",
-            "kind": "final",
-            "verdict": "succeeded",
+            "outcome_id": "service-explicit-correction",
+            "kind": "late_correction",
+            "verdict": "corrected",
             "selection_mode": "automatic",
             "observed_at": now.isoformat(),
-            "corrects_outcome_id": None,
+            "corrects_outcome_id": f"objective-final-{started['run_id']}",
             "summary": "The saved fixture run completed successfully.",
             "criteria": [],
             "contributions": [],
@@ -427,7 +427,7 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(report["sample_size"], 1)
         self.assertEqual(report["terminal_run_count"], 1)
         self.assertEqual(report["final_successes"], 1)
-        self.assertEqual(report["missingness"]["finals_without_contributions"], 1)
+        self.assertEqual(report["missingness"]["finals_without_contributions"], 0)
         proposed = self.service.learning_propose(self.repo)
         self.assertEqual(proposed["proposal"]["verdict"], "no_change")
         self.assertFalse(proposed["proposal"]["active_policy_changed"])

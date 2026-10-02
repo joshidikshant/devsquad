@@ -16,6 +16,7 @@ import zipfile
 from unittest.mock import patch
 
 from devsquad_test_fixtures import branch_review_routing_documents
+from devsquad.store import SUPPORTED_SCHEMA_VERSION
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -519,7 +520,7 @@ print(json.dumps([live,queued]))
                 self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 13)
             self.assertTrue(self.cli_json(launcher, "result", queued["run_id"], "--runtime-dir", str(runtime))["data"]["ready"])
             with closing(sqlite3.connect(runtime / "state.sqlite3")) as connection:
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], SUPPORTED_SCHEMA_VERSION)
         finally:
             # Use the old package explicitly even if a later assertion fails.
             cleanup_script = "from pathlib import Path; import sys; from devsquad.service import Service; s=Service(Path(sys.argv[1])); [s.cancel(r) for r in sys.argv[2:]]"
@@ -547,7 +548,7 @@ print(json.dumps([live,queued]))
         temporary.symlink_to("new-release")
         with patch("devsquad.release_activation.os.replace", side_effect=OSError("injected activation failure")):
             with self.assertRaisesRegex(OSError, "injected activation failure"):
-                activate_release(temporary, selector, runtime, supported_schema_version=15)
+                activate_release(temporary, selector, runtime, supported_schema_version=SUPPORTED_SCHEMA_VERSION)
         self.assertEqual(os.readlink(selector), "old-release")
         with closing(sqlite3.connect(database, timeout=1)) as connection:
             connection.execute("BEGIN EXCLUSIVE")
@@ -592,7 +593,7 @@ finally:
             self.install()
             store = Store(runtime / "state.sqlite3", runtime / "artifacts")
             try:
-                self.assertEqual(store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 15)
+                self.assertEqual(store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], SUPPORTED_SCHEMA_VERSION)
             finally:
                 store.close()
             output, stderr = process.communicate("admit\n", timeout=8)

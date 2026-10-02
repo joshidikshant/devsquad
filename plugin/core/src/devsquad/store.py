@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
+from functools import wraps
 from importlib.resources import files
 import json
 import os
@@ -17,7 +18,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 15
+SUPPORTED_SCHEMA_VERSION = 16
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -146,6 +147,15 @@ def git_common_dir(worktree: Path) -> Path:
     return Path(result.stdout.strip()).resolve(strict=True)
 
 
+def _project_terminal(method):
+    @wraps(method)
+    def wrapped(self, run_id, *args, **kwargs):
+        result = method(self, run_id, *args, **kwargs)
+        self.project_final_outcome(run_id)
+        return result
+    return wrapped
+
+
 class Store:
     def __init__(self, database: Path, artifacts: Path):
         self.database = database
@@ -238,7 +248,7 @@ class Store:
         self.connection.execute("INSERT INTO projects(id, git_common_dir, created_at) VALUES(?,?,?)", (project_id, key, _utc_now()))
         return project_id
 
-    def claim_start(self, worktree: Path, idempotency_key: str, submitted_request: Any, owner_id: str) -> StartClaim:
+    def claim_start(self, worktree: Path, idempotency_key: str, submitted_request: Any, owner_id: str, *, objective_outcome: bool = False) -> StartClaim:
         if not idempotency_key or not owner_id:
             raise ContractError("idempotency key and owner are required")
         encoded, digest = canonical_json(submitted_request), request_hash(submitted_request)
@@ -268,6 +278,8 @@ class Store:
                 "INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,1,'run.preparing','{}',?)",
                 (run_id, now),
             )
+            if objective_outcome:
+                self.connection.execute("INSERT INTO objective_outcome_jobs(run_id,requested_at) VALUES(?,?)", (run_id, now))
             self.connection.execute("COMMIT")
             return StartClaim(run_id, project_id, digest, 1, True, 1)
         except Exception:
@@ -540,6 +552,7 @@ class Store:
              canonical_json(snapshot), package_digest, run_version, fencing_token, recorded_at),
         )
 
+    @_project_terminal
     def fail_preparation(
         self,
         run_id: str,
@@ -606,6 +619,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def cancel_preparing(self, run_id: str) -> int:
         self.connection.execute("BEGIN IMMEDIATE")
         try:
@@ -1591,12 +1605,47 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    def project_final_outcome(self, run_id: str) -> dict[str, Any] | None:
+        """Idempotently drain a new run's durable terminal projection request."""
+        from .objective_outcomes import project_outcome
+        job = self.connection.execute("SELECT completed_outcome_id FROM objective_outcome_jobs WHERE run_id=?", (run_id,)).fetchone()
+        if job is None or job["completed_outcome_id"] is not None:
+            return None
+        self.connection.execute("BEGIN")
+        try:
+            run = self.run(run_id)
+            if run["state"] not in TERMINAL_STATES:
+                self.connection.execute("COMMIT")
+                return None
+            refs, documents = {}, {}
+            for artifact in self.artifacts_for_run(run_id):
+                content = Path(artifact["path"]).read_bytes()
+                if hashlib.sha256(content).hexdigest() != artifact["sha256"]:
+                    raise ConflictError("objective projection artifact integrity is invalid")
+                refs[artifact["name"]] = f"artifact:{artifact['id']}:{artifact['sha256']}"
+                if artifact["name"] in {"receipt.json", "result-receipt.json"}:
+                    documents[artifact["name"]] = json.loads(content)
+            receipt = documents.get("receipt.json", documents.get("result-receipt.json"))
+            if not isinstance(receipt, dict):
+                raise ConflictError("objective projection requires a durable terminal receipt")
+            row = self.connection.execute("SELECT assignment_json FROM experiment_assignments WHERE run_id=?", (run_id,)).fetchone()
+            assignment = json.loads(row["assignment_json"]) if row else None
+            outcome = project_outcome(run, receipt, self.attempts_for_run(run_id), refs, assignment)
+            self.connection.execute("COMMIT")
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+        result = self.record_outcome(run_id, outcome, _objective_projection=True)
+        self.connection.execute("UPDATE objective_outcome_jobs SET completed_outcome_id=? WHERE run_id=? AND completed_outcome_id IS NULL", (outcome["outcome_id"], run_id))
+        return result
+
     def record_outcome(
         self,
         run_id: str,
         outcome: dict[str, Any],
         *,
         now: datetime | None = None,
+        _objective_projection: bool = False,
     ) -> dict[str, Any]:
         """Append one replay-safe final outcome or late correction."""
         from .learning import validate_outcome
@@ -1646,6 +1695,8 @@ class Store:
                     and normalized["selection_mode"] != expected_selection_mode):
                 raise ConflictError("outcome selection mode does not match frozen routing")
             if normalized["kind"] == "final":
+                if not _objective_projection and self.connection.execute("SELECT 1 FROM objective_outcome_jobs WHERE run_id=?", (run_id,)).fetchone():
+                    raise ConflictError("public final outcomes are objective projections; use an explicit late correction")
                 if normalized["verdict"] != run["state"]:
                     raise ConflictError("final outcome verdict does not match run state")
             else:
@@ -1723,6 +1774,9 @@ class Store:
             raise
 
     def outcomes_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        # Repair only the requested run. Corrupt evidence in another pending
+        # projection must not prevent opening the ledger or observing good runs.
+        self.project_final_outcome(run_id)
         if not self.connection.execute(
             "SELECT 1 FROM runs WHERE id=?", (run_id,),
         ).fetchone():
@@ -1744,7 +1798,7 @@ class Store:
     def learning_report(
         self, project: Path, *, now: datetime | None = None,
     ) -> dict[str, Any]:
-        """Build a read-only project comparison with explicit missingness."""
+        """Repair pending public projections and compare with explicit missingness."""
         from .learning import build_comparison_report
 
         common_dir = git_common_dir(project)
@@ -1766,6 +1820,8 @@ class Store:
                     (project_id,),
                 )
             ]
+            for terminal_run in terminal_runs:
+                self.project_final_outcome(terminal_run["run_id"])
             outcome_records = [
                 {"run_id": row["run_id"], "outcome": json.loads(row["payload_json"])}
                 for row in self.connection.execute(
@@ -1818,6 +1874,10 @@ class Store:
         spec_sha256 = hashlib.sha256(spec_json.encode()).hexdigest()
         current = _authoritative_now(now)
         common_dir = git_common_dir(project_path)
+        for assigned in self.connection.execute(
+                "SELECT run_id FROM experiment_assignments WHERE experiment_id=?",
+                (spec["experiment_id"],)).fetchall():
+            self.project_final_outcome(assigned["run_id"])
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             existing = saved_evaluation(self.connection, spec["experiment_id"])
@@ -2885,6 +2945,28 @@ class Store:
             (run_id,),
         ).fetchone()[0]
 
+    def _enforce_experiment_budget(self, run_id: str) -> None:
+        """Shared experiment fence; caller holds the reservation write lock."""
+        row = self.connection.execute(
+            "SELECT s.spec_json,s.recorded_at FROM experiment_assignments a "
+            "JOIN experiment_specs s ON s.experiment_id=a.experiment_id WHERE a.run_id=?",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return
+        spec = json.loads(row["spec_json"])
+        # Count every durable reservation, including failed/fallback/revision
+        # slots and concurrent not-yet-launched work. Never trust caller counters.
+        consumed = self.connection.execute(
+            "SELECT COUNT(*) FROM attempts t JOIN experiment_assignments a ON a.run_id=t.run_id "
+            "WHERE a.experiment_id=?", (spec["experiment_id"],),
+        ).fetchone()[0]
+        if consumed >= spec["budget"]["max_worker_invocations"]:
+            raise BudgetExhausted("experiment worker reservation budget is exhausted")
+        elapsed = (_authoritative_now() - datetime.fromisoformat(row["recorded_at"])).total_seconds()
+        if elapsed >= spec["budget"]["wall_seconds"]:
+            raise BudgetExhausted("experiment wall-time budget is exhausted")
+
     def reserve_attempt(
         self,
         run_id: str,
@@ -2926,6 +3008,7 @@ class Store:
                 package_digest=package_digest,
             )
             self._enforce_attempt_budget(run_id, run)
+            self._enforce_experiment_budget(run_id)
             if account_pool_id is not None:
                 if not isinstance(account_pool_id, str) or not account_pool_id:
                     raise ContractError("attempt account pool is invalid")
@@ -3077,6 +3160,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def finish_attempt(self, run_id: str, attempt_token: str, terminal_state: str, payload: Any) -> int:
         if terminal_state not in TERMINAL_STATES:
             raise ContractError("invalid terminal state")
@@ -3268,6 +3352,7 @@ class Store:
             raise ConflictError("durable output conflicts with its prior import")
         return version
 
+    @_project_terminal
     def commit_durable_import(self, run_id: str, attempt_token: str, artifacts: list[dict[str, Any]], metadata: Any, terminal_state: str, payload: Any) -> str:
         """Atomically import one durable receipt, or observe its prior import.
 
@@ -3808,6 +3893,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def recover_unstarted_attempt(
         self, run_id: str, attempt_token: str, reason: str,
     ) -> tuple[int, str]:
@@ -3942,6 +4028,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def finish_recovery_cancel(
         self, run_id: str, attempt_token: str, reason: str,
     ) -> int:
@@ -4897,6 +4984,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def complete_handoff_terminal(
         self,
         run_id: str,
@@ -4978,6 +5066,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def cancel_host_wait(
         self,
         run_id: str,
@@ -5051,6 +5140,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def fail_queued_budget(
         self,
         run_id: str,
@@ -5107,6 +5197,7 @@ class Store:
             self.connection.execute("ROLLBACK")
             raise
 
+    @_project_terminal
     def cancel_queued(self, run_id: str) -> int:
         self.connection.execute("BEGIN IMMEDIATE")
         try:
@@ -5129,6 +5220,7 @@ class Store:
         except Exception:
             self.connection.execute("ROLLBACK"); raise
 
+    @_project_terminal
     def cancel_launching(self, run_id: str) -> int:
         self.connection.execute("BEGIN IMMEDIATE")
         try:

@@ -183,6 +183,17 @@ def command_start(args: argparse.Namespace) -> tuple[dict, int]:
     return _wait_for_run(service, started)
 
 
+def command_trial(args: argparse.Namespace) -> tuple[dict, int]:
+    service = _service(args)
+    started = service.trial_start(
+        _read_json(args.experiment, "experiment file"), args.case, args.arm,
+        _read_json(args.task_file, "trial task file"), args.idempotency_key,
+    )
+    if args.wait:
+        return _wait_for_run(service, started, resume_candidate_review=True)
+    return envelope(data=started), 0
+
+
 def _normal_entry_result(
     summary: dict[str, Any],
     idempotency_key: str,
@@ -490,6 +501,16 @@ def parser() -> argparse.ArgumentParser:
     fix.add_argument("--runtime-dir", default=runtime_default)
     fix.set_defaults(func=command_fix)
     start = sub.add_parser("start"); start.add_argument("--task-file", required=True); start.add_argument("--idempotency-key", required=True); start.add_argument("--supersedes-run"); start.add_argument("--wait", action="store_true"); start.add_argument("--json", action="store_true"); start.add_argument("--runtime-dir", default=runtime_default); start.set_defaults(func=command_start)
+    trial = sub.add_parser("trial", help="explicitly run one predeclared bounded experiment arm")
+    trial.add_argument("--experiment", required=True)
+    trial.add_argument("--case", required=True)
+    trial.add_argument("--arm", choices=("control", "candidate"), required=True)
+    trial.add_argument("--task-file", required=True)
+    trial.add_argument("--idempotency-key", required=True)
+    trial.add_argument("--wait", action="store_true")
+    trial.add_argument("--json", action="store_true")
+    trial.add_argument("--runtime-dir", default=runtime_default)
+    trial.set_defaults(func=command_trial)
     for name, fn in (("status",command_status),("result",command_result),("cancel",command_cancel),("resume",command_resume)):
         cmd=sub.add_parser(name); cmd.add_argument("run"); cmd.add_argument("--json",action="store_true"); cmd.add_argument("--runtime-dir",default=runtime_default)
         if name == "resume": cmd.add_argument("--recovery-file")

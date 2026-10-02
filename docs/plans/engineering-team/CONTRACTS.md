@@ -268,6 +268,31 @@ Use this loop:
 
 Default experiment budget is disabled until explicitly configured, then at most 10% of eligible runs with a hard call/time cap. Most work uses the current proven policy. V1 uses human-governed static preferences, not exhaustive permutations, an automatic bandit or foundation-model fine-tuning. Report sample sizes and missingness; tiny samples justify hypotheses, not provider rankings.
 
+New public runs (schema 16) request an objective final-outcome projection at
+admission. Terminal receipts remain immutable. A durable outbox and exact
+outcome ID make projection replay-safe after a crash; status/result, project
+reporting and experiment evaluation repair only their relevant pending jobs.
+Legacy history is not retrospectively assigned or rewritten. Prelaunch
+failures/cancellations have no worker contributions. Completed worker failures
+remain failed; subsequent fallback/revision success is repair, not independently
+successful original work. Reviewer findings and explicit lead revisions remain
+visible. Successful criterion status cites the fenced lead's final acceptance,
+not a fabricated check result; unevaluated criteria stay unknown. Subjective
+later feedback is an explicit append-only late correction, not another final.
+
+The opt-in `trial --experiment FILE --case ID --arm control|candidate
+--task-file FILE --idempotency-key KEY` command starts one arm through the
+ordinary runner. It freezes the complete v2 declaration under the existing
+preparation fence before any attempt. Reviewer trials require branch-review's
+same frozen candidate; implementer trials require issue-delivery's same
+baseline/task/check contract. The shared reservation transaction counts all
+durable experiment attempt slots (including failed, fallback, revision and
+in-flight slots) against the declared call cap; the wall deadline starts at
+declaration freeze. Controller limits are 100 cases, 1,000 reservations and
+3,600 seconds, never an entitlement to spend that much. Missing/unstarted arms
+do not become completed pairs. This explicit manual operation does not enable
+automatic experimentation, dispatch a background campaign or promote a binding.
+
 Measure acceptance and critical defects first; also show retries, lead rework, elapsed time, measured usage by pool, blocked time and unmeasured overhead. Final task success and original worker quality are distinct. Pair deterministic checks with review and human correction; a model judging itself is not sufficient evidence.
 
 ### Independent experiment provenance (v2)

@@ -74,6 +74,24 @@ class CliTest(unittest.TestCase):
         service.start.assert_called_once_with({"schema_version": 1}, "key-1", "old-run")
         service.status.assert_not_called()
 
+    def test_trial_dispatch_is_explicit_and_preserves_the_predeclaration(self):
+        experiment = {"schema_version": 2, "experiment_id": "explicit-fixture"}
+        path = self.root / "trial-experiment.json"
+        path.write_text(json.dumps(experiment))
+        service = mock.Mock()
+        response = {"run_id": "trial-run", "state": "queued", "created": True}
+        service.trial_start.return_value = response
+        code, payload, stderr = self.invoke([
+            "trial", "--experiment", str(path), "--case", "held-out-case", "--arm", "candidate",
+            "--task-file", str(self.task_file), "--idempotency-key", "explicit-trial-key",
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.trial_start.assert_called_once_with(experiment, "held-out-case", "candidate", {"schema_version": 1}, "explicit-trial-key")
+        service.start.assert_not_called()
+        service.status.assert_not_called()
+
     def test_review_dry_run_prepares_a_managed_task_without_starting(self):
         identity = {
             "harness": "codex", "harness_version": "codex fixture",
@@ -720,7 +738,7 @@ from importlib.resources import files
 from pathlib import Path
 import sqlite3
 import sys
-from devsquad.store import Store
+from devsquad.store import Store, SUPPORTED_SCHEMA_VERSION
 
 root = Path(sys.argv[1])
 root.mkdir(parents=True)
@@ -734,8 +752,9 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 15
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == SUPPORTED_SCHEMA_VERSION
     assert migrations.joinpath("015_experiment_evaluation_revisions.sql").is_file()
+    assert migrations.joinpath("016_objective_outcome_jobs.sql").is_file()
     attempt_columns = {row[1] for row in store.connection.execute("PRAGMA table_info(attempts)")}
     assert {"role", "account_pool_id", "profile_id", "profile_index"} <= attempt_columns
     columns = {row[1] for row in store.connection.execute("PRAGMA table_info(runs)")}

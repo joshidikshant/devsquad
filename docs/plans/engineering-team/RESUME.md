@@ -36,18 +36,29 @@ Antigravity externally updated to **1.2.14**: current doctor correctly labels
 its adapter unverified; the old 1.2.13 live status receipt is not a new-version
 proof. Recheck this during R6/R8 without broad MCP listings or UI bypass.
 
-Next is **R5**: red public tests for objective idempotent final outcomes from
-every terminal origin, including prelaunch failures/cancel, worker failures,
-host/headless completion and crash/replay. Preserve missingness and failed
-attempt/rework credit. Use a durable projection outbox with guarded migration
-if needed; do not rewrite historical final outcomes or retroactively assign
-legacy runs. Then expose a thin public trial controller reusing schema-14
-assignment authority and R3 eligibility. Replace the fixture's private
-preparation monkeypatch/manual outcome import with that actual public path.
-Freeze full spec/cases/splits/profiles/budgets before either arm, enforce budget
-from durable attempts under the existing reservation fence, and keep automatic
-experimentation disabled. Continue R6 UX/readiness/generated-reference checks,
-R7/C1 and final R8 acceptance; whole-plan completion is not claimed.
+**R5 is source-in-progress**, not accepted/installed. The new schema-16
+projection outbox opts in new public runs without rewriting legacy history.
+Terminal transitions and targeted status/result/report/evaluation replay
+generate one final outcome; failures, repairs, findings, fenced lead
+attestations and late corrections remain separate. Corrupt pending evidence
+does not block unrelated runs. The explicit public `trial` / `trial_start`
+path now uses the schema-14 assignment fence; the fixture no longer patches
+preparation or manually imports finals. Experiment reservations share a
+durable all-attempt call cap and a declaration-time wall deadline; automatic
+experimentation stays off. 88 affected outcome/service/CLI/store tests passed
+in 61.236s (before the added deadline test/lead-repair attribution refinement).
+Public concurrent-budget and promotion → new-run binding → held-out regression
+→ rollback tests pass. See `evidence/R5-public-integration-partial-2026-10-02.json`.
+
+Next: finish the frozen learning/lifecycle affected gate currently running
+(exec session 99417; do not start a second copy or edit source/tests during
+it). Then full core gate with explicit offline Python 3.12 build interpreter,
+independent exact-patch review, schema-16 safe installer/installed transport
+recheck and R5 closure. Current production installation/ledger is still the
+accepted R4 **schema 15**; never open it with source Service while schema-16
+work is incomplete. Preserve failed red/intermediate probes truthfully.
+Continue R6 UX/readiness/generated-reference checks, R7/C1 and final R8
+acceptance after R5; whole-plan completion is not claimed.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.

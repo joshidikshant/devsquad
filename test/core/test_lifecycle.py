@@ -174,7 +174,7 @@ class ProfileLifecycleTest(unittest.TestCase):
         candidate_succeeds=True,
     ):
         # Positive authority comes from real workers and public completion,
-        # never SQL-terminalized empty runs. The assignment seam remains R5.
+        # never SQL-terminalized empty runs or manually imported final outcomes.
         from experiment_runtime_fixture import ExperimentRuntimeFixture
 
         fixture = ExperimentRuntimeFixture(

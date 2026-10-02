@@ -98,6 +98,31 @@ The lower-level automation path remains available. A hand-written task must
 name an existing Git repository and committed refs. It may use either committed
 routing files or an exact embedded registry/policy pair.
 
+New public runs automatically record one final learning outcome, including
+failed attempts and repairs. `squad report --project "$PWD" --json` includes
+these without manual imports. Later feedback remains an explicit late
+correction via `squad outcome add RUN --file correction.json --json`; it never
+overwrites the original final outcome. Historical missing outcomes stay
+missing rather than being manufactured during an upgrade.
+
+For an explicitly reviewed, predeclared comparison, start each bounded arm:
+
+```bash
+squad trial --experiment experiment.json --case CASE --arm control \
+  --task-file control-task.json --idempotency-key trial-CASE-control --wait --json
+squad trial --experiment experiment.json --case CASE --arm candidate \
+  --task-file candidate-task.json --idempotency-key trial-CASE-candidate --wait --json
+```
+
+This advanced automation command requires the v2 declaration (case/split,
+input and concrete execution hashes, gates, budgets) before either arm. Use
+branch reviews for reviewer comparisons or issue delivery for implementer
+comparisons. All arms share the declared reservation/wall budget; failed and
+fallback slots count. Automatic experimentation and promotion remain off.
+The same `policy evaluate`, profile qualification and reviewed binding-change
+commands operate on the resulting saved-run evidence; missing arms cannot
+create a completed pair or authorize promotion.
+
 ```bash
 squad start --task-file task.json --idempotency-key issue-123 --json
 squad status RUN_ID --json

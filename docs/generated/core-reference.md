@@ -39,6 +39,7 @@ Regenerate with `python3 scripts/generate-core-reference.py`; verify with
 - `squad setup [-h] [--host {codex,claude-code,antigravity,grok}] [--dry-run] [--json] [--project-dir PROJECT_DIR] [--squad-executable SQUAD_EXECUTABLE]`
 - `squad start [-h] --task-file TASK_FILE --idempotency-key IDEMPOTENCY_KEY [--supersedes-run SUPERSEDES_RUN] [--wait] [--json] [--runtime-dir RUNTIME_DIR]`
 - `squad status [-h] [--json] [--runtime-dir RUNTIME_DIR] run`
+- `squad trial [-h] --experiment EXPERIMENT --case CASE --arm {control,candidate} --task-file TASK_FILE --idempotency-key IDEMPOTENCY_KEY [--wait] [--json] [--runtime-dir RUNTIME_DIR]`
 
 ## Common command examples
 

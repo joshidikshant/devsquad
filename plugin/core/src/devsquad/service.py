@@ -892,6 +892,15 @@ class Service:
             if store.remaining_wall_seconds(run_id) == 0:
                 raise BudgetExhausted("run wall-time budget is exhausted in preflight")
             package, digest = self._freeze_package()
+            if submitted.get("trial") is not None:
+                from .experiment_provenance import assignment_for
+                from .store import git_common_dir
+                trial = submitted["trial"]
+                snapshot["experiment_spec"] = trial["experiment"]
+                snapshot["experiment_assignment"] = assignment_for(
+                    trial["experiment"], trial["case_id"], trial["arm"],
+                    project_common_dir=str(git_common_dir(Path(task["project"]["repo_path"]))),
+                )
             version = store.complete_preparation(
                 run_id,
                 fencing_token,
@@ -945,6 +954,7 @@ class Service:
         idempotency_key: str,
         supersedes_run_id: str | None = None,
         *,
+        trial: dict[str, Any] | None = None,
         _internal_fake_delay: float | None = None,
         _internal_review_fixture: dict[str, Any] | None = None,
         _internal_lead_fixture: dict[str, Any] | None = None,
@@ -952,6 +962,25 @@ class Service:
         _internal_decision_fixture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         validate_task(task, require_existing_repo=True)
+        if trial is not None:
+            from .learning import validate_experiment
+            from .experiment_provenance import assignment_for
+            from .store import git_common_dir
+            if not isinstance(trial, dict) or set(trial) != {"experiment", "case_id", "arm"}:
+                raise ContractError("trial requires an explicit experiment, case and arm")
+            experiment = validate_experiment(trial["experiment"])
+            if experiment["schema_version"] != 2:
+                raise ContractError("public trials require a v2 predeclared experiment")
+            if (experiment["budget"]["max_cases"] > 100
+                    or experiment["budget"]["max_worker_invocations"] > 1000
+                    or experiment["budget"]["wall_seconds"] > 3600):
+                raise ContractError("public trial exceeds the bounded controller limits")
+            if ((experiment["variable"]["role"] == "reviewer" and task["workflow"] != "branch-review")
+                    or (experiment["variable"]["role"] == "implementer" and task["workflow"] != "issue-delivery")):
+                raise ContractError("trial role requires a frozen review candidate or implementation baseline")
+            common_dir = str(git_common_dir(Path(task["project"]["repo_path"])))
+            assignment_for(experiment, trial["case_id"], trial["arm"], project_common_dir=common_dir)
+            trial = json.loads(canonical_json({**trial, "experiment": experiment}))
         if _internal_fake_delay is not None and _internal_review_fixture is not None:
             raise ContractError("internal lifecycle fixtures are mutually exclusive")
         if _internal_lead_fixture is not None and _internal_fake_delay is not None:
@@ -966,6 +995,8 @@ class Service:
                 "internal decision fixture requires public preflight",
             )
         submitted = {"task": task, "supersedes_run_id": supersedes_run_id}
+        if trial is not None:
+            submitted["trial"] = trial
         if _internal_fake_delay is not None:
             submitted["_internal_fake_delay"] = _internal_fake_delay
         if _internal_review_fixture is not None:
@@ -980,7 +1011,7 @@ class Service:
             submitted["_internal_decision_fixture"] = _internal_decision_fixture
         store = self._store()
         try:
-            claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}")
+            claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}", objective_outcome=True)
             if not claim.created:
                 return {"run_id": claim.run_id, "state": store.run(claim.run_id)["state"], "created": False}
             launch, error = self._continue_preparation(
@@ -993,6 +1024,13 @@ class Service:
         version, package, digest = launch
         self._spawn_daemon(claim.run_id, version, package, digest)
         return {"run_id": claim.run_id, "state": "queued", "created": True}
+
+    def trial_start(self, experiment: dict[str, Any], case_id: str, arm: str,
+                    task: dict[str, Any], idempotency_key: str, **fixtures) -> dict[str, Any]:
+        """Explicit one-arm controller; no automatic dispatch or promotion."""
+        return self.start(task, idempotency_key,
+                          trial={"experiment": experiment, "case_id": case_id, "arm": arm},
+                          **fixtures)
 
     def _spawn_daemon(self, run_id: str, expected_version: int, package: Path, digest: str) -> int:
         command = [sys.executable, "-P", "-m", "devsquad.detached", "--database", str(self.database), "--artifacts", str(self.artifacts), "--run-id", run_id, "--expected-version", str(expected_version), "--package-digest", digest]
@@ -1233,6 +1271,7 @@ class Service:
     def status(self, run_id: str) -> dict[str, Any]:
         store = self._store()
         try:
+            store.project_final_outcome(run_id)
             run, attempt, handoff = store.status_snapshot(run_id)
             active=attempt if attempt and attempt.get("status") in {"reserved","running","cancelling","ownership_ambiguous"} else None
             if run["state"] == "blocked":
@@ -1286,6 +1325,7 @@ class Service:
     def result(self, run_id: str) -> dict[str, Any]:
         store = self._store()
         try:
+            store.project_final_outcome(run_id)
             run, artifacts = store.result_snapshot(run_id)
             if run["state"] not in TERMINAL_STATES:
                 return {"run_id":run_id,"ready":False,"state":run["state"],"artifacts":[]}
