@@ -17,12 +17,12 @@
   "next_work_package": "R3b.2",
   "partial_implementation_checkpoint": {
     "recorded_on": "2026-10-01",
-    "baseline_revision": "a22b949",
+    "baseline_revision": "6d2e0ba",
     "status": "partial",
-    "artifact": "evidence/R3b2-eligibility-partial-2026-10-01.json",
-    "scope": "Reader full gate passed at a4a87fd; schema-15 explicit revisions and shared lifecycle eligibility implemented with focused public fixtures; no install or provider calls",
-    "next_action": "Installed schema-15 runtime is refreshed through the tested Claude framing/identity and detached auth repairs. Real Claude host handoff, Grok operation and Gemini CLI/MCP pass. Genuine managed Claude implementation succeeded, but the reviewer died without a receipt. Continue the saved G4 correction run 288ee6f9-f503-421a-b81a-d50ee0cf44d8 through independent review, mandatory tests and fenced acceptance, then integrate and refresh.",
-    "limitations": "R4 catalog/quota, R5 public controller/outcomes, remaining R6 UX and R7 Council remain open. Managed implementation/review/tests acceptance is pending. Gemini CLI/MCP works; IDE UI permission is denied. Jev remains off; no paid API fallback or reset use authorized."
+    "artifact": "evidence/R8-installed-workflows-2026-10-01.json",
+    "scope": "Installed schema-15 runtime through 6d2e0ba; accepted real Claude-to-independent-Codex 477-test delivery, complete combined review and integration, actual Claude handoff/Grok operation and final Gemini CLI/MCP recheck",
+    "next_action": "Audit R3b.2/R3c closure against SOL-REVIEW-FOLLOWUP, then continue R4 catalog/quota, R5 public trials/outcomes, remaining R6 UX and R7/C1. Do not repeat accepted runtime proofs or unchanged full gates.",
+    "limitations": "Whole-plan closure is not claimed. Required desktop UI proofs remain unverified; Antigravity IDE permission is denied. Grok/Gemini MCP status does not prove automatic writer/reviewer roles. Jev remains off with its one-request allowance spent; no paid API fallback or reset use authorized."
   },
   "planning_checkpoint": {
     "recorded_on": "2026-10-01",
@@ -47,9 +47,9 @@
     {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "in_progress", "milestones": ["M6"], "depends_on": [], "items": ["F3"], "evidence": "evidence/R3b2-eligibility-partial-2026-10-01.json", "checkpoint": "R3a verified at 672e383; R3b.1 reader and failed-output repair passed 427-test full gate at a4a87fd. R3b.2 schema-15 explicit revisions and shared lifecycle eligibility have six new passing tests. Real public offline lifecycle/learning positives replace SQL-terminalized runs without lowering pair gates. Latest 23-test focused gate passes. Stale fallback/rollback, race, revision/CLI and upgraded legacy public proof plus full integration/independent audit remain open. R3 is not closed."},
     {"id": "R4", "title": "Normal routing, catalog lifecycle and quota", "status": "pending", "milestones": ["M6", "M7"], "depends_on": ["R1", "R2", "R3"], "items": ["F4", "G2"]},
     {"id": "R5", "title": "Public saved-run outcomes and bounded experiments", "status": "pending", "milestones": ["M6"], "depends_on": ["R3", "R4"], "items": ["G1"]},
-    {"id": "R6", "title": "Normal terminal experience and readiness", "status": "pending", "milestones": ["M5", "M7"], "depends_on": ["R1", "R2", "R4", "R5"], "items": ["G3", "G4"]},
+    {"id":"R6","title":"Normal terminal experience and readiness","status":"in_progress","milestones":["M5","M7"],"depends_on":["R1","R2","R4","R5"],"items":["G3","G4"],"evidence":"evidence/R8-installed-workflows-2026-10-01.json","checkpoint":"G4 discovery verified by accepted native 477-test delivery and combined review; integrated and installed at 6d2e0ba. Remaining UX and R4/R5 dependencies stay open."},
     {"id": "R7", "title": "Complete Council within existing runner", "status": "pending", "milestones": ["C1"], "depends_on": ["R1", "R2", "R3", "R4", "R5", "R6"], "items": ["G5"]},
-    {"id": "R8", "title": "Installed proofs, external gates and closure audit", "status": "pending", "milestones": ["M4", "M5", "M6", "M7", "C1"], "depends_on": ["R1", "R2", "R3", "R4", "R5", "R6"], "items": [], "note": "Core installed proofs may proceed before R7; full-delivery closure also requires R7. Auth/key-dependent subgates remain separately blocked."}
+    {"id":"R8","title":"Installed proofs, external gates and closure audit","status":"in_progress","milestones":["M4","M5","M6","M7","C1"],"depends_on":["R1","R2","R3","R4","R5","R6"],"items":[],"note":"Core installed proofs may proceed before R7; full-delivery closure also requires R7. Auth/key-dependent subgates remain separately blocked.","evidence":"evidence/R8-installed-workflows-2026-10-01.json","checkpoint":"Requested runtime slice passes: safe update, actual Claude handoff, accepted Claude-to-Codex 477-test workflow, Grok MCP and final Gemini CLI/MCP. Broader dependencies, desktop UI and full closure audit remain open."}
   ],
   "milestones": [
     {
@@ -124,7 +124,7 @@
       "status": "in_progress",
       "acceptance_section": "M3 — Ship a useful branch review",
       "open_review_items": [],
-      "review_resolution": "F1 source repair is verified under R1; affected installed-runtime refresh remains R8, so M3 is not reclosed yet.",
+      "review_resolution": "F1/R1 repair is now installed and the complete combined branch review is accepted with all checks passing. Milestone closure audit remains separate; old pending-install wording is superseded by R8-installed-workflows evidence.",
       "evidence": [
         {
           "kind": "implementation_checkpoint",
@@ -245,7 +245,7 @@
           "availability": "portable_redacted"
         }
       ],
-      "blocker": "Normal Claude Code provider login is required before the exact real-host handoff acceptance can run; SDK-labeled client evidence is not substituted for that live proof"
+      "blocker": "Claude authentication and actual CLI/MCP handoff now pass. Required desktop UI proofs remain unverified; Antigravity IDE control is permission-denied. Portable CLI proof is not substituted for desktop local Code-tab proof."
     },
     {
       "id": "M5",
@@ -254,7 +254,7 @@
       "status": "in_progress",
       "acceptance_section": "M5 — Deliver a bounded engineering change",
       "open_review_items": ["G4"],
-      "review_resolution": "F1/R1 and F2/R2 source/offline repairs are verified; R6 check coverage and R8 installed/live proof remain open.",
+      "review_resolution": "F1/R1 and F2/R2 repairs, G4 discovery, installed real Claude-to-independent-Codex 477-test delivery and complete combined review now pass. Whole M5 closure audit and broader R6 scope remain separate.",
       "evidence": [
         {
           "kind": "implementation_checkpoint",
@@ -311,7 +311,7 @@
           "availability": "tracked_tests"
         }
       ],
-      "blocker": "R1/R2 source repairs are verified; independent R6 normal-command check coverage remains. The genuine installed Claude-to-Codex delivery gate also requires normal Claude login; fixtures cannot substitute for that receipt."
+      "blocker": "Claude login, genuine delivery and G4 check coverage are no longer blockers. Remaining acceptance audit and broader R4/R5/R6 dependencies remain open; see installed-workflows evidence."
     },
     {
       "id": "M6",
@@ -490,7 +490,7 @@
           "availability": "portable_redacted"
         }
       ],
-      "blocker": "Independent R4/R6 normal-entry, readiness and check-discovery work remains. Final live surface and delivery receipts additionally require Claude login and renewed Grok authentication."
+      "blocker": "R4 catalog/quota, remaining R6 UX and desktop UI acceptance remain open. Actual Claude delivery/handoff, Grok MCP and Gemini CLI/MCP receipts pass; old login/expired-Grok blockers are superseded."
     }
   ],
   "extensions": [

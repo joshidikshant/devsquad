@@ -8,8 +8,8 @@ remain recoverable in Git; detailed receipts and failed gates stay in evidence.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.
-Source runtime repairs through `1781b89` are installed. The accepted G4
-candidate below is **integrated, not yet installed**; all five blob hashes
+Source runtime repairs and the accepted G4 candidate below are **integrated
+and installed at `6d2e0ba`**; all five blob hashes
 exactly match the accepted candidate. Local affected gate: 27 tests in 18.940s,
 plus 227 Bash assertions, generated-reference and diff checks passed.
 
@@ -38,17 +38,16 @@ integrity; 27 affected tests in 24.173s. Verified native Codex review is clean.
 
 ### Exact next action
 
-1. Both accepted runs and all artifact hashes are verified. Integration and
-   local affected/Bash/reference gates passed; do not repeat the full suite.
-   Never edit a frozen run/candidate/receipt.
-2. Checkpoint, safely refresh the immutable local installation offline using
-   existing Python 3.12.14 and MCP 2.2.0 wheelhouse; verify idempotence, drift,
-   pip check, doctor, matching host registrations and installed SDK tests.
-3. Run **one** bounded Gemini/Antigravity CLI/MCP status recheck against the
-   final installed launcher and accepted run. Do not repeat completed Grok or
-   Claude host proofs.
-4. Record final results/limits in backlog and installed evidence. Whole-plan
-   R3/R4–R7/C1 closure remains separate; use SOL-REVIEW-FOLLOWUP.md next.
+1. The user's three requested runtime actions are verified. Do not repeat
+   these accepted proofs or the unchanged full suite. Both exact packets and
+   artifact hashes are verified; never edit frozen evidence.
+2. Audit R3b.2/R3c closure against SOL-REVIEW-FOLLOWUP.md and the requirement
+   matrix, preserving existing reader/eligibility/compatibility repairs. Then
+   continue R4 catalog/quota, R5 public trials/outcomes, remaining R6 UX and
+   R7/C1 in dependency order. Whole-plan acceptance is not claimed.
+3. Desktop UI proofs remain separate. Antigravity IDE control is permission-
+   denied; do not bypass it or substitute a CLI receipt. Grok/Gemini MCP status
+   calls do not prove automatic writer/reviewer adapters.
 
 Only one full core suite may run at a time; freeze source/tests while it runs.
 Use the tracked spawn-safe scripts/run-core-tests.py, never a stdin main.
@@ -58,7 +57,7 @@ use git-safety checkpoints, never stash. No goal is currently active.
 ## Current local installation and host proof
 
 Stable launcher: /Users/Dikshant/.local/bin/squad.
-Selected release: `0.1.0-py31214-68d542f6e8ea-mcp-a26bc88afbef`.
+Selected release: `0.1.0-py31214-01fad439adea-mcp-a26bc88afbef`.
 Python 3.12.14/MCP 2.2.0, schema 15; previous releases and private pre-upgrade
 SQLite backup retained. Source/plugin/installed payload drift is false.
 Upgrade defers for old active/recoverable runs, swaps without migration under
@@ -71,10 +70,12 @@ the lock, then lazily migrates with old-client write guards.
   backed up privately, login/settings preserved. Native grok-4.7-build actually
   called DevSquad status. This is not automatic Grok writer/reviewer proof.
 - Antigravity 1.2.13/Gemini 3.8 Flash Low actually called the same MCP status.
-  Existing project-only grant, plan/sandbox; final-install recheck remains.
+  Final-install recheck actually observed accepted run 360a4993, succeeded/31,
+  in 12.118s. Existing project-only status grant, plan/sandbox, no bypass.
   IDE UI permission was denied; do not bypass it.
-- Initial installed SDK gate: 22 passed/no skips; transport follow-up: 9 passed.
-  Final refreshed-install SDK gate still pending.
+- Initial installed SDK gate: 22 passed/no skips; final installed transport
+  gate: 9 passed in 2.803s, no skips. Reinstall unchanged, no payload drift,
+  pip check/doctor passed, all four host registrations ready/unchanged.
 
 ## Repairs and failure history to preserve
 
