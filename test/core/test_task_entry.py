@@ -856,7 +856,18 @@ class ManagedTaskEntryTest(unittest.TestCase):
         from devsquad.task_entry import discover_models as real_discover_models
         def discover_then_confirm_parent_exit(*arguments, **keywords):
             models = real_discover_models(*arguments, **keywords)
-            self.assertEqual(spawned["process"].wait(timeout=2), 0)
+            # Observe exit without wait/poll: the unreaped child reserves its
+            # PID while shared cleanup owns the TERM-ignoring descendant.
+            deadline = time.monotonic() + 2
+            observed = ""
+            while time.monotonic() < deadline:
+                observed = subprocess.run(["/bin/ps", "-p", str(spawned["process"].pid), "-o", "stat="],
+                                          text=True, capture_output=True, timeout=1).stdout.strip()
+                if observed.startswith("Z"):
+                    break
+                time.sleep(0.01)
+            self.assertTrue(observed.startswith("Z"), "provider parent did not exit before cleanup")
+            self.assertIsNone(spawned["process"].returncode)
             return models
         try:
             with (

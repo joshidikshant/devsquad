@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_package": "R6",
   "recorded_on": "2026-10-02",
-  "status": "baseline_full_passed_native_rejected_ownership_repair_pending",
+  "status": "ownership_repair_integrated_followup_final_full_install_pending",
   "base_revision": "8f2c1c6a7d9edfe7cc3d78ecbc59ce105be636b2",
   "integrated_checkpoints": [
     "dd709804e70e0791614319a9ae5c2597768d7318",
@@ -13,7 +13,8 @@
     "03124c79ba53cb1b12296bb554024605e4cadbc7",
     "22a4ed8ac85b95861f4ba9725ca729388b7a9f49",
     "31a8a68b59db3d0af136c5c18cb67fe5088c02b0",
-    "e7e9042cbf4d1416209cf39e0269f7fa85479f4c"
+    "e7e9042cbf4d1416209cf39e0269f7fa85479f4c",
+    "093ed0f397289bffe9ea249c10796cb436027f00"
   ],
   "contract": "SOL-REVIEW-FOLLOWUP R6/G3/G4; unchanged low-level MCP envelopes, fenced host disposition, Bash 3.2 and optional jq",
   "implemented": [
@@ -38,14 +39,17 @@
     {"revision": "22a4ed8a", "tests": 150, "seconds": 180.750, "failures": 0, "errors": 0, "scope": "Affected repair gate before final command-copyability edit"},
     {"revision": "22a4ed8a", "tests": 45, "seconds": 48.316, "failures": 0, "errors": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Final CLI/terminal repair checkpoint"},
     {"revision": "31a8a68b", "tests": 156, "seconds": 350.005, "skips": 0, "failures": 0, "errors": 0, "resource_warnings": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Expiry rejection and command round-trip repair, before final original-rejection-event crosscheck"},
-    {"revision": "e7e9042c", "tests": 19, "seconds": 19.207, "failures": 0, "errors": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Final original-rejection-event crosscheck; 13 negative audit-corruption subcases"}
+    {"revision": "e7e9042c", "tests": 19, "seconds": 19.207, "failures": 0, "errors": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Final original-rejection-event crosscheck; 13 negative audit-corruption subcases"},
+    {"revision":"093ed0f397289bffe9ea249c10796cb436027f00","tests":36,"seconds":11.250,"python":"accepted immutable3.12","resource_warnings":0,"failures":0,"errors":0,"bash_assertions":227,"generated_reference":"pass","diff_check":"pass","scope":"Unavailable capture/current ownership, kernel direct-child-only cleanup, retained exited zombie and TERM-ignoring descendant/EOF cleanup; exclusive Popen-reaping contract"},
+    {"revision":"093ed0f397289bffe9ea249c10796cb436027f00","tests":36,"seconds":11.364,"python":"3.14","resource_warnings":0,"failures":0,"errors":0,"scope":"Same affected ownership and native-discovery regression set"}
   ],
   "root_affected_gates": [
     {"command": "python3 -m unittest test_diagnostics test_terminal_ux test_installed_usability test_cli test_task_entry test_mcp test_handoff_store", "tests": 114, "seconds": 65.066, "optional_sdk_skips": 2, "failures": 0, "errors": 0, "scope": "Integrated first five checkpoints, before final catalog cleanup reuse"},
     {"command": "python3 -m unittest test_delivery_workflow test_delivery_identity_runtime test_handoff_service", "tests": 32, "seconds": 66.877, "failures": 0, "errors": 0},
     {"command": "python3 -m unittest test_task_entry test_installed_usability", "tests": 27, "seconds": 25.389, "skips": 0, "failures": 0, "errors": 0, "scope": "All six integrated checkpoints including final catalog cleanup reuse"},
     {"command": "python3 -m unittest test_terminal_ux test_cli test_handoff_store test_handoff_service", "tests": 61, "seconds": 55.963, "failures": 0, "errors": 0, "scope": "Integrated initial interrupted-finish repair and current-schema assertion; ResourceWarning strict"},
-    {"command": "python3 -m unittest test_handoff_store test_terminal_ux.TerminalUxTest.test_finish_retries_authoritative_expiry_rejection_with_exact_fresh_claim test_terminal_ux.TerminalUxTest.test_pending_finish_negative_leading_reason_round_trips_as_actual_cli", "tests": 19, "seconds": 7.183, "failures": 0, "errors": 0, "scope": "All recovery follow-ups including final exact original rejection audit; ResourceWarning strict"}
+    {"command": "python3 -m unittest test_handoff_store test_terminal_ux.TerminalUxTest.test_finish_retries_authoritative_expiry_rejection_with_exact_fresh_claim test_terminal_ux.TerminalUxTest.test_pending_finish_negative_leading_reason_round_trips_as_actual_cli", "tests": 19, "seconds": 7.183, "failures": 0, "errors": 0, "scope": "All recovery follow-ups including final exact original rejection audit; ResourceWarning strict"},
+    {"tests":7,"seconds":1.259,"python":"accepted immutable3.12","resource_warnings":0,"failures":0,"errors":0,"source_blobs_equivalent_to":"093ed0f397289bffe9ea249c10796cb436027f00","scope":"Root independent capture/currentNone, no protocol/false readiness, direct-child absence, bounded zombie authority and EOF descendant checks"}
   ],
   "failure_history": [
     "Readiness red baseline: nine tests, three failures and 17 subtest errors before implementation",
@@ -61,8 +65,9 @@
     "Independent 22a4ed8a follow-up: ten existing repair tests pass in 26.811s, but a lease expiring after claim acquisition and before submission creates a durable expired_claim rejection. A fresh own retry advances fence 2 to 3/version 16 to 17 yet the stable decision replays that old rejection indefinitely. Follow-up must preserve complete immutable rejection history while recovering only exact fresh guided authority",
     "Independent 22a4ed8a command-copyability edge: saved reason --deferred is printed as --reason --deferred and argparse rejects it. Fixed by 31a8a68b attached shell-quoted --reason= and actual command round-trip",
     "Follow-up red reproduction: two tests/3.845s, one failure and one error. Initial audit implementation reused a run_version for two events and failed uniqueness; consecutive atomic recovery/submitted versions repaired it before green checkpoint gates",
-    "Exact native audit44d0eecb found a high process-ownership defect: start_identity=None/current_identity=None/returncode=None permits group signaling; diagnostic callers use output/protocol without confirmed captured identity. Candidate explicitly rejected, failed/version22; isolated repair pending",
-    "Native required check ran66 tests/89.977s/OK but created nine undeclared cpython-314 bytecode files. Integrity correctly invalidated the check; subsequent reference not run. Corrected private invocation sets PYTHONDONTWRITEBYTECODE=1 without relaxing candidate integrity"
+    "Exact native audit44d0eecb found a high process-ownership defect: start_identity=None/current_identity=None/returncode=None permits group signaling; diagnostic callers use output/protocol without confirmed captured identity. Candidate explicitly rejected, failed/version22; repair093ed0f now integrated, exact follow-up pending",
+    "Native required check ran66 tests/89.977s/OK but created nine undeclared cpython-314 bytecode files. Integrity correctly invalidated the check; subsequent reference not run. Corrected private invocation sets PYTHONDONTWRITEBYTECODE=1 without relaxing candidate integrity",
+    "Ownership repair red: six regressions/1.216s expose baseline signal/read/send/false-authentication behavior. First conservative macOS3.12 repair refused known exited-parent descendant cleanup because waitid is unavailable; fixture child was removed. Exact bounded retained zombie-child anchor and EOF-before-reap contract restored this required cleanup without unsafe missing-capture signals"
   ],
   "baseline_full_gate": {
     "target_revision": "7130ee7689f8cc14efacb606bcbc4c05f373298c",

@@ -370,6 +370,354 @@ os._exit(0)
         signal_group.assert_not_called()
         process.stdout.close.assert_called_once()
 
+    def test_missing_capture_and_observation_never_authorize_group_signals(self):
+        process = mock.Mock(pid=987654, returncode=None, stderr=None)
+        with (
+            mock.patch.object(probe_process, "PROBE_CLEANUP_SECONDS", 0.05),
+            mock.patch.object(probe_process, "PROBE_TERM_GRACE_SECONDS", 0.01),
+            mock.patch.object(probe_process, "_probe_group_exists", return_value=True),
+            mock.patch.object(probe_process, "process_start_identity", return_value=None),
+            mock.patch.object(probe_process.os, "killpg") as signal_group,
+            self.assertRaises(ContractError),
+        ):
+            probe_process.close_probe(process, start_identity=None)
+        signal_group.assert_not_called()
+        process.wait.assert_not_called()
+        process.stdout.close.assert_called_once()
+
+    def test_known_capture_missing_observation_has_no_unproven_group_authority(self):
+        for returncode in (None, 0):
+            with self.subTest(returncode=returncode):
+                process = mock.Mock(pid=987654, returncode=returncode, stderr=None)
+                with (
+                    mock.patch.object(probe_process, "_probe_group_exists", return_value=True),
+                    mock.patch.object(probe_process, "process_start_identity", return_value=None),
+                    mock.patch.object(probe_process.os, "killpg") as signal_group,
+                    mock.patch.object(probe_process.os, "kill") as signal_child,
+                    self.assertRaises(ContractError),
+                ):
+                    probe_process.close_probe(process, start_identity="captured-start")
+                signal_group.assert_not_called()
+                signal_child.assert_not_called()
+                process.wait.assert_not_called()
+                process.stdout.close.assert_called_once()
+
+    def test_probe_does_not_read_output_without_captured_identity(self):
+        process = mock.Mock(pid=987654, returncode=None, stderr=None)
+        process.wait.return_value = 0
+        with (
+            mock.patch.object(diagnostics.subprocess, "Popen", return_value=process),
+            mock.patch.object(diagnostics, "capture_probe_identity", return_value=None),
+            mock.patch.object(diagnostics, "_close_probe") as close,
+            mock.patch.object(diagnostics.selectors, "DefaultSelector") as selector,
+            mock.patch.object(diagnostics.os, "read", return_value=b"") as read,
+            self.assertRaisesRegex(ContractError, "ownership is unavailable"),
+        ):
+            diagnostics._probe_output(["/fixture/claude", "auth", "status", "--json"],
+                                      project=self.project, environment=diagnostics._environment(self.home))
+        selector.assert_not_called()
+        read.assert_not_called()
+        process.wait.assert_not_called()
+        close.assert_called_once_with(process, start_identity=None)
+
+    def test_codex_auth_does_not_construct_or_send_protocol_without_identity(self):
+        process = mock.Mock(pid=987654, returncode=None, stderr=None)
+        with (
+            mock.patch.object(diagnostics.subprocess, "Popen", return_value=process),
+            mock.patch.object(diagnostics, "capture_probe_identity", return_value=None),
+            mock.patch.object(diagnostics, "_close_probe") as close,
+            mock.patch.object(diagnostics, "JsonLinePeer") as peer,
+            mock.patch.object(diagnostics, "receive_response", side_effect=[
+                {"result": {}}, {"result": {"account": {"type": "chatgpt"}, "requiresOpenaiAuth": True}},
+            ]) as receive,
+        ):
+            authentication = diagnostics._codex_auth("/fixture/codex", project=self.project,
+                                                    environment=diagnostics._environment(self.home))
+        self.assertIsNone(authentication["authenticated"])
+        self.assertFalse(authentication["subscription_supported"])
+        peer.assert_not_called()
+        receive.assert_not_called()
+        close.assert_called_once_with(process, start_identity=None)
+
+    def test_unidentified_live_child_is_reaped_without_group_signals(self):
+        ready = self.root / "unidentified-ready"
+        code = (
+            "import signal,time\nfrom pathlib import Path\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            f"Path({str(ready)!r}).touch()\n"
+            "time.sleep(60)\n"
+        )
+        process = diagnostics.subprocess.Popen(
+            [sys.executable, "-c", code], stdin=diagnostics.subprocess.DEVNULL,
+            stdout=diagnostics.subprocess.PIPE, stderr=diagnostics.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        try:
+            deadline = time.monotonic() + 2
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(ready.exists())
+            with (
+                mock.patch.object(probe_process, "process_start_identity", return_value=None),
+                mock.patch.object(probe_process.os, "killpg", wraps=os.killpg) as signal_group,
+            ):
+                probe_process.close_probe(process, start_identity=None)
+            signal_group.assert_not_called()
+            self.assertIsNotNone(process.returncode)
+            self.assertFalse(_live_group_exists(process.pid))
+            self.assertTrue(process.stdout.closed)
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=2)
+            process.stdout.close()
+
+    def test_missing_kernel_child_authority_denies_all_signals(self):
+        process = diagnostics.subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
+            stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
+        )
+        try:
+            with (
+                mock.patch.object(probe_process.os, "waitpid", side_effect=ChildProcessError),
+                mock.patch.object(probe_process.os, "killpg") as signal_group,
+                mock.patch.object(probe_process.os, "kill") as signal_child,
+                self.assertRaisesRegex(ContractError, "ownership is unavailable"),
+            ):
+                probe_process.close_probe(process, start_identity=None)
+            signal_group.assert_not_called()
+            signal_child.assert_not_called()
+            self.assertIsNone(process.returncode)
+            self.assertTrue(process.stdout.closed)
+        finally:
+            process.kill()
+            process.wait(timeout=2)
+            process.stdout.close()
+        self.assertFalse(_live_group_exists(process.pid))
+
+    def test_known_capture_without_waitid_falls_back_to_verified_child_only(self):
+        process = diagnostics.subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
+            stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
+        )
+        captured = process_start_identity(process.pid)
+        self.assertIsNotNone(captured)
+        try:
+            with (
+                mock.patch.object(probe_process.os, "waitid", None, create=True),
+                mock.patch.object(probe_process, "process_start_identity", return_value=None),
+                mock.patch.object(probe_process.os, "killpg", wraps=os.killpg) as signal_group,
+            ):
+                probe_process.close_probe(process, start_identity=captured)
+            signal_group.assert_not_called()
+            self.assertIsNotNone(process.returncode)
+            self.assertFalse(_live_group_exists(process.pid))
+            self.assertTrue(process.stdout.closed)
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=2)
+            process.stdout.close()
+
+    def test_ps_zombie_anchor_rejects_reparented_wrong_group_and_malformed_rows(self):
+        process = diagnostics.subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
+            stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
+        )
+        pid, parent = process.pid, os.getpid()
+        cases = [
+            (0, f"{pid} {parent + 1} {pid} Z\n"),
+            (0, f"{pid} {parent} {pid + 1} Z\n"),
+            (0, f"{pid + 1} {parent} {pid} Z\n"),
+            (0, f"{pid} {parent} {pid} S\n"),
+            (0, f"{pid} {parent} {pid}\n"),
+            (0, f"{pid} {parent} {pid} Z\n{pid} {parent} {pid} Z\n"),
+            (0, "private-banner-token\n"),
+            (0, "x" * 1025),
+            (1, f"{pid} {parent} {pid} Z\n"),
+        ]
+        try:
+            for code, output in cases:
+                with self.subTest(code=code, output=output[:100]):
+                    with (
+                        mock.patch.object(probe_process.os, "waitid", None, create=True),
+                        mock.patch.object(probe_process.subprocess, "run", return_value=mock.Mock(returncode=code, stdout=output)) as inventory,
+                        mock.patch.object(probe_process.os, "killpg") as signal_group,
+                    ):
+                        self.assertFalse(probe_process._retained_child_anchor(process, deadline=time.monotonic() + 1))
+                    signal_group.assert_not_called()
+                    self.assertLessEqual(inventory.call_args.kwargs["timeout"], 0.5)
+                    self.assertEqual(set(inventory.call_args.kwargs["env"]), {"HOME", "USER", "PATH"})
+            for error in (OSError, diagnostics.subprocess.TimeoutExpired("/bin/ps", 0.5)):
+                with self.subTest(error=type(error).__name__):
+                    with (
+                        mock.patch.object(probe_process.os, "waitid", None, create=True),
+                        mock.patch.object(probe_process.subprocess, "run", side_effect=error),
+                    ):
+                        self.assertFalse(probe_process._retained_child_anchor(process, deadline=time.monotonic() + 1))
+        finally:
+            process.kill()
+            process.wait(timeout=2)
+            process.stdout.close()
+
+    def test_cleanup_reap_lock_contention_cannot_exceed_deadline_or_signal(self):
+        process = diagnostics.subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
+            stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
+        )
+        process._waitpid_lock.acquire()
+        started = time.monotonic()
+        try:
+            with (
+                mock.patch.object(probe_process, "PROBE_CLEANUP_SECONDS", 0.05),
+                mock.patch.object(probe_process.os, "killpg") as signal_group,
+                mock.patch.object(probe_process.os, "kill") as signal_child,
+                self.assertRaisesRegex(ContractError, "deadline expired"),
+            ):
+                probe_process.close_probe(process, start_identity=None)
+            signal_group.assert_not_called()
+            signal_child.assert_not_called()
+            self.assertLess(time.monotonic() - started, 0.5)
+            self.assertTrue(process.stdout.closed)
+        finally:
+            process._waitpid_lock.release()
+            process.kill()
+            process.wait(timeout=2)
+            process.stdout.close()
+
+    def test_probe_eof_retains_exited_parent_until_owned_descendant_cleanup(self):
+        record = self.root / "eof-child.json"
+        code = (
+            "import json,os,signal,time\nfrom pathlib import Path\n"
+            f"import sys\nsys.path.insert(0, {str(ROOT / 'plugin/core/src')!r})\n"
+            "from devsquad.supervisor import process_start_identity\n"
+            "read_ready,write_ready=os.pipe()\n"
+            "if os.fork()==0:\n"
+            "    os.close(read_ready)\n"
+            "    os.dup2(os.open(os.devnull,os.O_WRONLY),1)\n"
+            "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            f"    Path({str(record)!r}).write_text(json.dumps({{'pid':os.getpid(),'start':process_start_identity(os.getpid())}}))\n"
+            "    os.write(write_ready,b'r')\n    os.close(write_ready)\n    time.sleep(60)\n    os._exit(0)\n"
+            "os.close(write_ready)\nos.read(read_ready,1)\nos.close(read_ready)\n"
+            "print('codex-cli 0.159.2',flush=True)\nos._exit(0)\n"
+        )
+        captured_processes = []
+        real_spawn, real_close = diagnostics.subprocess.Popen, diagnostics._close_probe
+        def spawn(*args, **kwargs):
+            process = real_spawn(*args, **kwargs)
+            captured_processes.append(process)
+            return process
+        def close(process, **kwargs):
+            self.assertIsNone(process.returncode, "probe reaped its ownership anchor before cleanup")
+            real_close(process, **kwargs)
+        try:
+            with (
+                mock.patch.object(diagnostics.subprocess, "Popen", side_effect=spawn),
+                mock.patch.object(diagnostics, "_close_probe", side_effect=close),
+            ):
+                code, output = diagnostics._probe_output([sys.executable, "-c", code],
+                    project=self.project, environment=diagnostics._environment(self.home))
+            self.assertEqual((code, output.strip()), (0, "codex-cli 0.159.2"))
+            self.assertFalse(_live_group_exists(captured_processes[0].pid))
+        finally:
+            child = json.loads(record.read_text()) if record.exists() else None
+            if child and process_start_identity(child["pid"]) == child["start"]:
+                try:
+                    os.kill(child["pid"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if captured_processes:
+                process = captured_processes[0]
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=2)
+                process.stdout.close()
+
+    def test_unidentified_descendant_cleanup_is_unconfirmed_without_group_signals(self):
+        record = self.root / "unidentified-child.json"
+        code = (
+            "import json,os,signal,time\nfrom pathlib import Path\n"
+            f"import sys\nsys.path.insert(0, {str(ROOT / 'plugin/core/src')!r})\n"
+            "from devsquad.supervisor import process_start_identity\n"
+            "read_ready,write_ready=os.pipe()\n"
+            "if os.fork()==0:\n"
+            "    os.close(read_ready)\n"
+            "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            f"    Path({str(record)!r}).write_text(json.dumps({{'pid':os.getpid(),'start':process_start_identity(os.getpid())}}))\n"
+            "    os.write(write_ready,b'r')\n    os.close(write_ready)\n    time.sleep(60)\n    os._exit(0)\n"
+            "os.close(write_ready)\nos.read(read_ready,1)\nos.close(read_ready)\ntime.sleep(60)\n"
+        )
+        process = diagnostics.subprocess.Popen(
+            [sys.executable, "-c", code], stdin=diagnostics.subprocess.DEVNULL,
+            stdout=diagnostics.subprocess.PIPE, stderr=diagnostics.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        try:
+            deadline = time.monotonic() + 2
+            while not record.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(record.exists())
+            with (
+                mock.patch.object(probe_process, "process_start_identity", return_value=None),
+                mock.patch.object(probe_process.os, "killpg", wraps=os.killpg) as signal_group,
+                self.assertRaisesRegex(ContractError, "cleanup unconfirmed"),
+            ):
+                probe_process.close_probe(process, start_identity=None)
+            signal_group.assert_not_called()
+            self.assertIsNotNone(process.returncode)
+            self.assertTrue(_live_group_exists(process.pid))
+            self.assertTrue(process.stdout.closed)
+        finally:
+            child = json.loads(record.read_text()) if record.exists() else None
+            if child and process_start_identity(child["pid"]) == child["start"]:
+                try:
+                    os.kill(child["pid"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=2)
+            process.stdout.close()
+            deadline = time.monotonic() + 2
+            while _live_group_exists(process.pid) and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertFalse(_live_group_exists(process.pid))
+
+    def test_doctor_unidentified_auth_is_unknown_and_every_owned_parent_is_absent(self):
+        self.codex()
+        self.install("claude", response={"loggedIn": True, "authMethod": "claude.ai"})
+        processes = []
+        real_spawn, real_capture = diagnostics.subprocess.Popen, diagnostics.capture_probe_identity
+        def spawn(*args, **kwargs):
+            process = real_spawn(*args, **kwargs)
+            processes.append(process)
+            return process
+        def capture(process):
+            return real_capture(process) if process.args[-1] == "--version" else None
+        with (
+            mock.patch.object(diagnostics.subprocess, "Popen", side_effect=spawn),
+            mock.patch.object(diagnostics, "capture_probe_identity", side_effect=capture),
+            mock.patch.object(diagnostics, "JsonLinePeer") as peer,
+        ):
+            report = self.report()
+        peer.assert_not_called()
+        self.assertFalse(report["ready"])
+        self.assertFalse(report["adapter_ready"])
+        for name in ("codex", "claude"):
+            row = self.row(report, name)
+            self.assertTrue(row["supported"])
+            self.assertIsNone(row["authenticated"])
+            self.assertFalse(row["ready"])
+        for process in processes:
+            self.assertIsNotNone(process.returncode)
+            self.assertFalse(_live_group_exists(process.pid))
+            if process.stdout is not None:
+                self.assertTrue(process.stdout.closed)
+
     def test_missing_group_is_confirmed_before_reap_without_signaling_stale_pid(self):
         process = mock.Mock(pid=987654, returncode=0, stderr=None)
         with (

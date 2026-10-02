@@ -74,8 +74,18 @@ Exact immutable R6 candidate: `7130ee7689f8cc14efacb606bcbc4c05f373298c`.
 Native independent audit `44d0eecb-b5da-4c09-b1e1-c38b0d1d09ca` is explicitly
 **rejected**, failed/version22. Verified Codex0.159.2/gpt-6.1-sol/low found P1
 `r6-probe-ownership-unavailable`: missing captured/current start identities
-permit group signals and diagnostic protocol/output use. Readiness owns the
-isolated fail-closed repair from7130ee7; no Council network probe ran. Diff/Bash
+permit group signals and diagnostic protocol/output use. Repair `093ed0f397289bffe9ea249c10796cb436027f00`
+is now integrated: missing capture blocks reads/peer/send and all group signals;
+only kernel-confirmed direct children are stopped/reaped. Surviving descendants
+without authority remain cleanup-unconfirmed. Known missing-current identity
+requires a retained unreaped waitid or exact bounded zombie PID/PPID/PGID anchor
+under the Popen reap lock; fake/reaped/live-ps/wrong-parent/wrong-group rows fail
+closed. EOF preserves the child PID through cleanup. No ABI additions; helper
+requires exclusive Popen reaping, never an external waitpid/SIGCHLD reaper.
+Six red baseline regressions/1.216s; accepted Python3.12 strict36/11.250s and
+Python3.14 strict36/11.364s pass; root seven/1.259s with exact matching blobs,
+Bash/reference/diff green. No Council network
+probe ran. Diff/Bash
 checks passed, but the required66-test command (89.977s/OK) was **invalidated**
 by undeclared bytecode; reference was not run. The private invocation now sets
 PYTHONDONTWRITEBYTECODE=1; candidate integrity was not relaxed. Exact packet
@@ -85,8 +95,9 @@ The one frozen baseline full gate completed successfully, exec86382:
 **554 tests/645.034s**, two optional SDK skips, zero failures/errors/unraisable;
 UTC/monotonic645.167s agree. RootHEAD32b94d6 source/tests/scripts are equivalent
 to7130ee7. This is a baseline pass, not proof of the later ownership repair.
-No full suite/native run remains active. Next integrate the ownership repair,
-run affected regressions and a narrow exact follow-up audit; install only after
+No full suite/native run remains active. Next save this ownership integration
+after root affected tests/Bash, then run one narrow exact follow-up audit and
+the prepared bounded nongenerating resolver-socket diagnostic. Install only after
 final frozen/native acceptance. Production remains accepted R5/schema16.
 R7 Council remains in isolated `r7-council`; its controlled stage flow is
 partial. Its source is checkpointed at `42979ba4` with 21 Council tests and

@@ -53,8 +53,11 @@ def _probe_output(
         argv, cwd=project, env=environment, stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True,
     )
-    start_identity = capture_probe_identity(process)
+    start_identity = None
     try:
+        start_identity = capture_probe_identity(process)
+        if start_identity is None:
+            raise ContractError("diagnostic process ownership is unavailable")
         assert process.stdout is not None
         chunks = bytearray()
         with selectors.DefaultSelector() as selector:
@@ -69,12 +72,15 @@ def _probe_output(
                 chunks.extend(chunk)
                 if len(chunks) > MAX_PROBE_BYTES:
                     raise ContractError("diagnostic probe exceeds byte bound")
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
+        if deadline - time.monotonic() <= 0:
             raise TimeoutError("diagnostic probe timed out")
-        return process.wait(timeout=remaining), chunks.decode("utf-8")
+        output = chunks.decode("utf-8")
     finally:
+        # Retain the direct child's PID until group cleanup is confirmed;
+        # waiting here first would discard the exited-parent ownership anchor.
         _close_probe(process, start_identity=start_identity)
+    assert process.returncode is not None
+    return process.returncode, output
 
 
 def _resolve_adapter(
@@ -170,6 +176,8 @@ def _codex_auth(binary: str, *, project: Path, environment: dict[str, str]) -> d
             bufsize=1, start_new_session=True,
         )
         start_identity = capture_probe_identity(process)
+        if start_identity is None:
+            raise ContractError("diagnostic process ownership is unavailable")
         assert process.stdin is not None and process.stdout is not None
         peer = JsonLinePeer(process.stdout, process.stdin, max_frame_bytes=MAX_PROBE_BYTES)
         peer.send(initialize_request(1))
