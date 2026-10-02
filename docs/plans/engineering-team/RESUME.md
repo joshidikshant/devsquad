@@ -94,14 +94,40 @@ repaired by the shared bounded helper; `03124c79` has 106 affected tests/
 found a real P1: interruption after guided finish acquires its claim but before
 completion leaves no saved claim for retry; initial-only refuses it even after
 expiry. A controlled offline reproduction confirms this, not a usage timeout.
-The terminal agent is repairing durable exact intent/claim recovery without
-app-claim takeover or changed disposition. Integrate the repair, then launch
-one frozen full gate and exact R6 audit. No native/full gate or production
-installation change has started for this candidate.
+Repair checkpoint `22a4ed8a` is now integrated: the canonical decision and exact
+packet hash commit atomically with the claim. Live identical retries preserve
+the claim; expired identical retries acquire a fresh fence only with the latest
+matching durable terminal marker. App claims (including the same owner name),
+changed decisions, corruption, cancellation and stale/new handoff races fail
+closed. Saved submissions resume normally; Next commands are copyable. Agent
+gates: 150 affected tests/180.750s and final 45 CLI/UX tests/48.316s; Bash 227,
+reference and diff checks pass. Its first expanded gate exposed only an old
+isolated bf3 schema-15 test expectation; root already expected 16. Historical
+schema-four fixture checks are retained with the current supported-version
+assertion. Root's integrated 61 terminal/CLI/store/handoff tests pass in
+55.963s with ResourceWarning strict. Independent follow-up passed ten existing
+repair tests/26.811s but found two edge cases: an `expired_claim` rejection
+poisons identical retry even after its own fresh fence, and a reason beginning
+with `--` makes the emitted separate `--reason` argument invalid. The terminal
+agent owns the narrow follow-up: preserve the full rejected row canonically in
+append-only audit history before a gated operational-row recovery; keep all
+ordinary app replay rules unchanged. Attach the quoted reason with `--reason=`.
+Integrate/review/test this follow-up before one frozen full suite and exact
+native R6 audit. No full/native gate has started. Production remains accepted
+R5/schema16.
 R7 Council remains in isolated `r7-council`; its controlled stage flow is
-partial. Default-deny macOS own-evidence/peer-ledger denial and native binary
-version probes are boundary mechanics, not a live Council receipt. No new
-native Council generation has been made. Preserve all attached worktrees.
+partial. Its source is checkpointed at `42979ba4` with 21 Council tests and
+67 shared-contract tests (two optional SDK skips), Bash/reference/diff gates.
+Default-deny macOS own-evidence/peer-ledger denial and native bootstrap/catalog
+probes are boundary mechanics, not a live Council receipt. Native HTTPS,
+reserved-launch cancellation, comparison and final acceptance remain open.
+A controlled public-start/actual-worker scheduling-barrier reproduction proves
+the immutable installed R5/schema16 client can acquire a Council headless
+handoff that the new client rejects, stranding its completed lead. Both stores
+were authoritatively schema16; temporary runs were cancelled and owned worker
+PIDs confirmed absent. The Council agent owns a minimal schema17 compatibility
+epoch and old-client/active-upgrade tests. No production edit or new native
+Council generation has been made. Preserve all attached worktrees.
 
 Desktop control worked for scoped inspection. Claude's local Code tab selected only this
 DevSquad project on `codex/engineering-team`, with an empty prompt; no proof

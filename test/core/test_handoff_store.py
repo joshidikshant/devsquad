@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 from devsquad.store import (
     ConflictError,
     HandoffClaim,
+    SUPPORTED_SCHEMA_VERSION,
     Store,
     request_hash,
 )
@@ -197,7 +198,7 @@ class HandoffStoreTest(unittest.TestCase):
         self.addCleanup(upgraded.close)
         self.assertEqual(
             upgraded.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],
-            16,
+            SUPPORTED_SCHEMA_VERSION,
         )
         tables = {
             row[0]

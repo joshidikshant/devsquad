@@ -5,11 +5,13 @@ import copy
 import io
 import json
 import os
+import shlex
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -20,7 +22,7 @@ from devsquad import cli
 from devsquad import detached
 from devsquad.contracts import ContractError
 from devsquad.service import Service
-from devsquad.store import ConflictError, Store
+from devsquad.store import ConflictError, Store, canonical_json, request_hash
 from devsquad.task_entry import build_managed_task
 
 
@@ -61,7 +63,7 @@ class TerminalUxTest(unittest.TestCase):
             }}
             if task["workflow"] == "issue-delivery":
                 fixtures["_internal_implementation_fixture"] = {
-                    "writes": [{"path": "app.py", "content": "VALUE = 2\n"}], "delay_seconds": 0,
+                    "iterations": [{"writes": [{"path": "app.py", "content": f"VALUE = {value}\n"}], "delay_seconds": 0} for value in (2, 3, 4)],
                 }
             return original_start(task, *args, **fixtures)
         argv = [workflow]
@@ -117,6 +119,11 @@ class TerminalUxTest(unittest.TestCase):
         for workflow in ("review", "fix"):
             with self.subTest(workflow=workflow):
                 run = self.normal_run(workflow, workflow)
+                code, output, errors = self.invoke(["status", run])
+                self.assertEqual((code, errors), (0, ""), output)
+                next_command = next(line.removeprefix("Next: ") for line in output.splitlines() if line.startswith("Next: "))
+                self.assertEqual(shlex.split(next_command), ["squad", "finish", run, "--accept", "--reason", "your assessment of the saved evidence"])
+                self.assertIn("Guidance: use --reject or --revise", output)
                 code, output, errors = self.invoke(["finish", run, "--accept", "--reason", "Reviewed exact evidence."])
                 self.assertEqual((code, errors), (0, ""), output)
                 self.assertIn("succeeded", output)
@@ -138,6 +145,200 @@ class TerminalUxTest(unittest.TestCase):
             with mock.patch("devsquad.store._authoritative_now", return_value=datetime.now(timezone.utc) + timedelta(seconds=advance)):
                 with self.assertRaisesRegex(ConflictError, "claim"):
                     self.service.finish(run, "reject", "Another claim owns the packet.")
+
+    def interrupt_finish(self, run, *, service=None, reason="Reviewed exact evidence."):
+        service = service or self.service
+        captured = {}
+        def interrupt(run_id, claim, decision):
+            captured.update(claim=claim, decision=decision)
+            raise KeyboardInterrupt
+        with mock.patch.object(service, "handoff_complete", side_effect=interrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                service.finish(run, "accept", reason)
+        self.assertEqual(service.status(run)["state"], "awaiting_host")
+        return captured
+
+    def saved_artifacts(self, run):
+        store = self.service._store()
+        try:
+            return {item["id"]: (item, Path(item["path"]).read_bytes()) for item in store.artifacts_for_run(run)}
+        finally:
+            store.close()
+
+    def assert_artifacts_unchanged(self, artifacts):
+        for artifact, content in artifacts.values():
+            self.assertEqual(Path(artifact["path"]).read_bytes(), content)
+
+    def test_interrupted_finish_recovers_its_exact_live_intent(self):
+        run = self.normal_run("interrupted-finish")
+        artifacts = self.saved_artifacts(run)
+        interrupted = self.interrupt_finish(run)
+        version = self.service.status(run)["version"]
+        store = self.service._store()
+        try:
+            payload = json.loads(store.connection.execute("SELECT payload FROM events WHERE run_id=? AND type='handoff.acquired' ORDER BY id DESC LIMIT 1", (run,)).fetchone()[0])
+            self.assertEqual(payload["terminal_finish"]["decision"], interrupted["decision"])
+            self.assertEqual(payload["terminal_finish"]["packet_sha256"], self.service.status(run)["handoff"]["packet_sha256"])
+        finally:
+            store.close()
+        code, output, errors = self.invoke(["status", run])
+        self.assertEqual((code, errors), (0, ""), output)
+        self.assertIn(f"squad finish {run} --accept --reason 'Reviewed exact evidence.'", output)
+        self.assertIn("retry the exact saved intent", output)
+        next_command = next(line.removeprefix("Next: ") for line in output.splitlines() if line.startswith("Next: "))
+        self.assertEqual(shlex.split(next_command), ["squad", "finish", run, "--accept", "--reason", "Reviewed exact evidence."])
+        code, output, _ = self.invoke(["status", run, "--json"])
+        self.assertNotIn("handoff_view", json.loads(output)["data"])
+        retried = self.interrupt_finish(run, service=Service(self.service.runtime))
+        self.assertEqual(retried["claim"], interrupted["claim"])
+        self.assertEqual(retried["decision"], interrupted["decision"])
+        self.assertEqual(self.service.status(run)["version"], version)
+        self.assertEqual(Service(self.service.runtime).finish(run, "accept", "Reviewed exact evidence.")["state"], "succeeded")
+        self.assert_artifacts_unchanged(artifacts)
+        with self.assertRaises(ConflictError):
+            self.service.finish(run, "accept", "Reviewed exact evidence.")
+
+    def test_expired_interrupted_finish_gets_only_its_own_fresh_fence(self):
+        run = self.normal_run("expired-finish")
+        artifacts = self.saved_artifacts(run)
+        interrupted = self.interrupt_finish(run)
+        later = datetime.fromisoformat(interrupted["claim"]["expires_at"]) + timedelta(seconds=1)
+        with mock.patch("devsquad.store._authoritative_now", return_value=later):
+            recovered = self.interrupt_finish(run, service=Service(self.service.runtime))
+            self.assertEqual(recovered["claim"]["fencing_token"], interrupted["claim"]["fencing_token"] + 1)
+            self.assertEqual(recovered["decision"], interrupted["decision"])
+            with self.assertRaises(ConflictError):
+                self.service.handoff_claim(run, self.service.status(run)["version"], "terminal-operator", interrupted["claim"])
+            self.assertEqual(self.service.finish(run, "accept", "Reviewed exact evidence.")["state"], "succeeded")
+        self.assert_artifacts_unchanged(artifacts)
+
+    def test_pending_terminal_finish_refuses_different_intent_and_corrupt_evidence(self):
+        run = self.normal_run("pending-finish")
+        interrupted = self.interrupt_finish(run)
+        before = self.service.status(run)
+        for disposition, reason in (("accept", "A changed reason."), ("reject", "Reviewed exact evidence.")):
+            for advance in (0, 700):
+                with mock.patch("devsquad.store._authoritative_now", return_value=datetime.now(timezone.utc) + timedelta(seconds=advance)):
+                    with self.assertRaises(ConflictError):
+                        self.service.finish(run, disposition, reason)
+                self.assertEqual(self.service.status(run)["version"], before["version"])
+        artifacts = self.saved_artifacts(run)
+        artifact, content = artifacts[interrupted["decision"]["evidence_refs"][0]["artifact_id"]]
+        Path(artifact["path"]).write_bytes(b"corrupt pending evidence\n")
+        with self.assertRaisesRegex(ConflictError, "corrupt"):
+            self.service.finish(run, "accept", "Reviewed exact evidence.")
+        self.assertEqual(self.service.status(run)["version"], before["version"])
+        Path(artifact["path"]).write_bytes(content)
+        self.assertEqual(self.service.finish(run, "accept", interrupted["decision"]["reason"])["state"], "succeeded")
+
+    def test_app_claim_named_terminal_operator_is_never_guided_authority(self):
+        run = self.normal_run("named-app-claim")
+        self.service.handoff_claim(run, self.service.status(run)["version"], "terminal-operator")
+        before = self.service.status(run)
+        for advance in (0, 700):
+            with mock.patch("devsquad.store._authoritative_now", return_value=datetime.now(timezone.utc) + timedelta(seconds=advance)):
+                with self.assertRaisesRegex(ConflictError, "claim"):
+                    self.service.finish(run, "accept", "Reviewed exact evidence.")
+            self.assertEqual(self.service.status(run)["version"], before["version"])
+
+    def test_later_app_claim_cannot_reuse_an_older_terminal_marker(self):
+        run = self.normal_run("superseded-terminal-claim")
+        interrupted = self.interrupt_finish(run)
+        later = datetime.fromisoformat(interrupted["claim"]["expires_at"]) + timedelta(seconds=1)
+        with mock.patch("devsquad.store._authoritative_now", return_value=later):
+            app_claim = self.service.handoff_claim(run, self.service.status(run)["version"], "terminal-operator")
+            self.assertGreater(app_claim["claim"]["fencing_token"], interrupted["claim"]["fencing_token"])
+            with self.assertRaisesRegex(ConflictError, "claim"):
+                self.service.finish(run, "accept", "Reviewed exact evidence.")
+        with mock.patch("devsquad.store._authoritative_now", return_value=later + timedelta(seconds=700)):
+            with self.assertRaisesRegex(ConflictError, "claim"):
+                self.service.finish(run, "accept", "Reviewed exact evidence.")
+
+    def test_terminal_intent_and_claim_roll_back_together_before_commit(self):
+        run = self.normal_run("atomic-finish-intent")
+        before = self.service.status(run)
+        def fail_marker(value):
+            if isinstance(value, dict) and "terminal_finish" in value:
+                raise KeyboardInterrupt
+            return canonical_json(value)
+        real_store = self.service._store
+        def interrupt_after_event():
+            store = real_store()
+            connection = store.connection
+            class InterruptedConnection:
+                def __getattr__(self, name):
+                    return getattr(connection, name)
+                def execute(self, sql, parameters=()):
+                    result = connection.execute(sql, parameters)
+                    if ("INSERT INTO events" in sql and len(parameters) >= 4
+                            and parameters[2] == "handoff.acquired"
+                            and "terminal_finish" in json.loads(parameters[3])):
+                        raise KeyboardInterrupt
+                    return result
+            store.connection = InterruptedConnection()
+            return store
+        for point in ("before_event", "after_event"):
+            with self.subTest(point=point), contextlib.ExitStack() as patches:
+                if point == "before_event":
+                    patches.enter_context(mock.patch("devsquad.store.canonical_json", side_effect=fail_marker))
+                else:
+                    patches.enter_context(mock.patch.object(self.service, "_store", side_effect=interrupt_after_event))
+                with self.assertRaises(KeyboardInterrupt):
+                    self.service.finish(run, "accept", "Reviewed exact evidence.")
+            after = self.service.status(run)
+            self.assertEqual(after["version"], before["version"])
+            self.assertIsNone(after["handoff"]["claimed_by"])
+            self.assertIsNone(self.service.handoff_view(run)["pending_finish"])
+        self.assertEqual(self.service.finish(run, "accept", "Reviewed exact evidence.")["state"], "succeeded")
+
+    def test_guided_finish_claim_is_fenced_by_a_concurrent_version_or_new_handoff(self):
+        for replacement in (False, True):
+            with self.subTest(replacement=replacement):
+                run = self.normal_run(f"finish-race-{replacement}", "fix" if replacement else "review")
+                self.addCleanup(self.service.cancel, run)
+                before = self.service.status(run)
+                real_claim = self.service.handoff_claim
+                competing = Service(self.service.runtime)
+                def race(run_id, version, owner, *args, **kwargs):
+                    claim = competing.handoff_claim(run_id, version, "app-owner")
+                    if replacement:
+                        decision = copy.deepcopy(kwargs["_terminal_decision"])
+                        decision.update(disposition="revise", reason="Review the bounded revision.")
+                        decision["submission_hash"] = request_hash({key: value for key, value in decision.items() if key != "submission_hash"})
+                        competing.handoff_complete(run_id, claim["claim"], decision)
+                        real_status = competing.status
+                        deadline = time.monotonic() + 30
+                        def bounded_status(selected_run):
+                            status = real_status(selected_run)
+                            self.assertLess(time.monotonic(), deadline, status)
+                            return status
+                        with mock.patch.object(competing, "status", side_effect=bounded_status):
+                            response, code = cli._wait_for_run(competing, {"run_id": run_id}, resume_candidate_review=True)
+                        self.assertEqual(code, 2, response)
+                        self.assertNotEqual(competing.status(run_id)["handoff"]["handoff_id"], before["handoff"]["handoff_id"])
+                    return real_claim(run_id, version, owner, *args, **kwargs)
+                with mock.patch.object(self.service, "handoff_claim", side_effect=race):
+                    with self.assertRaises(ConflictError):
+                        self.service.finish(run, "accept", "Reviewed exact evidence.")
+                self.assertEqual(self.service.status(run)["state"], "awaiting_host")
+
+    def test_saved_finish_submission_still_resumes_the_existing_continuation(self):
+        run = self.normal_run("saved-finish-submission")
+        with mock.patch.object(self.service, "_continue_branch_review_submission", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.service.finish(run, "accept", "Reviewed exact evidence.")
+        self.assertEqual(self.service.status(run)["next_action"], "handoff_submission_saved")
+        self.assertEqual(Service(self.service.runtime).resume(run)["state"], "succeeded")
+
+    def test_cancelled_pending_terminal_finish_never_recovers_or_replays(self):
+        run = self.normal_run("cancelled-finish")
+        self.interrupt_finish(run)
+        self.assertEqual(self.service.cancel(run)["state"], "cancelled")
+        for advance in (0, 700):
+            with mock.patch("devsquad.store._authoritative_now", return_value=datetime.now(timezone.utc) + timedelta(seconds=advance)):
+                with self.assertRaises(ConflictError):
+                    self.service.finish(run, "accept", "Reviewed exact evidence.")
+        self.assertEqual(self.service.result(run)["state"], "cancelled")
 
     def test_reject_and_revision_exhaustion_use_the_existing_terminal_gates(self):
         rejected = self.normal_run("reject")

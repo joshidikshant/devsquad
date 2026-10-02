@@ -4443,6 +4443,64 @@ class Store:
                 return entry
         return None
 
+    def _terminal_finish_for_claim(
+        self, run_id: str, row: sqlite3.Row,
+    ) -> dict[str, Any] | None:
+        """Only the exact latest acquisition event proves terminal authority."""
+        if (row["kind"] != "host" or not row["active"]
+                or row["owner_id"] != "terminal-operator"
+                or row["claim_handoff_id"] != row["handoff_id"]):
+            return None
+        event = self.connection.execute(
+            "SELECT type,payload FROM events WHERE run_id=? "
+            "AND type IN ('handoff.acquired','handoff.taken_over','handoff.renewed') "
+            "ORDER BY id DESC LIMIT 1", (run_id,),
+        ).fetchone()
+        if event is None:
+            return None
+        try:
+            payload = json.loads(event["payload"])
+            if not isinstance(payload, dict) or "terminal_finish" not in payload:
+                return None
+            if (set(payload) != {"action", "expires_at", "fencing_token", "handoff_id", "owner_id", "terminal_finish"}
+                    or canonical_json(payload) != event["payload"]):
+                raise ConflictError("persisted terminal finish marker is invalid")
+            marker = payload["terminal_finish"]
+            if (not isinstance(marker, dict)
+                    or set(marker) != {"schema_version", "packet_sha256", "decision"}
+                    or type(marker["schema_version"]) is not int
+                    or marker["schema_version"] != 1):
+                raise ConflictError("persisted terminal finish intent is invalid")
+            # A later app claim or renewal invalidates older terminal authority,
+            # including when it happens to use the same human-readable owner.
+            if (type(payload["fencing_token"]) is not int
+                    or payload["fencing_token"] != row["fencing_token"]
+                    or payload["expires_at"] != row["lease_expires_at"]
+                    or payload["handoff_id"] != row["handoff_id"]
+                    or payload["owner_id"] != row["owner_id"]
+                    or event["type"] != f"handoff.{payload['action']}"
+                    or marker["packet_sha256"] != row["packet_sha256"]):
+                return None
+            self._validated_handoff_decision(run_id, marker["decision"])
+            if marker["decision"]["submission_id"] != f"terminal-{row['handoff_id']}":
+                raise ConflictError("persisted terminal finish targets a different handoff")
+            return marker["decision"]
+        except (TypeError, ValueError, ContractError) as exc:
+            raise ConflictError("persisted terminal finish intent is invalid") from exc
+
+    def terminal_finish_decision(
+        self, run_id: str, handoff_id: str,
+    ) -> dict[str, Any] | None:
+        """Read a pending guided choice without exposing or inventing a claim."""
+        row = self.connection.execute(
+            "SELECT h.id AS handoff_id,h.packet_sha256,c.kind,c.owner_id,"
+            "c.fencing_token,c.active,c.handoff_id AS claim_handoff_id,c.lease_expires_at "
+            "FROM runs r JOIN handoffs h ON h.run_id=r.id JOIN claims c ON c.run_id=r.id "
+            "WHERE r.id=? AND h.id=? AND r.state='awaiting_host' AND r.phase IS NULL "
+            "AND h.status='open'", (run_id, handoff_id),
+        ).fetchone()
+        return self._terminal_finish_for_claim(run_id, row) if row is not None else None
+
     def claim_handoff(
         self,
         run_id: str,
@@ -4452,19 +4510,24 @@ class Store:
         *,
         now: datetime | None = None,
         initial_only: bool = False,
+        terminal_decision: dict[str, Any] | None = None,
     ) -> HandoffClaim:
         if (type(expected_version) is not int or expected_version < 1
                 or not isinstance(owner_id, str) or not owner_id):
             raise ContractError("handoff claim requires a run version and owner")
         if prior_claim is not None and not isinstance(prior_claim, HandoffClaim):
             raise ContractError("prior handoff claim is invalid")
+        if terminal_decision is not None and (
+                not initial_only or prior_claim is not None
+                or owner_id != "terminal-operator"):
+            raise ContractError("terminal finish requires its own initial guided claim")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             current = _authoritative_now(now)
             timestamp = current.isoformat()
             expires_at = (current + timedelta(seconds=HOST_LEASE_SECONDS)).isoformat()
             row = self.connection.execute(
-                "SELECT r.state,r.phase,r.version,h.id AS handoff_id,h.status,"
+                "SELECT r.state,r.phase,r.version,h.id AS handoff_id,h.status,h.packet_sha256,"
                 "c.kind,c.owner_id,c.fencing_token,c.active,c.handoff_id AS claim_handoff_id,"
                 "c.lease_expires_at "
                 "FROM runs r JOIN handoffs h ON h.run_id=r.id "
@@ -4477,15 +4540,39 @@ class Store:
             if (row["state"] != "awaiting_host" or row["phase"] is not None
                     or row["status"] != "open" or row["version"] != expected_version):
                 raise ConflictError("handoff is not claimable at that run version")
-            if (initial_only and row["kind"] == "host"
-                    and row["claim_handoff_id"] == row["handoff_id"]):
-                raise ConflictError("handoff already has a host claim; use its saved claim to complete or renew it")
+            terminal_marker = None
+            if terminal_decision is not None:
+                self._validated_handoff_decision(run_id, terminal_decision)
+                if terminal_decision["submission_id"] != f"terminal-{row['handoff_id']}":
+                    raise ConflictError("terminal finish decision targets a different handoff")
+                if (not terminal_decision["reason"].strip()
+                        or len(terminal_decision["reason"]) > 2000):
+                    raise ContractError("terminal finish requires a bounded non-empty reason")
+                terminal_marker = {
+                    "schema_version": 1, "packet_sha256": row["packet_sha256"],
+                    "decision": json.loads(canonical_json(terminal_decision)),
+                }
+            prior_host_claim = row["kind"] == "host" and row["claim_handoff_id"] == row["handoff_id"]
+            if initial_only and prior_host_claim:
+                saved = self._terminal_finish_for_claim(run_id, row) if terminal_marker is not None else None
+                if saved is None:
+                    raise ConflictError("handoff already has a host claim; use its saved claim to complete or renew it")
+                if canonical_json(saved) != canonical_json(terminal_decision):
+                    raise ConflictError("a different terminal finish intent is pending; retry its exact saved decision")
             live = bool(
                 row["kind"] == "host" and row["active"]
                 and row["claim_handoff_id"] == row["handoff_id"]
                 and row["lease_expires_at"]
                 and current < _parse_utc(row["lease_expires_at"])
             )
+            if initial_only and prior_host_claim and live:
+                # Exact live recovery does not renew, mutate or increment a
+                # fence. The durable event retains the capability after a crash.
+                self.connection.execute("COMMIT")
+                return HandoffClaim(
+                    run_id, row["handoff_id"], owner_id, row["fencing_token"],
+                    row["lease_expires_at"], expected_version, "current",
+                )
             if prior_claim is not None:
                 if (not live or prior_claim.run_id != run_id
                         or prior_claim.handoff_id != row["handoff_id"]
@@ -4502,7 +4589,6 @@ class Store:
             else:
                 if live:
                     raise ConflictError("handoff already has a live claim")
-                prior_host_claim = row["kind"] == "host" and row["claim_handoff_id"] == row["handoff_id"]
                 token = row["fencing_token"] + 1
                 action = "taken_over" if prior_host_claim else "acquired"
                 self.connection.execute(
@@ -4520,6 +4606,7 @@ class Store:
                 "fencing_token": token,
                 "handoff_id": row["handoff_id"],
                 "owner_id": owner_id,
+                **({"terminal_finish": terminal_marker} if terminal_marker is not None else {}),
             })
             self.connection.execute(
                 "INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,?,?,?)",

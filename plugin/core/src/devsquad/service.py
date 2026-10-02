@@ -1360,6 +1360,7 @@ class Service:
                 "candidate_sha256": packet["candidate_sha256"],
                 "review": packet["review"], "checks": packet["checks"],
                 "report": report,
+                "pending_finish": store.terminal_finish_decision(run_id, handoff.handoff_id),
             }
         finally:
             store.close()
@@ -1411,6 +1412,7 @@ class Service:
             store.close()
         claimed = self.handoff_claim(
             run_id, version, "terminal-operator", _initial_only=True,
+            _terminal_decision=decision,
         )
         return self.handoff_complete(run_id, claimed["claim"], decision)
 
@@ -1486,6 +1488,7 @@ class Service:
         prior_claim: dict[str, Any] | None = None,
         *,
         _initial_only: bool = False,
+        _terminal_decision: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if type(expected_version) is not int or expected_version < 1:
             raise ContractError("handoff expected version is invalid")
@@ -1506,6 +1509,7 @@ class Service:
                 )
             claim = store.claim_handoff(
                 run_id, expected_version, owner, decoded, initial_only=_initial_only,
+                terminal_decision=_terminal_decision,
             )
             snapshot = store.handoff_snapshot(run_id)
             if snapshot is None:  # Defensive: claim_handoff just verified it.

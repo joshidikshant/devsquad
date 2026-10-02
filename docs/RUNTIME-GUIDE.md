@@ -102,8 +102,13 @@ finish command. That pause exits 2; it is saved work awaiting your assessment.
 Use `--reject` or `--revise` instead of `--accept` when appropriate, with a
 reason. Finish binds every artifact from the exact current packet and applies
 the same claim, independent-review and required-check gates as the low-level
-API. It refuses terminal replays and existing host claims; use the saved claim
-for a handoff already owned by an app. The normal lead is the terminal host;
+API. It refuses terminal replays and app-owned host claims; use the saved claim
+for a handoff already owned by an app. If interrupted after acquiring its own
+claim, finish saves the exact decision atomically with that claim. Status shows
+the exact retry command. Only that same packet, disposition and reason can
+recover the live claim or its expired fence; an owner name alone never permits
+recovery. If the decision was already submitted, use `squad resume RUN_ID` to
+finish the saved continuation. The normal lead is the terminal host;
 an explicitly configured headless run follows its existing lead through a
 temporary handoff when observed with `--wait`. Omitting `--wait` returns the run
 ID immediately.

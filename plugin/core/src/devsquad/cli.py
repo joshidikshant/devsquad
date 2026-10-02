@@ -658,10 +658,13 @@ def _next_command(data: dict[str, Any]) -> str:
     run_id = data.get("run_id", "RUN")
     action = data.get("next_action")
     if action == "claim_handoff":
+        pending = (data.get("handoff_view") or {}).get("pending_finish")
+        if pending:
+            return f"squad finish {run_id} --{pending['disposition']} --reason {shlex.quote(pending['reason'])}"
         owner = (data.get("handoff") or {}).get("claimed_by")
         if owner:
             return f"complete or renew the saved claim in {owner}; this handoff already has an owner"
-        return f'squad finish {run_id} --accept --reason "your assessment of the saved evidence" (or --reject / --revise)'
+        return f'squad finish {run_id} --accept --reason "your assessment of the saved evidence"'
     if action in {"continue_headless_lead", "resume_candidate_review", "handoff_submission_saved"}:
         return f"squad resume {run_id}"
     if action == "recovery_file_required":
@@ -671,6 +674,16 @@ def _next_command(data: dict[str, Any]) -> str:
     if isinstance(action, str) and action:
         return action.removesuffix(" --json")
     return f"squad status {run_id}"
+
+
+def _next_lines(data: dict[str, Any]) -> list[str]:
+    lines = [f"Next: {_next_command(data)}"]
+    if data.get("next_action") == "claim_handoff":
+        if (data.get("handoff_view") or {}).get("pending_finish"):
+            lines.append("Guidance: retry the exact saved intent; disposition and reason must match.")
+        elif not (data.get("handoff") or {}).get("claimed_by"):
+            lines.append("Guidance: use --reject or --revise instead of --accept if the evidence requires it.")
+    return lines
 
 
 def _handoff_lines(data: dict[str, Any]) -> list[str]:
@@ -734,7 +747,7 @@ def _human_response(command: str, response: dict[str, Any]) -> str:
             lines.append(f"Checks: {', '.join(data.get('checks', []))}")
         next_data = data.get("service") or data
         lines.extend(_handoff_lines(next_data))
-        lines.append(f"Next: {_next_command(next_data)}")
+        lines.extend(_next_lines(next_data))
     else:
         run_id = data.get("run_id", "unknown")
         lines.append(f"Run {run_id}: {data.get('state', 'unknown')}")
@@ -753,7 +766,7 @@ def _human_response(command: str, response: dict[str, Any]) -> str:
         if command == "cancel" and data.get("state") == "cancelling":
             lines.append("Cancellation is saved; worker cleanup is still running.")
         if command != "result" or not data.get("ready"):
-            lines.append(f"Next: {_next_command(data)}")
+            lines.extend(_next_lines(data))
     return "\n".join(lines)
 
 
