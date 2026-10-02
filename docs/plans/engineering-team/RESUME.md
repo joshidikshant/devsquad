@@ -6,6 +6,39 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Active continuation — managed delivery failure remains unresolved
 
+**Current active run: `33c64397-3a57-42e7-82d5-773d50f466ee`**, launched via
+the installed stable `squad fix`, original base `1781b89`, retained target
+`6375955f66ce87a541fdfbf60db6eb0fcd30a55e`. Claude is repairing NUL-safe
+Unicode/tab/newline test filenames and three `InstalledWheel*.build_python`
+helpers in `test_cli.py`, `test_handoff_store.py`, `test_mcp.py`: unavailable
+HOME-relative interpreter candidates must catch OSError and try the next
+candidate. This new task freezes all five allowed files; the previous run's
+immutable scope/checks were not widened. The full check explicitly sets
+`DEVSQUAD_BUILD_PYTHON=/Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3.12`
+so wheel gates run, not silently skip. Keep check HOME isolation and identity
+validation strict. No API fallback/settings/reset changes.
+
+The prior corrective run `288ee6f9…` completed a verified native Codex clean
+review, explicitly reporting inspection of the complete G4 diff from 1781b89,
+although its frozen comparison remains 5cb9eab → 6375955. Bash/diff checks
+passed with verified candidate integrity. Full core gate: **471 tests,
+473.762s, 3 errors, zero failures/unraisable, two optional-SDK skips**.
+All three errors are the missing build-interpreter candidate under isolated
+HOME; two were reproduced immediately by a focused offline check. No pass is
+inferred. The operator used exact artifact-bound host **reject**, terminal
+**failed/version 31**, retaining all receipts and the candidate.
+
+Next: finish current Claude → native Codex → mandatory tests; verify the
+previous negative and filename positive fixtures; accept only a passing saved
+candidate. Run one bounded saved full-combined branch review from 1781b89 to
+the final candidate (no duplicate full gate), then integrate that full diff via
+apply_patch, affected/Bash gates, checkpoint, final safe install and Gemini
+CLI/MCP recheck. Current installation remains `68d542f6e8ea`, source HEAD is
+clean except this recovery/evidence update. Private host helper is
+`/Users/Dikshant/.devsquad/private-probes/r8-installed-workflows-20261001/complete-handoff.py`;
+it revalidates artifact hashes and does not print claims. Do not reuse the old
+native Claude handoff's prior claim for a new run.
+
 **Latest active run: `288ee6f9-f503-421a-b81a-d50ee0cf44d8`.** The prior run
 `45667697…` produced a verified Claude Sonnet 5 implementation and frozen
 candidate `5cb9eab81bf4f7ba01861ffb05193a8a67521200`, but its reviewer runner
