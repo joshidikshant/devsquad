@@ -4,6 +4,31 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ## Current position — October 1, 2026
 
+### Authoritative next action — repair the byte-filename finding
+
+At the latest checkpoint all owned jobs are terminal. Run `33c64397…` is
+**failed/version 37**, `WORKFLOW_OUTPUT_INVALID`: its fenced revision returned
+a verified native summary saying the original goal was already implemented,
+made no edits, and candidate freezing correctly rejected the no-op. The
+delivery worktree is clean at `af994e9`. The saved revision reason is present
+and the profile-bound prompt hash passed validation; this is not evidence of
+quota exhaustion or a dropped revision request. Revision stdout SHA-256:
+`767af9da8716b5eda3922a9a299108fc99e67ad0d77c0efb015e714e79affffc`.
+
+The earlier first iteration genuinely passed Claude → independent Codex →
+475 core tests, but it was not accepted because the exact combined review
+found strict UTF-8 Git filename decoding. Retain that passing historical gate
+and the later failed terminal receipt separately. Do not mutate either.
+
+Next: one fresh narrow issue-delivery task from `af994e9`, with the byte-safe
+decoder and real-Git regression as its primary goal, only two writable files,
+verified Claude writer/Codex reviewer and mandatory full/Bash gates. After a
+clean accepted candidate, perform the exact five-file combined review from
+1781b89, integrate via apply_patch, refresh the stable offline installation and
+recheck Gemini CLI/MCP once. Broader R4–R7 and IDE UI acceptance remain open.
+
+### Historical continuation records (latest action above supersedes states below)
+
 ### Active continuation — managed delivery failure remains unresolved
 
 ### Passing managed gate — final combined review / integration remains
