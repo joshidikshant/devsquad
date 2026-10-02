@@ -393,7 +393,7 @@ class LearningContractTest(unittest.TestCase):
                 store.connection.execute(
                     "SELECT MAX(version) FROM schema_migrations",
                 ).fetchone()[0],
-                15,
+                16,
             )
             columns = {
                 row[1] for row in store.connection.execute("PRAGMA table_info(outcomes)")

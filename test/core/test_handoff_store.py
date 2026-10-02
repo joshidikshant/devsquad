@@ -705,7 +705,7 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 15
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 16
     assert store.connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='handoff_submissions'"
     ).fetchone()

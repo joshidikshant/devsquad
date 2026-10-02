@@ -50,9 +50,11 @@ in 61.236s (before the added deadline test/lead-repair attribution refinement).
 Public concurrent-budget and promotion → new-run binding → held-out regression
 → rollback tests pass. See `evidence/R5-public-integration-partial-2026-10-02.json`.
 
-Next: finish the frozen learning/lifecycle affected gate currently running
-(exec session 99417; do not start a second copy or edit source/tests during
-it). Then full core gate with explicit offline Python 3.12 build interpreter,
+The frozen learning/lifecycle affected gate finished: **71 tests/233.881s**,
+two stale schema-15 assertion failures, no behavioral errors. Those expectations
+now match schema 16; keep the failed gate in partial evidence. No test process
+remains active at this checkpoint. Next: recheck the two assertions, then the
+full core gate with explicit offline Python 3.12 build interpreter,
 independent exact-patch review, schema-16 safe installer/installed transport
 recheck and R5 closure. Current production installation/ledger is still the
 accepted R4 **schema 15**; never open it with source Service while schema-16

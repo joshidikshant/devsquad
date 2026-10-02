@@ -189,7 +189,7 @@ class ExperimentAssignmentStoreTest(unittest.TestCase):
         saved = upgraded.connection.execute('SELECT * FROM experiments').fetchone()
         self.assertEqual(saved['spec_json'], spec)
         self.assertEqual(saved['evaluation_json'], evaluation)
-        self.assertEqual(upgraded.connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0], 15)
+        self.assertEqual(upgraded.connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0], 16)
         self.assertEqual(upgraded.connection.execute('SELECT COUNT(*) FROM experiment_assignments').fetchone()[0], 0)
 
 
