@@ -109,11 +109,18 @@ assertion. Root's integrated 61 terminal/CLI/store/handoff tests pass in
 repair tests/26.811s but found two edge cases: an `expired_claim` rejection
 poisons identical retry even after its own fresh fence, and a reason beginning
 with `--` makes the emitted separate `--reason` argument invalid. The terminal
-agent owns the narrow follow-up: preserve the full rejected row canonically in
-append-only audit history before a gated operational-row recovery; keep all
-ordinary app replay rules unchanged. Attach the quoted reason with `--reason=`.
-Integrate/review/test this follow-up before one frozen full suite and exact
-native R6 audit. No full/native gate has started. Production remains accepted
+agent repaired these at `31a8a68b`: complete rejected-row/digest immutable audit
+and exact fresh-authority recovery, consecutive event versions, unchanged app
+replay and actual `--reason=` CLI round-trip. Its 156-test affected gate passes
+in 350.005s, no skips/warnings; independent six-test/9.120s review is clean and
+exact reviewed blobs/diff match the checkpoint. Final `e7e9042c` additionally
+requires the canonical original rejection event to match its row/run/version/
+timestamp/ID/hash/reason; 19 focused tests/19.207s pass, 13 negative subcases.
+Both follow-ups are integrated; root's final 19 focused tests pass in 7.183s.
+Bash/reference/diff gates pass. Final added-hunk independent review is clean;
+one test/13 negative subcases in 0.208s, reviewed/committed blobs equivalent.
+Next freeze one full suite and exact native R6 audit, then safe install only
+after acceptance. No full/native gate has started. Production remains accepted
 R5/schema16.
 R7 Council remains in isolated `r7-council`; its controlled stage flow is
 partial. Its source is checkpointed at `42979ba4` with 21 Council tests and
@@ -126,8 +133,17 @@ the immutable installed R5/schema16 client can acquire a Council headless
 handoff that the new client rejects, stranding its completed lead. Both stores
 were authoritatively schema16; temporary runs were cancelled and owned worker
 PIDs confirmed absent. The Council agent owns a minimal schema17 compatibility
-epoch and old-client/active-upgrade tests. No production edit or new native
-Council generation has been made. Preserve all attached worktrees.
+epoch and old-client/active-upgrade tests. Residual checkpoint `72ae4130` now
+has the minimal no-table schema17 epoch, owned gated-launch cancellation and
+actual matched/held-out fixture workflow comparison: inconclusive, all native
+quality/escaped-defect/rework/quota/host-usage observations remain unknown,
+automatic use off. Its 25 Council tests/90.724s, 35 shared migration tests/
+54.469s, 12 handoff-store tests/4.528s and 10 supervisor/crash tests/1.819s pass.
+Native HTTPS attestation fails closed before generation. The Council agent
+owns actual temporary immutable16-to17 install-upgrade proof; readiness owns
+immutable-old16 claim denial and one bounded Unix mDNS resolver-socket diagnostic.
+Root owns shared-hunk/formatter reconciliation after R6 acceptance. No production
+edit or new native Council generation has occurred. Preserve attached worktrees.
 
 Desktop control worked for scoped inspection. Claude's local Code tab selected only this
 DevSquad project on `codex/engineering-team`, with an empty prompt; no proof

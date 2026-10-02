@@ -4728,9 +4728,54 @@ class Store:
             if reused_id and rejection is None:
                 rejection = "submission_id_reused"
             persisted_claim = self.connection.execute(
-                "SELECT kind,owner_id,fencing_token,active,handoff_id,lease_expires_at "
-                "FROM claims WHERE run_id=?", (run_id,),
+                "SELECT c.kind,c.owner_id,c.fencing_token,c.active,c.lease_expires_at,"
+                "c.handoff_id AS claim_handoff_id,h.id AS handoff_id,h.packet_sha256 "
+                "FROM claims c JOIN handoffs h ON h.run_id=c.run_id "
+                "WHERE c.run_id=? AND h.id=?", (run_id, claim.handoff_id),
             ).fetchone()
+            recovered_rejection = None
+            if (prior is not None and prior["outcome"] == "rejected"
+                    and isinstance(prior["id"], str) and prior["id"]
+                    and prior["rejection_code"] == "expired_claim"
+                    and claim.owner_id == "terminal-operator"
+                    and prior["owner_id"] == claim.owner_id
+                    and type(prior["fencing_token"]) is int
+                    and prior["fencing_token"] < claim.fencing_token
+                    and prior["decision_json"] == decision_json
+                    and prior["evidence_refs_json"] == evidence_json
+                    and prior["disposition"] == disposition
+                    and type(prior["recorded_run_version"]) is int
+                    and prior["recorded_run_version"] < run["version"]
+                    and reused_id is None
+                    and persisted_claim is not None
+                    and claim.expires_at == persisted_claim["lease_expires_at"]):
+                saved = self._terminal_finish_for_claim(run_id, persisted_claim)
+                if saved is not None and canonical_json(saved) == decision_json:
+                    rejected_event = self.connection.execute(
+                        "SELECT run_id,run_version,type,payload,created_at FROM events "
+                        "WHERE run_id=? AND run_version=?",
+                        (run_id, prior["recorded_run_version"]),
+                    ).fetchone()
+                    expected_payload = canonical_json({
+                        "handoff_id": prior["handoff_id"],
+                        "reason": "expired_claim",
+                        "submission_hash": prior["submission_hash"],
+                        "submission_id": prior["submission_id"],
+                    })
+                    if (rejected_event is None
+                            or rejected_event["run_id"] != run_id
+                            or rejected_event["run_version"] != prior["recorded_run_version"]
+                            or rejected_event["type"] != "handoff.completion_rejected"
+                            or rejected_event["created_at"] != prior["created_at"]
+                            or rejected_event["payload"] != expected_payload):
+                        raise ConflictError("expired terminal finish rejection audit is invalid")
+                    # The row is an operational projection with a unique
+                    # decision identity. Preserve its complete rejected state
+                    # in the append-only log before changing that projection.
+                    if _parse_utc(prior["created_at"]) > current:
+                        raise ConflictError("expired terminal finish rejection timestamp is invalid")
+                    recovered_rejection = dict(prior)
+                    rejection = None
             if rejection is None:
                 if run["state"] in TERMINAL_STATES:
                     rejection = "terminal_run"
@@ -4739,7 +4784,7 @@ class Store:
                     rejection = "handoff_not_open"
                 elif (not persisted_claim or persisted_claim["kind"] != "host"
                         or not persisted_claim["active"]
-                        or persisted_claim["handoff_id"] != claim.handoff_id
+                        or persisted_claim["claim_handoff_id"] != claim.handoff_id
                         or persisted_claim["owner_id"] != claim.owner_id
                         or persisted_claim["fencing_token"] != claim.fencing_token):
                     rejection = "stale_claim"
@@ -4748,16 +4793,40 @@ class Store:
                     rejection = "expired_claim"
             if rejection is None:
                 version = run["version"] + 1
-                submission_row_id = str(uuid.uuid4())
-                self.connection.execute(
-                    "INSERT INTO handoff_submissions(id,handoff_id,submission_id,submission_hash,"
-                    "owner_id,fencing_token,disposition,decision_json,evidence_refs_json,outcome,"
-                    "rejection_code,recorded_run_version,created_at) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,'recorded',NULL,?,?)",
-                    (submission_row_id, claim.handoff_id, submission_id, submission_hash,
-                     claim.owner_id, claim.fencing_token, disposition, decision_json,
-                     evidence_json, version, timestamp),
-                )
+                if recovered_rejection is not None:
+                    payload = canonical_json({
+                        "disposition": disposition,
+                        "handoff_id": claim.handoff_id,
+                        "fencing_token": claim.fencing_token,
+                        "submission_hash": submission_hash,
+                        "submission_id": submission_id,
+                        "rejected_submission": recovered_rejection,
+                        "rejected_submission_sha256": request_hash(recovered_rejection),
+                    })
+                    self.connection.execute(
+                        "INSERT INTO events(run_id,run_version,type,payload,created_at) "
+                        "VALUES(?,?,'handoff.completion_recovered',?,?)",
+                        (run_id, version, payload, timestamp),
+                    )
+                    version += 1
+                    updated = self.connection.execute(
+                        "UPDATE handoff_submissions SET owner_id=?,fencing_token=?,outcome='recorded',"
+                        "rejection_code=NULL,recorded_run_version=?,created_at=? "
+                        "WHERE id=? AND outcome='rejected' AND rejection_code='expired_claim'",
+                        (claim.owner_id, claim.fencing_token, version, timestamp, prior["id"]),
+                    )
+                    if updated.rowcount != 1:
+                        raise ConflictError("expired terminal finish projection changed")
+                else:
+                    self.connection.execute(
+                        "INSERT INTO handoff_submissions(id,handoff_id,submission_id,submission_hash,"
+                        "owner_id,fencing_token,disposition,decision_json,evidence_refs_json,outcome,"
+                        "rejection_code,recorded_run_version,created_at) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,'recorded',NULL,?,?)",
+                        (str(uuid.uuid4()), claim.handoff_id, submission_id, submission_hash,
+                         claim.owner_id, claim.fencing_token, disposition, decision_json,
+                         evidence_json, version, timestamp),
+                    )
                 self.connection.execute(
                     "UPDATE handoffs SET status='submitted',submitted_run_version=?,closed_at=? "
                     "WHERE id=?", (version, timestamp, claim.handoff_id),

@@ -20,6 +20,7 @@ from devsquad.store import (
     HandoffClaim,
     SUPPORTED_SCHEMA_VERSION,
     Store,
+    canonical_json,
     request_hash,
 )
 from devsquad.contracts import ContractError
@@ -487,6 +488,182 @@ class HandoffStoreTest(unittest.TestCase):
         current_claim = self.store.handoff_snapshot(run_id).claim
         self.assertEqual(current_claim.owner_id, takeover.owner_id)
         self.assertEqual(current_claim.fencing_token, takeover.fencing_token)
+
+    def guided_expiry_recovery(self, key, *, guided=True):
+        run_id, _, snapshot = self.waiting_run(key)
+        started = datetime(2026, 9, 15, 5, 1, tzinfo=timezone.utc)
+        decision = self.decision(submission_id=f"terminal-{snapshot.handoff_id}")
+        options = {"initial_only": True, "terminal_decision": decision} if guided else {}
+        old = self.store.claim_handoff(run_id, snapshot.run_version, "terminal-operator", now=started, **options)
+        later = datetime.fromisoformat(old.expires_at) + timedelta(seconds=1)
+        with self.assertRaisesRegex(ConflictError, "expired_claim"):
+            self.store.record_handoff_submission(run_id, old, decision, now=later)
+        rejected = dict(self.store.connection.execute("SELECT * FROM handoff_submissions WHERE handoff_id=?", (old.handoff_id,)).fetchone())
+        current = self.store.claim_handoff(run_id, self.store.run(run_id)["version"], "terminal-operator", now=later, **options)
+        return run_id, old, current, decision, later, rejected
+
+    def handoff_rows(self, run_id):
+        return {table: [dict(row) for row in self.store.connection.execute(query, (run_id,))] for table, query in {
+            "runs": "SELECT * FROM runs WHERE id=?",
+            "claims": "SELECT * FROM claims WHERE run_id=?",
+            "handoffs": "SELECT * FROM handoffs WHERE run_id=?",
+            "submissions": "SELECT s.* FROM handoff_submissions s JOIN handoffs h ON h.id=s.handoff_id WHERE h.run_id=?",
+            "events": "SELECT * FROM events WHERE run_id=? ORDER BY id",
+        }.items()}
+
+    def test_guided_expiry_audit_and_projection_commit_or_roll_back_together(self):
+        for interruption in ("before-audit", "after-audit", "after-projection"):
+            with self.subTest(interruption=interruption):
+                run_id, old, current, decision, later, rejected = self.guided_expiry_recovery(interruption)
+                before = self.handoff_rows(run_id)
+                connection = self.store.connection
+                class InterruptedConnection:
+                    def execute(self, statement, *args, **kwargs):
+                        audit = "'handoff.completion_recovered'" in statement
+                        projection = statement.startswith("UPDATE handoff_submissions SET")
+                        if audit and interruption == "before-audit":
+                            raise KeyboardInterrupt
+                        result = connection.execute(statement, *args, **kwargs)
+                        if (audit and interruption == "after-audit") or (projection and interruption == "after-projection"):
+                            raise KeyboardInterrupt
+                        return result
+                    def __getattr__(self, name):
+                        return getattr(connection, name)
+                self.store.connection = InterruptedConnection()
+                try:
+                    with self.assertRaises(KeyboardInterrupt):
+                        self.store.record_handoff_submission(run_id, current, decision, now=later)
+                finally:
+                    self.store.close()
+                    self.store = Store(self.database, self.artifacts)
+                self.assertEqual(self.handoff_rows(run_id), before)
+                recorded = self.store.record_handoff_submission(run_id, current, decision, now=later)
+                self.assertFalse(recorded.replayed)
+                after = self.handoff_rows(run_id)
+                self.assertEqual(after["events"][:-2], before["events"])
+                audit_event, submitted = after["events"][-2:]
+                self.assertEqual((audit_event["type"], submitted["type"]), ("handoff.completion_recovered", "handoff.submitted"))
+                payload = json.loads(audit_event["payload"])
+                self.assertEqual(audit_event["payload"], canonical_json(payload))
+                self.assertEqual(payload["rejected_submission"], rejected)
+                self.assertEqual(payload["rejected_submission_sha256"], request_hash(rejected))
+                self.assertEqual(submitted["run_version"], audit_event["run_version"] + 1)
+                self.assertEqual(recorded.recorded_run_version, submitted["run_version"])
+                self.assertEqual(after["runs"][0]["version"], submitted["run_version"])
+                self.assertEqual(after["handoffs"][0]["submitted_run_version"], submitted["run_version"])
+                self.assertEqual(after["submissions"][0]["recorded_run_version"], submitted["run_version"])
+                replay = self.store.record_handoff_submission(run_id, old, decision, now=later + timedelta(hours=1))
+                self.assertTrue(replay.replayed)
+                self.assertEqual(replay.recorded_run_version, recorded.recorded_run_version)
+                self.assertEqual(self.handoff_rows(run_id), after)
+
+    def test_guided_expiry_recovery_refuses_malformed_prior_row_or_marker(self):
+        corruptions = {
+            "decision": ("decision_json", "{}"),
+            "evidence": ("evidence_refs_json", "[{}]"),
+            "owner": ("owner_id", "other-app"),
+            "disposition": ("disposition", "reject"),
+            "rejection": ("rejection_code", "stale_claim"),
+            "created": ("created_at", "not-a-time"),
+            "future-created": ("created_at", "2099-01-01T00:00:00+00:00"),
+            "same-fence": ("fencing_token", None),
+            "same-version": ("recorded_run_version", None),
+            "marker-structure": None,
+            "marker-packet": None,
+        }
+        for name, corruption in corruptions.items():
+            with self.subTest(corruption=name):
+                run_id, _, current, decision, later, rejected = self.guided_expiry_recovery(name)
+                if corruption is None:
+                    event = self.store.connection.execute("SELECT id,payload FROM events WHERE run_id=? AND type='handoff.taken_over' ORDER BY id DESC LIMIT 1", (run_id,)).fetchone()
+                    payload = json.loads(event["payload"])
+                    if name == "marker-structure":
+                        payload["terminal_finish"]["unexpected"] = True
+                    else:
+                        payload["terminal_finish"]["packet_sha256"] = "0" * 64
+                    self.store.connection.execute("UPDATE events SET payload=? WHERE id=?", (canonical_json(payload), event["id"]))
+                else:
+                    field, value = corruption
+                    if name == "same-fence":
+                        value = current.fencing_token
+                    elif name == "same-version":
+                        value = current.run_version
+                    self.store.connection.execute(f"UPDATE handoff_submissions SET {field}=? WHERE id=?", (value, rejected["id"]))
+                before = self.handoff_rows(run_id)
+                with self.assertRaises(ConflictError):
+                    self.store.record_handoff_submission(run_id, current, decision, now=later)
+                self.assertEqual(self.handoff_rows(run_id), before)
+
+    def test_guided_expiry_recovery_requires_current_marker_not_same_name_app(self):
+        for operation in ("ordinary-app", "renew", "takeover", "changed-intent"):
+            with self.subTest(operation=operation):
+                run_id, _, current, decision, later, _ = self.guided_expiry_recovery(operation, guided=operation != "ordinary-app")
+                if operation == "renew":
+                    current = self.store.claim_handoff(run_id, current.run_version, "terminal-operator", current, now=later + timedelta(seconds=1))
+                    later += timedelta(seconds=1)
+                elif operation == "takeover":
+                    later = datetime.fromisoformat(current.expires_at) + timedelta(seconds=1)
+                    current = self.store.claim_handoff(run_id, current.run_version, "terminal-operator", now=later)
+                elif operation == "changed-intent":
+                    decision = self.decision(submission_id=decision["submission_id"], reason="different exact intent")
+                before = self.handoff_rows(run_id)
+                with self.assertRaises(ConflictError):
+                    self.store.record_handoff_submission(run_id, current, decision, now=later)
+                after = self.handoff_rows(run_id)
+                self.assertFalse(any(row["type"] == "handoff.completion_recovered" for row in after["events"]))
+                self.assertEqual(after["submissions"][0], before["submissions"][0])
+                if operation != "changed-intent":
+                    self.assertEqual(after, before)
+                    self.assertIsNone(self.store.terminal_finish_decision(run_id, current.handoff_id))
+
+    def test_guided_expiry_recovery_requires_exact_original_rejection_event(self):
+        for corruption in ("missing", "type", "created", "row-created", "row-version", "run", "version", "noncanonical", "extra", "handoff", "submission-id", "hash", "reason"):
+            with self.subTest(corruption=corruption):
+                run_id, _, current, decision, later, rejected = self.guided_expiry_recovery(f"audit-{corruption}")
+                event = self.store.connection.execute("SELECT * FROM events WHERE run_id=? AND run_version=?", (run_id, rejected["recorded_run_version"])).fetchone()
+                if corruption == "missing":
+                    self.store.connection.execute("DELETE FROM events WHERE id=?", (event["id"],))
+                elif corruption == "type":
+                    self.store.connection.execute("UPDATE events SET type='handoff.submitted' WHERE id=?", (event["id"],))
+                elif corruption == "created":
+                    self.store.connection.execute("UPDATE events SET created_at=? WHERE id=?", ((later + timedelta(seconds=1)).isoformat(), event["id"]))
+                elif corruption == "row-created":
+                    self.store.connection.execute("UPDATE handoff_submissions SET created_at=? WHERE id=?", ((later - timedelta(seconds=1)).isoformat(), rejected["id"]))
+                elif corruption == "row-version":
+                    self.store.connection.execute("UPDATE handoff_submissions SET recorded_run_version=? WHERE id=?", (rejected["recorded_run_version"] - 1, rejected["id"]))
+                elif corruption == "run":
+                    other, _, _ = self.waiting_run("audit-other-run")
+                    self.store.connection.execute("UPDATE events SET run_id=? WHERE id=?", (other, event["id"]))
+                elif corruption == "version":
+                    self.store.connection.execute("UPDATE events SET run_version=? WHERE id=?", (current.run_version + 100, event["id"]))
+                elif corruption == "noncanonical":
+                    self.store.connection.execute("UPDATE events SET payload=? WHERE id=?", (json.dumps(json.loads(event["payload"])), event["id"]))
+                else:
+                    payload = json.loads(event["payload"])
+                    if corruption == "extra":
+                        payload["extra"] = True
+                    else:
+                        field = {"handoff": "handoff_id", "submission-id": "submission_id", "hash": "submission_hash", "reason": "reason"}[corruption]
+                        payload[field] = "different"
+                    self.store.connection.execute("UPDATE events SET payload=? WHERE id=?", (canonical_json(payload), event["id"]))
+                before = self.handoff_rows(run_id)
+                with self.assertRaisesRegex(ConflictError, "rejection audit"):
+                    self.store.record_handoff_submission(run_id, current, decision, now=later)
+                self.assertEqual(self.handoff_rows(run_id), before)
+
+    def test_repeated_guided_expiry_retains_one_rejection_and_one_recovery(self):
+        run_id, _, current, decision, later, rejected = self.guided_expiry_recovery("repeated-expiry")
+        again = datetime.fromisoformat(current.expires_at) + timedelta(seconds=1)
+        with self.assertRaisesRegex(ConflictError, "expired_claim"):
+            self.store.record_handoff_submission(run_id, current, decision, now=again)
+        self.assertEqual(dict(self.store.connection.execute("SELECT * FROM handoff_submissions WHERE id=?", (rejected["id"],)).fetchone()), rejected)
+        latest = self.store.claim_handoff(run_id, self.store.run(run_id)["version"], "terminal-operator", now=again, initial_only=True, terminal_decision=decision)
+        self.assertGreater(latest.fencing_token, current.fencing_token)
+        self.store.record_handoff_submission(run_id, latest, decision, now=again)
+        rows = self.handoff_rows(run_id)
+        self.assertEqual(sum(row["type"] == "handoff.completion_rejected" for row in rows["events"]), 1)
+        self.assertEqual(sum(row["type"] == "handoff.completion_recovered" for row in rows["events"]), 1)
+        self.assertEqual(len(rows["submissions"]), 1)
 
     def test_submission_replays_and_terminal_late_rejection_preserves_run_and_events(self):
         run_id, _, snapshot = self.waiting_run()

@@ -660,11 +660,11 @@ def _next_command(data: dict[str, Any]) -> str:
     if action == "claim_handoff":
         pending = (data.get("handoff_view") or {}).get("pending_finish")
         if pending:
-            return f"squad finish {run_id} --{pending['disposition']} --reason {shlex.quote(pending['reason'])}"
+            return f"squad finish {run_id} --{pending['disposition']} --reason={shlex.quote(pending['reason'])}"
         owner = (data.get("handoff") or {}).get("claimed_by")
         if owner:
             return f"complete or renew the saved claim in {owner}; this handoff already has an owner"
-        return f'squad finish {run_id} --accept --reason "your assessment of the saved evidence"'
+        return f'squad finish {run_id} --accept --reason="your assessment of the saved evidence"'
     if action in {"continue_headless_lead", "resume_candidate_review", "handoff_submission_saved"}:
         return f"squad resume {run_id}"
     if action == "recovery_file_required":

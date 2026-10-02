@@ -108,7 +108,13 @@ claim, finish saves the exact decision atomically with that claim. Status shows
 the exact retry command. Only that same packet, disposition and reason can
 recover the live claim or its expired fence; an owner name alone never permits
 recovery. If the decision was already submitted, use `squad resume RUN_ID` to
-finish the saved continuation. The normal lead is the terminal host;
+finish the saved continuation. A claim that expires just before submission is
+still rejected and audited. An exact guided retry under its own fresh valid
+fence can recover that expiry: the unique submission row is an operational
+projection, while an append-only recovery event preserves the complete original
+rejected row and its digest. Final event exports retain both rejection and
+recovery history. App claims and other rejection reasons cannot use this path.
+The normal lead is the terminal host;
 an explicitly configured headless run follows its existing lead through a
 temporary handoff when observed with `--wait`. Omitting `--wait` returns the run
 ID immediately.

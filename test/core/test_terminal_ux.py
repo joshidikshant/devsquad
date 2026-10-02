@@ -122,7 +122,7 @@ class TerminalUxTest(unittest.TestCase):
                 code, output, errors = self.invoke(["status", run])
                 self.assertEqual((code, errors), (0, ""), output)
                 next_command = next(line.removeprefix("Next: ") for line in output.splitlines() if line.startswith("Next: "))
-                self.assertEqual(shlex.split(next_command), ["squad", "finish", run, "--accept", "--reason", "your assessment of the saved evidence"])
+                self.assertEqual(shlex.split(next_command), ["squad", "finish", run, "--accept", "--reason=your assessment of the saved evidence"])
                 self.assertIn("Guidance: use --reject or --revise", output)
                 code, output, errors = self.invoke(["finish", run, "--accept", "--reason", "Reviewed exact evidence."])
                 self.assertEqual((code, errors), (0, ""), output)
@@ -183,10 +183,10 @@ class TerminalUxTest(unittest.TestCase):
             store.close()
         code, output, errors = self.invoke(["status", run])
         self.assertEqual((code, errors), (0, ""), output)
-        self.assertIn(f"squad finish {run} --accept --reason 'Reviewed exact evidence.'", output)
+        self.assertIn(f"squad finish {run} --accept --reason='Reviewed exact evidence.'", output)
         self.assertIn("retry the exact saved intent", output)
         next_command = next(line.removeprefix("Next: ") for line in output.splitlines() if line.startswith("Next: "))
-        self.assertEqual(shlex.split(next_command), ["squad", "finish", run, "--accept", "--reason", "Reviewed exact evidence."])
+        self.assertEqual(shlex.split(next_command), ["squad", "finish", run, "--accept", "--reason=Reviewed exact evidence."])
         code, output, _ = self.invoke(["status", run, "--json"])
         self.assertNotIn("handoff_view", json.loads(output)["data"])
         retried = self.interrupt_finish(run, service=Service(self.service.runtime))
@@ -211,6 +211,73 @@ class TerminalUxTest(unittest.TestCase):
                 self.service.handoff_claim(run, self.service.status(run)["version"], "terminal-operator", interrupted["claim"])
             self.assertEqual(self.service.finish(run, "accept", "Reviewed exact evidence.")["state"], "succeeded")
         self.assert_artifacts_unchanged(artifacts)
+
+    def test_finish_retries_authoritative_expiry_rejection_with_exact_fresh_claim(self):
+        run = self.normal_run("finish-expired-at-completion")
+        artifacts = self.saved_artifacts(run)
+        original_complete = self.service.handoff_complete
+        captured = {}
+        def expire_before_submission(run_id, claim, decision):
+            captured.update(claim=claim, decision=decision)
+            later = datetime.fromisoformat(claim["expires_at"]) + timedelta(seconds=1)
+            captured["later"] = later
+            with mock.patch("devsquad.store._authoritative_now", return_value=later):
+                return original_complete(run_id, claim, decision)
+        with mock.patch.object(self.service, "handoff_complete", side_effect=expire_before_submission):
+            with self.assertRaisesRegex(ConflictError, "expired_claim"):
+                self.service.finish(run, "accept", "Reviewed exact evidence.")
+        store = self.service._store()
+        try:
+            rejected = dict(store.connection.execute("SELECT * FROM handoff_submissions WHERE handoff_id=?", (captured["claim"]["handoff_id"],)).fetchone())
+            events_before = [dict(row) for row in store.connection.execute("SELECT * FROM events WHERE run_id=? ORDER BY id", (run,))]
+        finally:
+            store.close()
+        self.assertEqual((rejected["outcome"], rejected["rejection_code"]), ("rejected", "expired_claim"))
+        self.assertEqual(self.service.status(run)["state"], "awaiting_host")
+        with mock.patch("devsquad.store._authoritative_now", return_value=captured["later"]):
+            recovered = self.interrupt_finish(run, service=Service(self.service.runtime))
+            self.assertEqual(recovered["decision"], captured["decision"])
+            self.assertEqual(recovered["claim"]["fencing_token"], captured["claim"]["fencing_token"] + 1)
+            with self.assertRaisesRegex(ConflictError, "expired_claim"):
+                self.service.handoff_complete(run, captured["claim"], captured["decision"])
+            self.assertEqual(Service(self.service.runtime).finish(run, "accept", "Reviewed exact evidence.")["state"], "succeeded")
+        store = self.service._store()
+        try:
+            events_after = [dict(row) for row in store.connection.execute("SELECT * FROM events WHERE run_id=? ORDER BY id", (run,))]
+            audit = json.loads(store.connection.execute("SELECT payload FROM events WHERE run_id=? AND type='handoff.completion_recovered'", (run,)).fetchone()[0])
+            recorded = dict(store.connection.execute("SELECT * FROM handoff_submissions WHERE handoff_id=?", (captured["claim"]["handoff_id"],)).fetchone())
+        finally:
+            store.close()
+        self.assertEqual(events_after[:len(events_before)], events_before)
+        self.assertEqual(audit["rejected_submission"], rejected)
+        self.assertEqual(audit["rejected_submission_sha256"], request_hash(rejected))
+        self.assertEqual(audit["fencing_token"], recovered["claim"]["fencing_token"])
+        self.assertEqual((recorded["outcome"], recorded["rejection_code"]), ("recorded", None))
+        self.assertEqual(recorded["decision_json"], rejected["decision_json"])
+        self.assertEqual(recorded["evidence_refs_json"], rejected["evidence_refs_json"])
+        result = self.service.result(run)
+        exported_path = next(Path(item["path"]) for item in result["artifacts"] if item["name"] == "events.jsonl")
+        exported = [json.loads(line) for line in exported_path.read_text().splitlines()]
+        self.assertEqual(sum(item["type"] == "handoff.completion_rejected" for item in exported), 1)
+        recovery = [item for item in exported if item["type"] == "handoff.completion_recovered"]
+        self.assertEqual(len(recovery), 1)
+        self.assertEqual(recovery[0]["payload"], audit)
+        self.assertEqual(sum(item["type"] == "handoff.submitted" for item in exported), 1)
+        self.assert_artifacts_unchanged(artifacts)
+        with self.assertRaises(ConflictError):
+            self.service.finish(run, "accept", "Reviewed exact evidence.")
+
+    def test_pending_finish_negative_leading_reason_round_trips_as_actual_cli(self):
+        run = self.normal_run("finish-negative-leading-reason")
+        interrupted = self.interrupt_finish(run, reason="--deferred 'quoted' assessment")
+        code, output, errors = self.invoke(["status", run])
+        self.assertEqual((code, errors), (0, ""), output)
+        next_command = next(line.removeprefix("Next: ") for line in output.splitlines() if line.startswith("Next: "))
+        command = shlex.split(next_command)
+        self.assertEqual(command, ["squad", "finish", run, "--accept", f"--reason={interrupted['decision']['reason']}"])
+        code, output, errors = self.invoke(command[1:])
+        self.assertEqual((code, errors), (0, ""), output)
+        self.assertEqual(self.service.status(run)["state"], "succeeded")
 
     def test_pending_terminal_finish_refuses_different_intent_and_corrupt_evidence(self):
         run = self.normal_run("pending-finish")

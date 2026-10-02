@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_package": "R6",
   "recorded_on": "2026-10-02",
-  "status": "recovery_repair_integrated_followup_required",
+  "status": "recovery_repairs_integrated_full_native_pending",
   "base_revision": "8f2c1c6a7d9edfe7cc3d78ecbc59ce105be636b2",
   "integrated_checkpoints": [
     "dd709804e70e0791614319a9ae5c2597768d7318",
@@ -11,14 +11,17 @@
     "d0eec55c9dbede205e3c8831b7c224d3d77114d3",
     "4a6bc15d81017aa996be9a21e6c81bc02ebd17a6",
     "03124c79ba53cb1b12296bb554024605e4cadbc7",
-    "22a4ed8ac85b95861f4ba9725ca729388b7a9f49"
+    "22a4ed8ac85b95861f4ba9725ca729388b7a9f49",
+    "31a8a68b59db3d0af136c5c18cb67fe5088c02b0",
+    "e7e9042cbf4d1416209cf39e0269f7fa85479f4c"
   ],
   "contract": "SOL-REVIEW-FOLLOWUP R6/G3/G4; unchanged low-level MCP envelopes, fenced host disposition, Bash 3.2 and optional jq",
   "implemented": [
     "Readable normal terminal commands; --json retains the versioned automation envelope",
     "Guided finish binds the exact current packet/artifact hashes and existing independent-review/check/claim fences; rejects replay and app-owned prior host claims",
     "Finish intent and claim commit atomically; only an identical canonical decision whose latest acquisition event matches the current packet/owner/fence/expiry recovers its live or expired guided claim. App claims with the same owner name and later renewals cannot reuse old terminal authority",
-    "Saved submissions continue through resume; human status prints a copyable, shell-quoted exact intent retry command with separate guidance",
+    "Saved submissions continue through resume; human status prints a copyable, shell-quoted --reason= exact intent retry command with separate guidance, including negative-leading reasons",
+    "A prior authoritative expired_claim rejection can recover only with exact latest guided intent and a fresh live matching claim; the complete rejected row and digest are atomically preserved in append-only history before the operational projection becomes recorded. Original rejection and recovery/submission consecutive event versions remain visible; no schema or decision-ID rewrite",
     "Omitted IDs require exactly one canonical current-project run; zero and multiple choices are explicit; unrelated runs never selected",
     "Doctor distinguishes installed, registered, exact supported version, subscription authentication, workflow readiness and unknown operation proof",
     "Bounded non-generating Claude auth and Codex account/read with no API keys or alternate credential-home overrides",
@@ -33,13 +36,16 @@
     {"revision": "4a6bc15d", "tests": 41, "seconds": 11.356, "optional_sdk_skips": 2, "bash_assertions": 227},
     {"revision": "03124c79", "tests": 106, "seconds": 95.408, "skips": 0, "failures": 0, "errors": 0, "resource_warnings": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass"},
     {"revision": "22a4ed8a", "tests": 150, "seconds": 180.750, "failures": 0, "errors": 0, "scope": "Affected repair gate before final command-copyability edit"},
-    {"revision": "22a4ed8a", "tests": 45, "seconds": 48.316, "failures": 0, "errors": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Final CLI/terminal repair checkpoint"}
+    {"revision": "22a4ed8a", "tests": 45, "seconds": 48.316, "failures": 0, "errors": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Final CLI/terminal repair checkpoint"},
+    {"revision": "31a8a68b", "tests": 156, "seconds": 350.005, "skips": 0, "failures": 0, "errors": 0, "resource_warnings": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Expiry rejection and command round-trip repair, before final original-rejection-event crosscheck"},
+    {"revision": "e7e9042c", "tests": 19, "seconds": 19.207, "failures": 0, "errors": 0, "bash_assertions": 227, "generated_reference": "pass", "diff_check": "pass", "scope": "Final original-rejection-event crosscheck; 13 negative audit-corruption subcases"}
   ],
   "root_affected_gates": [
     {"command": "python3 -m unittest test_diagnostics test_terminal_ux test_installed_usability test_cli test_task_entry test_mcp test_handoff_store", "tests": 114, "seconds": 65.066, "optional_sdk_skips": 2, "failures": 0, "errors": 0, "scope": "Integrated first five checkpoints, before final catalog cleanup reuse"},
     {"command": "python3 -m unittest test_delivery_workflow test_delivery_identity_runtime test_handoff_service", "tests": 32, "seconds": 66.877, "failures": 0, "errors": 0},
     {"command": "python3 -m unittest test_task_entry test_installed_usability", "tests": 27, "seconds": 25.389, "skips": 0, "failures": 0, "errors": 0, "scope": "All six integrated checkpoints including final catalog cleanup reuse"},
-    {"command": "python3 -m unittest test_terminal_ux test_cli test_handoff_store test_handoff_service", "tests": 61, "seconds": 55.963, "failures": 0, "errors": 0, "scope": "Final integrated interrupted-finish repair and current-schema assertion; ResourceWarning strict"}
+    {"command": "python3 -m unittest test_terminal_ux test_cli test_handoff_store test_handoff_service", "tests": 61, "seconds": 55.963, "failures": 0, "errors": 0, "scope": "Integrated initial interrupted-finish repair and current-schema assertion; ResourceWarning strict"},
+    {"command": "python3 -m unittest test_handoff_store test_terminal_ux.TerminalUxTest.test_finish_retries_authoritative_expiry_rejection_with_exact_fresh_claim test_terminal_ux.TerminalUxTest.test_pending_finish_negative_leading_reason_round_trips_as_actual_cli", "tests": 19, "seconds": 7.183, "failures": 0, "errors": 0, "scope": "All recovery follow-ups including final exact original rejection audit; ResourceWarning strict"}
   ],
   "failure_history": [
     "Readiness red baseline: nine tests, three failures and 17 subtest errors before implementation",
@@ -53,8 +59,10 @@
     "Repair red reproduction: three selected tests had one failure and two errors before durable intent implementation",
     "First expanded repair-agent gate failed a stale isolated bf3 current-schema expectation of 15; root already expected 16 after dfe9976. Changed only the current-schema assertion to SUPPORTED_SCHEMA_VERSION and retained the historical schema-four fixture checks; not a current root runtime failure",
     "Independent 22a4ed8a follow-up: ten existing repair tests pass in 26.811s, but a lease expiring after claim acquisition and before submission creates a durable expired_claim rejection. A fresh own retry advances fence 2 to 3/version 16 to 17 yet the stable decision replays that old rejection indefinitely. Follow-up must preserve complete immutable rejection history while recovering only exact fresh guided authority",
-    "Independent 22a4ed8a command-copyability edge: saved reason --deferred is printed as --reason --deferred and argparse rejects it. Attach the shell-quoted reason to --reason= and test actual command round-trip"
+    "Independent 22a4ed8a command-copyability edge: saved reason --deferred is printed as --reason --deferred and argparse rejects it. Fixed by 31a8a68b attached shell-quoted --reason= and actual command round-trip",
+    "Follow-up red reproduction: two tests/3.845s, one failure and one error. Initial audit implementation reused a run_version for two events and failed uniqueness; consecutive atomic recovery/submitted versions repaired it before green checkpoint gates"
   ],
+  "independent_followup": {"revision": "31a8a68b", "result": "clean_bounded_scope", "tests": 6, "seconds": 9.120, "source_blobs_before_after": "unchanged", "full_five_file_diff_sha256": "b4c742fa400932d216d698e483af40abaa733c741325aebd3eaaf56776accf40", "final_original_event_hunk_review": {"revision": "e7e9042c", "result": "clean_bounded_scope", "tests": 1, "negative_subcases": 13, "seconds": 0.208, "source_before_after_committed": "equivalent", "two_file_diff_sha256": "39ba13f6e5b0cf06da5c55d619d7bd0b2a3684780129d16f8493640736b8cc65"}},
   "fresh_install_scope": {
     "providers": "offline native CLI protocol fixtures only",
     "installer": "actual source installer with no-index and temporary HOME/install/runtime/bin",
@@ -75,7 +83,6 @@
     "unrelated_servers_or_settings": "not changed"
   },
   "remaining_gates": [
-    "Expiry-rejection poisoning and leading-hyphen reason follow-up, final integrated regressions and independent repair review",
     "Frozen full gate",
     "Independent exact R6 review and accepted immutable checkpoint",
     "Safe installed update, non-generating live readiness, idempotence/drift and actual installed SDK tests",
