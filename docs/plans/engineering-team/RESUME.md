@@ -8,6 +8,25 @@ This file is the recovery entry point for a quota cutoff, interrupted task or ne
 
 ### Passing managed gate — final combined review / integration remains
 
+**Latest action: fenced revision in `33c64397-3a57-42e7-82d5-773d50f466ee`,
+queued/version 26 at 01:05 UTC.** Full combined review `ba14b743…` completed
+all required checks (25 affected tests in 24.390s plus Bash/diff, verified
+integrity) but found one medium issue: `_git_entries_z` uses strict text
+decoding and rejects valid non-UTF-8 Git filenames. It was host-rejected,
+failed/version 22, not counted clean. Its exact base was 1781b89 and target
+af994. The existing managed task allows the two affected files, so its scope
+and budget were preserved while a hashed host revise requested bytes plus
+UTF-8 surrogateescape and a real-Git non-UTF-8 documentation/valid-test case.
+Do not apply the prepared af994 patch or accept the old snapshot with that
+finding open. Wait for the revised exact candidate's review/full checks,
+then repeat only the narrow combined-baseline review/affected checks.
+
+The managed run's original 1,800s wall budget began 00:46:23 UTC; it is not
+extended by handoff/revision. If the new full gate cannot fit, retain its
+truthful timeout/budget receipt and final candidate, and complete a fresh saved
+exact-candidate branch-review/full-check run rather than editing old budgets,
+receipts, packages or snapshots. No provider job is duplicated.
+
 Current active full-combined branch review: **`ba14b743-9473-46fe-9e1f-d5b79fb032d4`**,
 exact base `1781b89` → target **`af994e948eb38764884d27fd61665efa776cb47b`**,
 read scope limited to the five changed files. Its diff/Bash/affected-wheel and
