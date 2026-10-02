@@ -27,6 +27,21 @@ Next: inspect this run's final review/check receipts, accept only if all gates
 and the reproduced cases pass, integrate the full accepted G4 diff, checkpoint
 and refresh the final installation; then recheck Gemini CLI/MCP once.
 
+The corrective Claude writer finished with candidate
+`6375955f66ce87a541fdfbf60db6eb0fcd30a55e`; both README/symlink red cases now
+pass. The reviewer/check worker is running version 13, with the coordinator's
+Python regression runner observed active. **Actual frozen review base is
+`5cb9eab`, not `1781b89`**: delivery preparation uses its implementation
+baseline even though the requested task base/focus names the original base.
+Do not claim whole-combined-diff review from that receipt alone; supplement it
+with a real branch review `1781b89` → final candidate before integration.
+An additional real-Git fixture reproduces missed Unicode `test_π.py` because
+the current parser reads quoted newline `ls-tree` output. After this gate,
+use a fenced host **revise**, request NUL-safe regular-blob filename discovery
+plus Unicode/tab/newline positive regressions, and finish the revised candidate
+through independent review and mandatory tests. Do not accept the known issue
+or duplicate the running full gate. No frozen runtime file has been modified.
+
 The auth repair is committed at `1781b89` and installed as
 `0.1.0-py31214-68d542f6e8ea-mcp-a26bc88afbef`; payload drift is false,
 `pip check` passes, and previous releases remain recoverable. A fresh genuine
