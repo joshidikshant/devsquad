@@ -10,38 +10,44 @@ R3c is now **accepted** at immutable `39b95f1`: native independent audit is
 clean; mandatory diff/Bash/51 focused tests pass with unchanged integrity.
 The R3 source blobs exactly match the prior accepted 477-test full candidate.
 See `evidence/R3-closure-2026-10-02.json` for the requirement/proof matrix.
-A coherent **partial R4** source slice is checkpointed:
-native normal commands now call account/config/model/quota read-only RPCs;
-scoped private last-good catalogs use a 24-hour TTL, OS refresh lease and
-two-minute failure backoff. Native windows enter the shared typed capacity
-ledger. Alias account/config/catalog mismatches block for requalification;
-explicit pins remain trials. No login, reset-credit or API fallback calls.
-New cache/concurrency/privacy/window and two-project discovery tests are added.
-Latest stable-source focused gate: **79 tests passed in 14.696s**. Public CLI
-entry for two committed projects proves fresh weekly exhaustion prevents any
-worker launch; failed quota queries preserve still-fresh prior exhaustion.
-R3c independent saved review **`f0a4f86b-b305-4839-88a2-cb5fed8739ab`** is
-**succeeded/version 22**, accepted against immutable `39b95f1`; all mandatory
-checks and artifact hashes are verified. No active native audit remains.
-R4 partial evidence: `evidence/R4-native-scoped-partial-2026-10-02.json`.
-R4 review **`9a12f6f6-59aa-43c0-a003-9f057f42f670`** was truthfully
-rejected (failed/version 22): discovery config/binary/version scope must not
-split one subscription-wide reservation fence. Repair now uses an opaque
-account-only pool ID, while separate native-scope and catalog-fingerprint
-evidence block incompatible approved aliases. Different-config cross-project
-reservation and fresh-exhaustion regressions pass, plus CLI runtime-argument
-expectations are updated. Initial full gate at `500d1b1` showed two CLI
-expectation failures and was SIGINT-stopped (exit 130) to apply this finding;
-it is not a completed gate. Its interrupted test setUp caused one implicit
-TemporaryDirectory ResourceWarning. Latest 30-test targeted repair gate passes
-in 2.712s; the combined **102-test** affected gate now passes in **17.610s**,
-with explicit offline wheel-build interpreter and ResourceWarnings as errors.
-Next: new frozen full integration gate and bounded pool/context repair review.
-Focused/full/independent package closure and fresh-install proof are still
-required before R4 is closed. One real non-generating native discovery probe
-verified gpt-6.1-sol/low, scoped pool/catalog fingerprint and two quota windows;
-reported capacity was unknown (not guessed available). Continue R4 full and
-independent package/installed acceptance, then R5, R6 and R7/C1.
+R4 is now **accepted and installed** at source `913abc1`:
+
+- Normal entry has private account/config/binary/version-scoped complete
+  last-good catalogs, 24h TTL, one OS refresh owner, bounded pagination and
+  two-minute failure backoff. Default hints do not promote or invalidate aliases.
+- Native typed quota observations share one opaque **account-only** reservation
+  pool across discovery configurations. Incompatible qualified contexts block;
+  pins remain trials. Failed queries retain still-fresh known exhaustion.
+- 102 affected tests in 17.610s; **484 full tests in 458.607s**, two optional SDK
+  skips, zero failures/errors/unraisable. Source was frozen for the full gate.
+- Initial R4 audit `9a12f6f6…` rejected a high shared-pool partition bug.
+  Exact repair audit **`f45c723b-3067-473f-9349-f1012f5548e7`** is clean,
+  succeeded/22; diff/Bash/30 targeted tests pass, one optional wheel-environment
+  skip, all integrity hashes unchanged. Initial interrupted failed full gate
+  and the fixed CLI expectations remain truthfully recorded in partial evidence.
+- Installed normal dry-run selects gpt-6.1-sol/low as a bounded trial, no run
+  creation; reinstall no-op, drift false, pip check pass, four registrations
+  matching. **Nine actual installed SDK transport tests pass in 2.743s, no skips.**
+
+Closure matrix: `evidence/R4-closure-2026-10-02.json`. No native audit, full
+suite or nonterminal production run remains active. Earlier accepted native
+Claude/Grok/Gemini proofs below remain historical; do not repeat unchanged ones.
+Antigravity externally updated to **1.2.14**: current doctor correctly labels
+its adapter unverified; the old 1.2.13 live status receipt is not a new-version
+proof. Recheck this during R6/R8 without broad MCP listings or UI bypass.
+
+Next is **R5**: red public tests for objective idempotent final outcomes from
+every terminal origin, including prelaunch failures/cancel, worker failures,
+host/headless completion and crash/replay. Preserve missingness and failed
+attempt/rework credit. Use a durable projection outbox with guarded migration
+if needed; do not rewrite historical final outcomes or retroactively assign
+legacy runs. Then expose a thin public trial controller reusing schema-14
+assignment authority and R3 eligibility. Replace the fixture's private
+preparation monkeypatch/manual outcome import with that actual public path.
+Freeze full spec/cases/splits/profiles/budgets before either arm, enforce budget
+from durable attempts under the existing reservation fence, and keep automatic
+experimentation disabled. Continue R6 UX/readiness/generated-reference checks,
+R7/C1 and final R8 acceptance; whole-plan completion is not claimed.
 
 Workspace: /Users/Dikshant/Desktop/Projects/devsquad.
 Branch: `codex/engineering-team`; never restart this build from main.
@@ -78,10 +84,10 @@ integrity; 27 affected tests in 24.173s. Verified native Codex review is clean.
 1. The user's three requested runtime actions are verified. Do not repeat
    these accepted proofs or the unchanged full suite. Both exact packets and
    artifact hashes are verified; never edit frozen evidence.
-2. Audit R3b.2/R3c closure against SOL-REVIEW-FOLLOWUP.md and the requirement
-   matrix, preserving existing reader/eligibility/compatibility repairs. Then
-   continue R4 catalog/quota, R5 public trials/outcomes, remaining R6 UX and
-   R7/C1 in dependency order. Whole-plan acceptance is not claimed.
+2. R3 and R4 are accepted by their October 2 closure matrices. Continue R5
+   public terminal outcomes/trial controller, then remaining R6 UX/readiness,
+   R7/C1 and R8 whole-delivery acceptance. Preserve the existing reader and
+   lifecycle eligibility gates; do not restart the architecture exercise.
 3. Desktop UI proofs remain separate. Antigravity IDE control is permission-
    denied; do not bypass it or substitute a CLI receipt. Grok/Gemini MCP status
    calls do not prove automatic writer/reviewer adapters.
@@ -94,7 +100,7 @@ use git-safety checkpoints, never stash. No goal is currently active.
 ## Current local installation and host proof
 
 Stable launcher: /Users/Dikshant/.local/bin/squad.
-Selected release: `0.1.0-py31214-01fad439adea-mcp-a26bc88afbef`.
+Selected release: `0.1.0-py31214-3631f1737bc9-mcp-a26bc88afbef`.
 Python 3.12.14/MCP 2.2.0, schema 15; previous releases and private pre-upgrade
 SQLite backup retained. Source/plugin/installed payload drift is false.
 Upgrade defers for old active/recoverable runs, swaps without migration under
@@ -145,8 +151,8 @@ Full portable redacted record:
 M1/M2 remain accepted. R1/R2 source/offline repairs are verified; R3 saved-run
 reader, eligibility/revisions, provenance/ratio and upgrade repairs are now
 accepted with the independent R3 closure proof above.
-Normal aliases/public promotion proof exist; this does not close R4 catalog/
-quota, R5 public trial controller/outcomes, remaining R6 UX or R7/C1 Council.
+Normal aliases/catalog/quota are accepted by the R4 closure above. This does
+not close R5 public trials/outcomes, remaining R6 UX or R7/C1 Council.
 Read backlog.json and SOL-REVIEW-FOLLOWUP.md for dependency/acceptance details;
 do not restart the architecture exercise or weaken gates to mark these done.
 

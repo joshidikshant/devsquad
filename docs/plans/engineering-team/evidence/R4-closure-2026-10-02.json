@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "status": "accepted_source_and_installed_routing_package",
+  "source_revision": "913abc1267e47684fee63dbbb1d69945f67f4a32",
+  "full_gate": {"tests": 484, "seconds": 458.607, "skips": 2, "errors": 0, "failures": 0, "unraisable": [], "monotonic_seconds": 458.6838033749991, "utc_seconds": 458.680991, "offline_build_interpreter": "explicit_python3.12", "source_and_tests_frozen": true},
+  "focused_gate": {"tests": 102, "seconds": 17.610, "result": "pass"},
+  "independent_repair_review": {
+    "run_id": "f45c723b-3067-473f-9349-f1012f5548e7",
+    "base_revision": "500d1b1917ecbcf417af73fbfd21ae67accc45e7",
+    "candidate_sha256": "15ca9655c33f89b9be71fcad07c82c5c996c5c77b7c7ea1c67f18141ccd61076",
+    "state": "succeeded", "version": 22, "disposition": "accept", "verdict": "clean", "findings": [],
+    "identity": {"harness": "codex", "harness_version": "codex-cli 0.159.2", "model_id": "gpt-6.1-sol", "effort": "low", "verification": "verified", "permission_policy": "read_only"},
+    "review_sha256": "a3e3d56f5cc91b56737952eb53912d818dd914d4d7a08abf69ce6660ba9feba7",
+    "checks_sha256": "1bca1c29edd2337634a9a14d0d1d701ad1b6a6abbbbd2102bf95a13c6651160c",
+    "receipt_sha256": "7f3a50bf9c5a23064278b78cda4f8773ab40ab153d238ca88294778f188a5c76",
+    "checks": {"diff_and_bash": "pass", "focused_tests": 30, "seconds": 0.993, "optional_installed_wheel_environment_skips": 1, "integrity": "verified_unchanged"},
+    "usage": {"source": "native_reported", "input_tokens": 95191, "output_tokens": 567, "total_tokens": 95758}
+  },
+  "installation": {
+    "release": "0.1.0-py31214-3631f1737bc9-mcp-a26bc88afbef",
+    "source_digest": "3631f1737bc97132dcb51596c65b929c13b1a0904f2f9776a586f106e6c53b9d",
+    "python": "3.12.14", "mcp": "2.2.0", "ledger_schema": 15,
+    "nonterminal_runs_before": 0, "first_changed": true, "reinstall_changed": false,
+    "network_downloads": false, "all_payload_drift": false, "manifest_matches": true,
+    "pip_check": "pass", "previous_releases_retained": true,
+    "installed_sdk_transport": {"tests": 9, "seconds": 2.743, "skips": 0, "result": "pass", "import_origin": "resolved installed release, not source"},
+    "normal_cli_discovery": {"workflow": "branch-review", "dry_run": true, "model": "gpt-6.1-sol", "effort": "low", "selection_mode": "bounded_trial", "run_created": false, "task_sha256": "d026a58b367879fb61d754a0fd252e798a10a5e091acd71346bb206f9833a4e2"},
+    "host_registrations": {"matching": 4, "writes": 0},
+    "doctor_note": "Current doctor confirms installation/registration only, not authenticated workflow readiness; that distinction is R6. Antigravity externally changed to 1.2.14 and remains unverified; prior 1.2.13 live receipt is historical"
+  },
+  "requirements": [
+    {"requirement": "approved aliases survive provider-default hints; reviewed promotion changes only new runs; exact pins and frozen runs preserved", "proof": "test_task_entry public promotion and pin fixtures plus test_native_catalog default-hint fingerprint test", "result": "pass"},
+    {"requirement": "scoped complete last-good catalog, TTL, one refresh owner, interruption, initial and prior-snapshot failure backoff", "proof": "test_native_catalog and production normal CLI discovery connection", "result": "pass"},
+    {"requirement": "affected model/account/config/version changes block normal approved roles for requalification, without alias mutation or promotion from discovery", "proof": "test_task_entry native context/catalog mismatch and scoped discovery tests", "result": "pass"},
+    {"requirement": "two projects honor weekly exhaustion despite available primary quota before worker launch", "proof": "test_task_entry actual normal CLI preparation over two committed projects; daemon launch asserted absent", "result": "pass"},
+    {"requirement": "same account across discovery configurations shares one reservation fence and retains fresh exhausted quota", "proof": "test_task_entry cross-config public discovery and Store reservation fence regression; independent audit follow-up", "result": "pass"},
+    {"requirement": "incompatible accounts do not reuse capacity; unsupported/null/stale observations remain unknown; manual observations retained", "proof": "test_native_catalog, test_capacity and cross-account normal discovery fixture", "result": "pass"},
+    {"requirement": "no billing, permission, login, reset-credit or paid-API expansion", "proof": "read-only RPC allowlist and fixed normal role permissions; all discovery calls are non-generating", "result": "pass"}
+  ],
+  "official_native_protocol_reference": "https://learn.chatgpt.com/docs/app-server",
+  "preserved_failed_and_partial_history": "R4-native-scoped-partial-2026-10-02.json",
+  "operator_probe_note": "First installed-origin assertion compared a symlink path string instead of resolved path; corrected resolved-origin assertion passed the actual installed SDK gate. Expected negative squad_events argument rejection is not a failed test",
+  "separate_open_scope": ["R5 automatic terminal outcomes/public trials", "R6 terminal UX/auth readiness/generated-reference check", "R7 Council", "R8 final delivery/desktop UI/new Antigravity version acceptance"],
+  "adoption_note": "No real-model superiority or automatic policy promotion is claimed. Normal unqualified selection remains a bounded trial; Jev stays off"
+}
