@@ -294,11 +294,87 @@ def _managed_routing(
     }
 
 
-def _tracked(repo: Path, relative: str) -> bool:
+def _tree_entry(repo: Path, oid: str, relative: str) -> tuple[str, str] | None:
+    """Return (mode, type) for a path in the exact oid tree, or None if absent."""
+    output = _git(repo, "ls-tree", oid, "--", relative)
+    if not output:
+        return None
+    meta, _, _ = output.splitlines()[0].partition("\t")
+    parts = meta.split()
+    if len(parts) < 2:
+        return None
+    return parts[0], parts[1]
+
+
+def _is_regular_blob(repo: Path, oid: str, relative: str) -> bool:
+    entry = _tree_entry(repo, oid, relative)
+    return entry is not None and entry[1] == "blob" and entry[0] != "120000"
+
+
+def _is_tree(repo: Path, oid: str, relative: str) -> bool:
+    entry = _tree_entry(repo, oid, relative)
+    return entry is not None and entry[1] == "tree"
+
+
+def _git_entries_z(repo: Path, *arguments: str) -> list[str]:
+    """Run git and split NUL-delimited output, preserving embedded tabs/newlines."""
     try:
-        return bool(_git(repo, "ls-files", "--error-unmatch", "--", relative))
-    except ContractError:
+        completed = subprocess.run(
+            ["git", "-C", str(repo), *arguments],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ContractError("cannot inspect the Git project") from exc
+    if completed.returncode != 0:
+        raise ContractError(f"Git project check failed: {' '.join(arguments[:2])}")
+    return [
+        entry.decode("utf-8", errors="surrogateescape")
+        for entry in completed.stdout.split(b"\0")
+        if entry
+    ]
+
+
+def _has_python_tests(repo: Path, oid: str, relative: str) -> bool:
+    """Return True if a real tracked tree at `relative` holds a regular test*.py file."""
+    if not _is_tree(repo, oid, relative):
         return False
+    for entry in _git_entries_z(repo, "ls-tree", "-r", "-z", oid, "--", relative):
+        meta, _, path = entry.partition("\t")
+        parts = meta.split()
+        if len(parts) < 2:
+            continue
+        mode, object_type = parts[0], parts[1]
+        if object_type != "blob" or mode == "120000":
+            continue
+        name = PurePosixPath(path).name
+        if name.startswith("test") and name.endswith(".py"):
+            return True
+    return False
+
+
+def _detect_tests(repo: Path, oid: str) -> list[tuple[str, ...]]:
+    detected: list[tuple[str, ...]] = []
+    if _is_regular_blob(repo, oid, "test/run.sh"):
+        detected.append(("bash", "test/run.sh"))
+    elif _has_python_tests(repo, oid, "tests"):
+        detected.append(("python3", "-m", "unittest", "discover", "-s", "tests"))
+    elif _has_python_tests(repo, oid, "test"):
+        detected.append(("python3", "-m", "unittest", "discover", "-s", "test"))
+    if (
+        _is_tree(repo, oid, "plugin/core/src")
+        and _is_tree(repo, oid, "test/core")
+        and _is_regular_blob(repo, oid, "scripts/run-core-tests.py")
+    ):
+        detected.append((
+            "env",
+            "PYTHONPATH=plugin/core/src:test/core",
+            "PYTHONWARNINGS=error::ResourceWarning",
+            "python3",
+            "scripts/run-core-tests.py",
+        ))
+    return detected
 
 
 def _checks(
@@ -322,22 +398,22 @@ def _checks(
         "timeout_seconds": min(timeout_seconds, 120),
         "required_to_pass": required,
     }]
-    detected: tuple[str, ...] | None = None
-    if _tracked(repo, "test/run.sh"):
-        detected = ("bash", "test/run.sh")
-    elif (repo / "tests").is_dir():
-        detected = ("python3", "-m", "unittest", "discover", "-s", "tests")
-    elif (repo / "test").is_dir():
-        detected = ("python3", "-m", "unittest", "discover", "-s", "test")
-    if detected is not None:
+    seen: set[tuple[str, ...]] = set()
+    detected_ids = ("detected-tests", "detected-core-tests")
+    for check_id, argv in zip(detected_ids, _detect_tests(repo, target_oid)):
         checks.append({
-            "id": "detected-tests",
-            "argv": list(detected),
+            "id": check_id,
+            "argv": list(argv),
             "cwd": ".",
             "timeout_seconds": timeout_seconds,
             "required_to_pass": required,
         })
-    for index, arguments in enumerate(supplied, 1):
+        seen.add(argv)
+    index = 0
+    for arguments in supplied:
+        if arguments in seen:
+            continue
+        index += 1
         checks.append({
             "id": f"user-check-{index}",
             "argv": list(arguments),
@@ -345,6 +421,7 @@ def _checks(
             "timeout_seconds": timeout_seconds,
             "required_to_pass": required,
         })
+        seen.add(arguments)
     if len(checks) > 16:
         raise ContractError("normal entry produced too many checks")
     return checks

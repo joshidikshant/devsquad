@@ -67,6 +67,55 @@ class ManagedTaskEntryTest(unittest.TestCase):
             "effort": "low",
         }
 
+    def _init_repo(self):
+        temp = tempfile.TemporaryDirectory(prefix="devsquad-task-entry-discovery-")
+        self.addCleanup(temp.cleanup)
+        repo = Path(temp.name) / "project"
+        repo.mkdir()
+        subprocess.run(
+            ["git", "init", "-b", "main"], cwd=repo,
+            check=True, text=True, capture_output=True,
+        )
+        subprocess.run(["git", "config", "user.name", "DevSquad Test"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True,
+        )
+        return repo
+
+    def _commit(self, repo, message):
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", message], cwd=repo,
+            check=True, text=True, capture_output=True,
+        )
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo,
+            check=True, text=True, capture_output=True,
+        ).stdout.strip()
+
+    def _stage_raw_path_blob(self, repo, path_bytes: bytes, content: bytes) -> None:
+        """Stage a blob at a raw byte path, bypassing filesystem filename rules."""
+        hashed = subprocess.run(
+            ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+            input=content, check=True, capture_output=True,
+        )
+        sha = hashed.stdout.strip().decode()
+        cacheinfo = f"100644,{sha},".encode() + path_bytes
+        subprocess.run(
+            ["git", "-C", str(repo), "update-index", "--add", "--cacheinfo", cacheinfo],
+            check=True, capture_output=True,
+        )
+
+    def _commit_index(self, repo, message):
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", message],
+            check=True, capture_output=True,
+        )
+        return subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True, text=True, capture_output=True,
+        ).stdout.strip()
+
     def test_branch_review_freezes_exact_commits_and_embedded_routing(self):
         task, summary = build_managed_task(
             workflow="branch-review",
@@ -327,6 +376,339 @@ class ManagedTaskEntryTest(unittest.TestCase):
             parse_checks(['python3 -c "unterminated'])
         with self.assertRaisesRegex(ContractError, "at most 12"):
             parse_checks(["true"] * 13)
+
+    def test_check_discovery_inspects_selected_target_not_current_checkout(self):
+        repo = self._init_repo()
+        (repo / "src").mkdir()
+        (repo / "src/app.py").write_text("VALUE = 1\n")
+        without_tests = self._commit(repo, "no tests")
+        (repo / "test").mkdir()
+        (repo / "test/run.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+        with_tests = self._commit(repo, "add bash tests")
+
+        subprocess.run(
+            ["git", "checkout", without_tests], cwd=repo,
+            check=True, text=True, capture_output=True,
+        )
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=without_tests, target_ref=with_tests,
+            goal="Target tree has tests though the checkout does not.",
+            codex_identity=self.codex,
+        )
+        detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+        self.assertEqual(detected["argv"], ["bash", "test/run.sh"])
+
+        subprocess.run(
+            ["git", "checkout", with_tests], cwd=repo,
+            check=True, text=True, capture_output=True,
+        )
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=without_tests, target_ref=without_tests,
+            goal="Target tree lacks tests though the checkout has them.",
+            codex_identity=self.codex,
+        )
+        self.assertNotIn("detected-tests", [c["id"] for c in task["checks"]])
+
+    def test_check_discovery_python_tests_follow_selected_target_not_checkout(self):
+        repo = self._init_repo()
+        (repo / "src").mkdir()
+        (repo / "src/app.py").write_text("VALUE = 1\n")
+        without_tests = self._commit(repo, "no tests tree")
+        (repo / "tests").mkdir()
+        (repo / "tests/test_sample.py").write_text("def test_ok():\n    assert True\n")
+        with_tests = self._commit(repo, "add python tests tree")
+
+        subprocess.run(
+            ["git", "checkout", without_tests], cwd=repo,
+            check=True, text=True, capture_output=True,
+        )
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=without_tests, target_ref=with_tests,
+            goal="Target tree has Python tests though the checkout does not.",
+            codex_identity=self.codex,
+        )
+        detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+        self.assertEqual(
+            detected["argv"], ["python3", "-m", "unittest", "discover", "-s", "tests"],
+        )
+
+        subprocess.run(
+            ["git", "checkout", with_tests], cwd=repo,
+            check=True, text=True, capture_output=True,
+        )
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=without_tests, target_ref=without_tests,
+            goal="Target tree lacks Python tests though the checkout has them.",
+            codex_identity=self.codex,
+        )
+        self.assertNotIn("detected-tests", [c["id"] for c in task["checks"]])
+
+    def test_check_discovery_selected_target_without_tests(self):
+        repo = self._init_repo()
+        (repo / "src").mkdir()
+        (repo / "src/app.py").write_text("VALUE = 1\n")
+        oid = self._commit(repo, "no tests at all")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="No tests are tracked anywhere in the selected target.",
+            codex_identity=self.codex,
+        )
+        self.assertEqual(
+            [check["id"] for check in task["checks"]], ["candidate-diff-check"],
+        )
+
+    def test_check_discovery_detects_real_python_tests(self):
+        repo = self._init_repo()
+        (repo / "tests").mkdir()
+        (repo / "tests/test_sample.py").write_text("def test_ok():\n    assert True\n")
+        (repo / "tests/README").write_text("Docs alongside real tests.\n")
+        oid = self._commit(repo, "real python tests")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="Real tracked test*.py files under tests/ are detected.",
+            codex_identity=self.codex,
+        )
+        detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+        self.assertEqual(
+            detected["argv"], ["python3", "-m", "unittest", "discover", "-s", "tests"],
+        )
+
+    def test_check_discovery_detects_unicode_tab_and_newline_named_python_tests(self):
+        names = ("test_café.py", "test\tplan.py", "test\nplan.py")
+        for name in names:
+            with self.subTest(name=name):
+                repo = self._init_repo()
+                (repo / "tests").mkdir()
+                (repo / "tests" / name).write_text("def test_ok():\n    assert True\n")
+                oid = self._commit(repo, "special filename test")
+                task, _ = build_managed_task(
+                    workflow="branch-review", project_dir=repo,
+                    base_ref=oid, target_ref=oid,
+                    goal="Unicode, tab, and newline named test*.py files are detected.",
+                    codex_identity=self.codex,
+                )
+                detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+                self.assertEqual(
+                    detected["argv"], ["python3", "-m", "unittest", "discover", "-s", "tests"],
+                )
+
+    def test_check_discovery_detects_tests_beside_non_utf8_documentation_filename(self):
+        repo = self._init_repo()
+        (repo / "tests").mkdir()
+        (repo / "tests/test_sample.py").write_text("def test_ok():\n    assert True\n")
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+        self._stage_raw_path_blob(
+            repo, b"tests/doc_\xff.md", b"Non-UTF-8 named documentation.\n",
+        )
+        oid = self._commit_index(repo, "python tests plus a non-utf8 doc filename")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="A non-UTF-8 documentation filename alongside real tests must not raise.",
+            codex_identity=self.codex,
+        )
+        detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+        self.assertEqual(
+            detected["argv"], ["python3", "-m", "unittest", "discover", "-s", "tests"],
+        )
+
+    def test_check_discovery_detects_non_utf8_named_python_test_file(self):
+        repo = self._init_repo()
+        self._stage_raw_path_blob(
+            repo, b"tests/test_\xff.py", b"def test_ok():\n    assert True\n",
+        )
+        oid = self._commit_index(repo, "non-utf8 named python test file")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="A non-UTF-8 named test*.py file must itself be detected.",
+            codex_identity=self.codex,
+        )
+        detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+        self.assertEqual(
+            detected["argv"], ["python3", "-m", "unittest", "discover", "-s", "tests"],
+        )
+
+    def test_check_discovery_excludes_readme_only_and_symlinked_test_trees(self):
+        repo = self._init_repo()
+        (repo / "tests").mkdir()
+        (repo / "tests/README").write_text("Not a test suite.\n")
+        readme_only = self._commit(repo, "readme only tests dir")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=readme_only, target_ref=readme_only,
+            goal="A tests/README must not be treated as Python tests.",
+            codex_identity=self.codex,
+        )
+        self.assertNotIn("detected-tests", [c["id"] for c in task["checks"]])
+
+        (repo / "tests/README").unlink()
+        (repo / "tests").rmdir()
+        real_dir = Path(self.temp.name) / "external-tests"
+        real_dir.mkdir()
+        (real_dir / "test_real.py").write_text("def test_ok():\n    assert True\n")
+        (repo / "tests").symlink_to(real_dir)
+        symlinked_dir = self._commit(repo, "symlinked tests dir")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=symlinked_dir, target_ref=symlinked_dir,
+            goal="A symlinked tests directory must not be treated as Python tests.",
+            codex_identity=self.codex,
+        )
+        self.assertNotIn("detected-tests", [c["id"] for c in task["checks"]])
+
+    def test_check_discovery_excludes_symlinked_test_file(self):
+        repo = self._init_repo()
+        (repo / "tests").mkdir()
+        (repo / "tests/real_test.py").write_text("def test_ok():\n    assert True\n")
+        (repo / "tests/test_link.py").symlink_to("real_test.py")
+        oid = self._commit(repo, "symlinked python test file")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="A symlinked test*.py file must not be treated as a real Python test.",
+            codex_identity=self.codex,
+        )
+        self.assertNotIn("detected-tests", [c["id"] for c in task["checks"]])
+
+    def test_check_discovery_requires_regular_blob_not_symlink(self):
+        repo = self._init_repo()
+        (repo / "test").mkdir()
+        (repo / "test/test_sample.py").write_text("def test_ok():\n    assert True\n")
+        (repo / "test/real.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+        (repo / "test/real.sh").chmod(0o755)
+        (repo / "test/run.sh").symlink_to("real.sh")
+        symlinked = self._commit(repo, "symlinked run.sh")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=symlinked, target_ref=symlinked,
+            goal="A symlinked run.sh must not select Bash.",
+            codex_identity=self.codex,
+        )
+        detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+        self.assertEqual(
+            detected["argv"], ["python3", "-m", "unittest", "discover", "-s", "test"],
+        )
+
+        (repo / "test/run.sh").unlink()
+        (repo / "test/run.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+        regular = self._commit(repo, "regular run.sh")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=regular, target_ref=regular,
+            goal="A regular blob run.sh selects Bash.",
+            codex_identity=self.codex,
+        )
+        detected = next(c for c in task["checks"] if c["id"] == "detected-tests")
+        self.assertEqual(detected["argv"], ["bash", "test/run.sh"])
+
+    def test_check_discovery_combines_bash_and_core_runner(self):
+        repo = self._init_repo()
+        (repo / "test").mkdir()
+        (repo / "test/run.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+        (repo / "test/core").mkdir()
+        (repo / "test/core/test_sample.py").write_text("def test_ok():\n    assert True\n")
+        (repo / "plugin/core/src/devsquad").mkdir(parents=True)
+        (repo / "plugin/core/src/devsquad/__init__.py").write_text("")
+        (repo / "scripts").mkdir()
+        (repo / "scripts/run-core-tests.py").write_text("#!/usr/bin/env python3\n")
+        oid = self._commit(repo, "bash plus core runner")
+        task, _ = build_managed_task(
+            workflow="branch-review", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="Both Bash and the DevSquad core runner are detected.",
+            codex_identity=self.codex,
+        )
+        self.assertEqual(
+            [
+                check["argv"] for check in task["checks"]
+                if check["id"] in {"detected-tests", "detected-core-tests"}
+            ],
+            [
+                ["bash", "test/run.sh"],
+                [
+                    "env",
+                    "PYTHONPATH=plugin/core/src:test/core",
+                    "PYTHONWARNINGS=error::ResourceWarning",
+                    "python3",
+                    "scripts/run-core-tests.py",
+                ],
+            ],
+        )
+
+    def test_check_discovery_deduplicates_supplied_argv_matching_detected(self):
+        repo = self._init_repo()
+        (repo / "test").mkdir()
+        (repo / "test/run.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
+        oid = self._commit(repo, "bash only")
+        task, _ = build_managed_task(
+            workflow="issue-delivery", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="An exact supplied duplicate of a detected check runs once.",
+            codex_identity=self.codex,
+            checks=parse_checks([
+                "bash test/run.sh",
+                "python3 -m unittest discover -s test",
+            ]),
+        )
+        self.assertEqual(
+            [(check["id"], check["argv"]) for check in task["checks"]],
+            [
+                ("candidate-diff-check", ["git", "diff", "--check", oid, "HEAD", "--"]),
+                ("detected-tests", ["bash", "test/run.sh"]),
+                (
+                    "user-check-1",
+                    ["python3", "-m", "unittest", "discover", "-s", "test"],
+                ),
+            ],
+        )
+        self.assertTrue(all(check["required_to_pass"] for check in task["checks"]))
+
+    def test_check_discovery_deduplicates_supplied_core_runner_argv(self):
+        repo = self._init_repo()
+        (repo / "test/core").mkdir(parents=True)
+        (repo / "test/core/test_sample.py").write_text("def test_ok():\n    assert True\n")
+        (repo / "plugin/core/src/devsquad").mkdir(parents=True)
+        (repo / "plugin/core/src/devsquad/__init__.py").write_text("")
+        (repo / "scripts").mkdir()
+        (repo / "scripts/run-core-tests.py").write_text("#!/usr/bin/env python3\n")
+        oid = self._commit(repo, "core runner with python tests tree")
+        task, _ = build_managed_task(
+            workflow="issue-delivery", project_dir=repo,
+            base_ref=oid, target_ref=oid,
+            goal="A supplied duplicate of the full core runner check runs once.",
+            codex_identity=self.codex,
+            checks=parse_checks([
+                "env PYTHONPATH=plugin/core/src:test/core "
+                "PYTHONWARNINGS=error::ResourceWarning python3 scripts/run-core-tests.py",
+            ]),
+        )
+        self.assertEqual(
+            [(check["id"], check["argv"]) for check in task["checks"]],
+            [
+                ("candidate-diff-check", ["git", "diff", "--check", oid, "HEAD", "--"]),
+                (
+                    "detected-tests",
+                    ["python3", "-m", "unittest", "discover", "-s", "test"],
+                ),
+                (
+                    "detected-core-tests",
+                    [
+                        "env",
+                        "PYTHONPATH=plugin/core/src:test/core",
+                        "PYTHONWARNINGS=error::ResourceWarning",
+                        "python3",
+                        "scripts/run-core-tests.py",
+                    ],
+                ),
+            ],
+        )
 
     def test_codex_discovery_selects_requested_exact_model_and_effort(self):
         manifest = mock.Mock(verified_versions=("codex-cli fixture",))

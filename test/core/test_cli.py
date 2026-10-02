@@ -661,13 +661,34 @@ class InstalledWheelMigrationTest(unittest.TestCase):
             shutil.which("python3.11"),
         ]
         for candidate in dict.fromkeys(value for value in candidates if value):
-            result = subprocess.run([
-                candidate, "-c",
-                "import setuptools, wheel; assert int(setuptools.__version__.split('.')[0]) >= 68",
-            ], text=True, capture_output=True)
+            try:
+                result = subprocess.run([
+                    candidate, "-c",
+                    "import setuptools, wheel; assert int(setuptools.__version__.split('.')[0]) >= 68",
+                ], text=True, capture_output=True)
+            except OSError:
+                continue
             if result.returncode == 0:
                 return candidate
         return None
+
+    def test_build_python_skips_missing_first_candidate_for_supported_interpreter(self):
+        missing = str(Path(tempfile.mkdtemp(prefix="devsquad-missing-")) / "no-such-python")
+        probed = []
+
+        def fake_run(argv, **kwargs):
+            probed.append(argv[0])
+            if argv[0] == missing:
+                raise FileNotFoundError(argv[0])
+            return subprocess.CompletedProcess(argv, 0)
+
+        with (
+            mock.patch.dict(os.environ, {"DEVSQUAD_BUILD_PYTHON": missing}),
+            mock.patch("subprocess.run", side_effect=fake_run),
+        ):
+            result = self.build_python()
+        self.assertEqual(probed[0], missing)
+        self.assertEqual(result, sys.executable)
 
     def test_installed_wheel_contains_and_applies_current_migrations(self):
         build_python = self.build_python()
