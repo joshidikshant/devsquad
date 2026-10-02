@@ -138,6 +138,24 @@ class ObjectiveOutcomeTest(unittest.TestCase):
         self.assertEqual(self.service.status(good_id)["state"], "succeeded")
         self.assertEqual(self.outcome(good_id)["verdict"], "succeeded")
 
+    def test_proposal_repairs_pending_outcome_before_its_consistent_read(self):
+        run_id, waiting = self.fixture.start_waiting("objective-proposal-crash")
+        with mock.patch.object(Store, "project_final_outcome", side_effect=RuntimeError("projection crash")):
+            with self.assertRaises(RuntimeError):
+                self.accept(run_id, waiting)
+        proposed = self.service.learning_propose(self.fixture.repo)
+        self.assertEqual(proposed["proposal"]["sample_sizes"]["final_outcomes"], 1)
+        self.assertEqual(self.outcome(run_id)["verdict"], "succeeded")
+
+    def test_generic_worker_timeout_preserves_native_exit_and_projects_failure(self):
+        task = copy.deepcopy(self.fixture.task)
+        task["budget"]["wall_seconds"] = 2
+        started = self.service.start(task, "objective-generic-timeout", _internal_fake_delay=4)
+        self.fixture.wait_state(started["run_id"], {"failed"})
+        final = self.outcome(started["run_id"])
+        self.assertEqual(final["verdict"], "failed")
+        self.assertEqual([c["result"] for c in final["contributions"]], ["failed"])
+
 
 if __name__ == "__main__":
     unittest.main()

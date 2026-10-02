@@ -50,7 +50,8 @@ def main(argv=None):
     try:
         while child.poll() is None:
             run=store.run(a.run_id)
-            if run["state"]=="cancelling" or time.monotonic()>=deadline:
+            if (run["state"]=="cancelling" or time.monotonic()>=deadline
+                    or store.remaining_wall_seconds(a.run_id) == 0):
                 cancelled=run["state"]=="cancelling"; timed_out=not cancelled
                 if inspect_process(child.pid,child.pid,started)!="live": raise RuntimeError("child identity became unsafe")
                 try: os.killpg(child.pid,signal.SIGTERM)

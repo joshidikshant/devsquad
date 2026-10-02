@@ -11,13 +11,14 @@ from .contracts import ContractError
 def project_outcome(run: dict[str, Any], receipt: dict[str, Any], attempts: list[dict[str, Any]],
                     artifact_refs: dict[str, str], assignment: dict[str, Any] | None) -> dict[str, Any]:
     snapshot = json.loads(run["mutable_snapshot"] or "null")
-    if ("internal_fake_delay" in (snapshot or {}) and set(receipt) == {
+    if ("internal_fake_delay" in (snapshot or {}) and set(receipt) - {"error"} == {
             "returncode", "cancelled", "timed_out", "stdout", "stderr", "finished_at"}):
         # The existing generic runner fixture retains its native exit receipt,
         # unlike the managed workflow's semantic receipt. Do not rewrite it.
         if (type(receipt["returncode"]) is not int or type(receipt["cancelled"]) is not bool
                 or type(receipt["timed_out"]) is not bool
-                or type(receipt["finished_at"]) not in {int, float}):
+                or type(receipt["finished_at"]) not in {int, float}
+                or "error" in receipt and (receipt["error"] != "TIMEOUT" or not receipt["timed_out"])):
             raise ContractError("objective generic exit receipt is invalid")
         expected = "cancelled" if receipt["cancelled"] else "failed" if receipt["timed_out"] or receipt["returncode"] != 0 else "succeeded"
         if run["state"] != expected and run["state"] != "cancelled":

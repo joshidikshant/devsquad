@@ -799,11 +799,26 @@ class Store:
         if run is None:
             raise ContractError("run does not exist")
         wall_seconds = self._wall_seconds_from_run(run)
+        current = _authoritative_now(now)
+        experiment_remaining = self._experiment_remaining_wall_seconds(run_id, current)
         if wall_seconds is None:
-            return None
+            return experiment_remaining
         elapsed_ms = self._execution_elapsed_ms(
-            run_id, run, _authoritative_now(now),
+            run_id, run, current,
         )
+        remaining = max(0, (wall_seconds * 1000 - elapsed_ms) // 1000)
+        return remaining if experiment_remaining is None else min(remaining, experiment_remaining)
+
+    def _experiment_remaining_wall_seconds(self, run_id: str, current: datetime) -> int | None:
+        row = self.connection.execute(
+            "SELECT s.spec_json,s.recorded_at FROM experiment_assignments a "
+            "JOIN experiment_specs s ON s.experiment_id=a.experiment_id WHERE a.run_id=?",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        wall_seconds = json.loads(row["spec_json"])["budget"]["wall_seconds"]
+        elapsed_ms = max(0, int((current - _parse_utc(row["recorded_at"])).total_seconds() * 1000))
         return max(0, (wall_seconds * 1000 - elapsed_ms) // 1000)
 
     def _enforce_attempt_budget(
@@ -1795,12 +1810,26 @@ class Store:
             )
         ]
 
+    def repair_project_outcomes(self, project: Path) -> None:
+        """Repair before, never inside, a caller's consistent read transaction."""
+        if self.connection.in_transaction:
+            raise ConflictError("project outcome repair requires an independent transaction")
+        common = str(git_common_dir(project))
+        for job in self.connection.execute(
+                "SELECT j.run_id FROM objective_outcome_jobs j JOIN runs r ON r.id=j.run_id "
+                "JOIN projects p ON p.id=r.project_id WHERE p.git_common_dir=? "
+                "AND j.completed_outcome_id IS NULL AND r.state IN ('succeeded','failed','cancelled')",
+                (common,)).fetchall():
+            self.project_final_outcome(job["run_id"])
+
     def learning_report(
-        self, project: Path, *, now: datetime | None = None,
+        self, project: Path, *, now: datetime | None = None, _repair_pending: bool = True,
     ) -> dict[str, Any]:
         """Repair pending public projections and compare with explicit missingness."""
         from .learning import build_comparison_report
 
+        if _repair_pending:
+            self.repair_project_outcomes(project)
         common_dir = git_common_dir(project)
         project_row = self.connection.execute(
             "SELECT id FROM projects WHERE git_common_dir=?", (str(common_dir),),
@@ -1820,8 +1849,6 @@ class Store:
                     (project_id,),
                 )
             ]
-            for terminal_run in terminal_runs:
-                self.project_final_outcome(terminal_run["run_id"])
             outcome_records = [
                 {"run_id": row["run_id"], "outcome": json.loads(row["payload_json"])}
                 for row in self.connection.execute(
@@ -2004,9 +2031,10 @@ class Store:
         from .experiment_eligibility import current_evidence, saved_evaluation
         project_path = project.resolve(strict=True)
         current = _authoritative_now(now)
+        self.repair_project_outcomes(project_path)
         self.connection.execute("BEGIN")
         try:
-            report = self.learning_report(project_path, now=current)
+            report = self.learning_report(project_path, now=current, _repair_pending=False)
             if report["project_id"] is None:
                 row = self.connection.execute(
                     "SELECT experiment_id FROM experiments WHERE project_path=? "
@@ -2963,8 +2991,7 @@ class Store:
         ).fetchone()[0]
         if consumed >= spec["budget"]["max_worker_invocations"]:
             raise BudgetExhausted("experiment worker reservation budget is exhausted")
-        elapsed = (_authoritative_now() - datetime.fromisoformat(row["recorded_at"])).total_seconds()
-        if elapsed >= spec["budget"]["wall_seconds"]:
+        if self._experiment_remaining_wall_seconds(run_id, _authoritative_now()) == 0:
             raise BudgetExhausted("experiment wall-time budget is exhausted")
 
     def reserve_attempt(

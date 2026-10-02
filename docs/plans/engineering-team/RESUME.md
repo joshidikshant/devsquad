@@ -51,12 +51,29 @@ Public concurrent-budget and promotion → new-run binding → held-out regressi
 → rollback tests pass. See `evidence/R5-public-integration-partial-2026-10-02.json`.
 
 The frozen learning/lifecycle affected gate finished: **71 tests/233.881s**,
-two stale schema-15 assertion failures, no behavioral errors. Those expectations
-now match schema 16; keep the failed gate in partial evidence. No test process
-remains active at this checkpoint. Next: recheck the two assertions, then the
-full core gate with explicit offline Python 3.12 build interpreter,
-independent exact-patch review, schema-16 safe installer/installed transport
-recheck and R5 closure. Current production installation/ledger is still the
+two stale schema-15 assertion failures, no behavioral errors. The two direct
+assertion checks and another 22 migration/capacity/decision tests passed after
+updating expectations, not removing them. Initial independent native R5 audit
+**`5a70f3db-91a8-4606-9809-c0b993b988b1`** rejected exact `14b3a391`:
+medium pending-projection nested read transaction and high reservation-only
+experiment deadline. Diff/Bash/16 public tests/reference checks had passed;
+that does not supersede the findings. Controlled active-worker reproduction
+confirmed 7.274s work against a 3s experiment cap. The root full gate was
+explicitly SIGINT-stopped (PID 77765/exit 130) to repair this known rejected
+candidate, not counted as a pass. That interruption bypassed unittest cleanup,
+producing TemporaryDirectory/SQLite finalizer warnings; normal complete gates
+must still prove no warnings/unraisable. No scoped leftover process was found.
+
+Repairs now move project projection before the consistent proposal read,
+clip launch timeouts to the experiment deadline and poll remaining budget in
+the gated runner for active work. A generic fixture timeout's native TIMEOUT
+field is preserved and projected, not rewritten. Three new red public tests
+reproduced the defects (1 failure/2 errors/14.842s); **54 affected outcome,
+trial, store, supervisor and M2 gate tests now pass in 48.572s**. No test/native
+process remains active at this checkpoint. Next: full core gate with explicit
+offline Python 3.12 build interpreter and narrow independent exact-repair
+follow-up, then schema-16 safe installer/installed transport recheck and R5
+closure. Current production installation/ledger is still the
 accepted R4 **schema 15**; never open it with source Service while schema-16
 work is incomplete. Preserve failed red/intermediate probes truthfully.
 Continue R6 UX/readiness/generated-reference checks, R7/C1 and final R8

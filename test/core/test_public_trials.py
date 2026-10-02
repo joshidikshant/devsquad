@@ -119,6 +119,29 @@ class PublicTrialTest(unittest.TestCase):
         finally:
             store.close()
 
+    def test_experiment_deadline_also_stops_an_already_running_worker(self):
+        fixture = ExperimentRuntimeFixture(self.fixture.root / "active-deadline", workflow="issue-delivery")
+        self.addCleanup(fixture.close)
+        fixture.spec["budget"]["wall_seconds"] = 5
+        before = time.monotonic()
+        started = fixture.service.trial_start(
+            fixture.spec, "eval-1", "candidate", fixture.task("eval-1", "candidate"), "public-active-deadline",
+            _internal_implementation_fixture={"writes": [{"path": "README", "content": "fixed eval-1\n"}], "delay_seconds": 10},
+            _internal_review_fixture={"verdict": "clean", "summary": "Active deadline fixture.", "findings": []},
+        )
+        fixture.runs[("eval-1", "candidate")] = started["run_id"]
+        self.assertEqual(fixture.wait(started["run_id"])["state"], "failed")
+        self.assertLess(time.monotonic() - before, 8, "worker must not run for its separate 120-second task budget")
+        store = fixture.store()
+        try:
+            attempts = store.attempts_for_run(started["run_id"])
+            self.assertEqual(len(attempts), 1)
+            self.assertIsNotNone(attempts[0]["pid"], "this must exercise active work, not a prelaunch failure")
+            final = store.outcomes_for_run(started["run_id"])[0]["outcome"]
+            self.assertEqual([c["result"] for c in final["contributions"]], ["failed"])
+        finally:
+            store.close()
+
     def test_public_controller_rejects_delivery_reviewer_and_unbounded_requests(self):
         task = self.fixture.task("eval-1", "control")
         task.update(workflow="issue-delivery")
