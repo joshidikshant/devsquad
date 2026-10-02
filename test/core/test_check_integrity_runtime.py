@@ -208,7 +208,13 @@ class PublicCheckIntegrityTest(unittest.TestCase):
             ),
         ]
         run_id = self.start(workflow, mode, checks)
-        status = self.wait_state(run_id, {"awaiting_host", "succeeded", "failed"})
+        # Headless mode traverses awaiting_host while it queues its own lead.
+        # Only host mode may inspect that intermediate packet; headless evidence
+        # is the terminal receipt, which is not published at the transition.
+        states = {"succeeded", "failed"}
+        if mode == "host":
+            states.add("awaiting_host")
+        status = self.wait_state(run_id, states)
         if mode == "host":
             self.assertEqual(status["state"], "awaiting_host", status)
             claimed = self.service.handoff_claim(run_id, status["version"], "integrity-host")

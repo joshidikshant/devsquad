@@ -69,10 +69,17 @@ clip launch timeouts to the experiment deadline and poll remaining budget in
 the gated runner for active work. A generic fixture timeout's native TIMEOUT
 field is preserved and projected, not rewritten. Three new red public tests
 reproduced the defects (1 failure/2 errors/14.842s); **54 affected outcome,
-trial, store, supervisor and M2 gate tests now pass in 48.572s**. No test/native
-process remains active at this checkpoint. Next: full core gate with explicit
-offline Python 3.12 build interpreter and narrow independent exact-repair
-follow-up, then schema-16 safe installer/installed transport recheck and R5
+trial, store, supervisor and M2 gate tests now pass in 48.572s**. Exact native
+repair follow-up **e046a174-55ce-4496-973e-2fc97c68a493** is clean and accepted,
+succeeded/22; diff/Bash/13 public tests/reference checks passed with unchanged
+integrity. The next full fail-fast gate stopped at 17 tests/10.494s, one failure,
+no errors/skips/unraisable: a headless integrity test requested a terminal
+receipt during a transient handoff transition. Isolated reproduction passed;
+the test now waits for terminal state in headless mode while retaining every
+integrity assertion. **66 integrity/outcome/review/delivery tests pass in
+125.322s**. No test/native process remains active at this checkpoint. Next:
+one full core gate with explicit offline Python 3.12 build interpreter, then
+schema-16 safe installer/installed transport recheck and R5
 closure. Current production installation/ledger is still the
 accepted R4 **schema 15**; never open it with source Service while schema-16
 work is incomplete. Preserve failed red/intermediate probes truthfully.
