@@ -120,15 +120,23 @@ Both follow-ups are integrated; root's final 19 focused tests pass in 7.183s.
 Bash/reference/diff gates pass. Final added-hunk independent review is clean;
 one test/13 negative subcases in 0.208s, reviewed/committed blobs equivalent.
 Exact immutable R6 candidate: `7130ee7689f8cc14efacb606bcbc4c05f373298c`.
-Native independent audit `44d0eecb-b5da-4c09-b1e1-c38b0d1d09ca` started
-2026-10-02 23:24 UTC from accepted installed R5: one pinned gpt-6.1-sol/low
-reviewer, host lead, 600s wall, no revisions/fallbacks, required diff/Bash/
-affected/reference checks, no duplicate full suite. Observe this saved run;
-never start another while it is live. Next launch exactly one frozen full gate:
+Native independent audit `44d0eecb-b5da-4c09-b1e1-c38b0d1d09ca` is explicitly
+**rejected**, failed/version22. Verified Codex0.159.2/gpt-6.1-sol/low found P1
+`r6-probe-ownership-unavailable`: missing captured/current start identities
+permit group signals and diagnostic protocol/output use. Readiness owns the
+isolated fail-closed repair from7130ee7; no Council network probe ran. Diff/Bash
+checks passed, but the required66-test command (89.977s/OK) was **invalidated**
+by undeclared bytecode; reference was not run. The private invocation now sets
+PYTHONDONTWRITEBYTECODE=1; candidate integrity was not relaxed. Exact packet
+and four artifact hashes are verified and retained in R6 partial evidence.
+The one frozen baseline full gate completed successfully, exec86382:
 `env DEVSQUAD_BUILD_PYTHON=/Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3.12 PYTHONPATH=plugin/core/src:test/core PYTHONWARNINGS=error::ResourceWarning python3 scripts/run-core-tests.py --failfast`.
-Freeze root source/tests until it completes. Record its session/result before
-any interruption. Install only after full/native acceptance. Production remains
-accepted R5/schema16; this audit is its only new authorized run.
+**554 tests/645.034s**, two optional SDK skips, zero failures/errors/unraisable;
+UTC/monotonic645.167s agree. RootHEAD32b94d6 source/tests/scripts are equivalent
+to7130ee7. This is a baseline pass, not proof of the later ownership repair.
+No full suite/native run remains active. Next integrate the ownership repair,
+run affected regressions and a narrow exact follow-up audit; install only after
+final frozen/native acceptance. Production remains accepted R5/schema16.
 R7 Council remains in isolated `r7-council`; its controlled stage flow is
 partial. Its source is checkpointed at `42979ba4` with 21 Council tests and
 67 shared-contract tests (two optional SDK skips), Bash/reference/diff gates.
@@ -147,10 +155,17 @@ quality/escaped-defect/rework/quota/host-usage observations remain unknown,
 automatic use off. Its 25 Council tests/90.724s, 35 shared migration tests/
 54.469s, 12 handoff-store tests/4.528s and 10 supervisor/crash tests/1.819s pass.
 Native HTTPS attestation fails closed before generation. The Council agent
-owns actual temporary immutable16-to17 install-upgrade proof; readiness owns
-immutable-old16 claim denial and one bounded Unix mDNS resolver-socket diagnostic.
-Root owns shared-hunk/formatter reconciliation after R6 acceptance. No production
-edit or new native Council generation has occurred. Preserve attached worktrees.
+completed the actual temporary immutable16-to17 install-upgrade proof at
+`eee6db738a9996ea432e3ca2bf2347b005ecd74a`: active and recoverable16 both defer
+without selector/launcher/schema changes; safe cancel/reconcile permits17,
+then immutable long-lived/fresh old16 clients deny Council mutations. Two
+focused tests/7.976s, Bash/reference/diff pass; no production update occurred.
+Readiness independently verified old16 denial on17 and the actual fourth lead
+succeeding. Its one bounded Unix mDNS resolver-socket diagnostic is paused for
+the P1 ownership repair. Council agent now owns shared-hunk/formatter and R6
+authority reconciliation on isolated `codex/council-integration` in the former
+r6-terminal worktree; root remains on codex/engineering-team. No native Council
+generation occurred. Preserve all original checkpoints/attached worktrees.
 
 Desktop control worked for scoped inspection. Claude's local Code tab selected only this
 DevSquad project on `codex/engineering-team`, with an empty prompt; no proof

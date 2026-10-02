@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_package": "R6",
   "recorded_on": "2026-10-02",
-  "status": "recovery_repairs_integrated_full_native_pending",
+  "status": "baseline_full_passed_native_rejected_ownership_repair_pending",
   "base_revision": "8f2c1c6a7d9edfe7cc3d78ecbc59ce105be636b2",
   "integrated_checkpoints": [
     "dd709804e70e0791614319a9ae5c2597768d7318",
@@ -60,8 +60,53 @@
     "First expanded repair-agent gate failed a stale isolated bf3 current-schema expectation of 15; root already expected 16 after dfe9976. Changed only the current-schema assertion to SUPPORTED_SCHEMA_VERSION and retained the historical schema-four fixture checks; not a current root runtime failure",
     "Independent 22a4ed8a follow-up: ten existing repair tests pass in 26.811s, but a lease expiring after claim acquisition and before submission creates a durable expired_claim rejection. A fresh own retry advances fence 2 to 3/version 16 to 17 yet the stable decision replays that old rejection indefinitely. Follow-up must preserve complete immutable rejection history while recovering only exact fresh guided authority",
     "Independent 22a4ed8a command-copyability edge: saved reason --deferred is printed as --reason --deferred and argparse rejects it. Fixed by 31a8a68b attached shell-quoted --reason= and actual command round-trip",
-    "Follow-up red reproduction: two tests/3.845s, one failure and one error. Initial audit implementation reused a run_version for two events and failed uniqueness; consecutive atomic recovery/submitted versions repaired it before green checkpoint gates"
+    "Follow-up red reproduction: two tests/3.845s, one failure and one error. Initial audit implementation reused a run_version for two events and failed uniqueness; consecutive atomic recovery/submitted versions repaired it before green checkpoint gates",
+    "Exact native audit44d0eecb found a high process-ownership defect: start_identity=None/current_identity=None/returncode=None permits group signaling; diagnostic callers use output/protocol without confirmed captured identity. Candidate explicitly rejected, failed/version22; isolated repair pending",
+    "Native required check ran66 tests/89.977s/OK but created nine undeclared cpython-314 bytecode files. Integrity correctly invalidated the check; subsequent reference not run. Corrected private invocation sets PYTHONDONTWRITEBYTECODE=1 without relaxing candidate integrity"
   ],
+  "baseline_full_gate": {
+    "target_revision": "7130ee7689f8cc14efacb606bcbc4c05f373298c",
+    "frozen_root_head": "32b94d66e57ca227deb1cfda37411570af92c055",
+    "source_tests_scripts_equivalent": true,
+    "exec_session": 86382,
+    "command": "env DEVSQUAD_BUILD_PYTHON=/Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3.12 PYTHONPATH=plugin/core/src:test/core PYTHONWARNINGS=error::ResourceWarning python3 scripts/run-core-tests.py --failfast",
+    "tests": 554,
+    "seconds": 645.034,
+    "monotonic_seconds": 645.1674028339985,
+    "utc_seconds": 645.167055,
+    "optional_sdk_skips": 2,
+    "failures": 0,
+    "errors": 0,
+    "unraisable": [],
+    "scope": "Baseline only; does not prove the pending ownership repair or Council integration"
+  },
+  "native_audit": {
+    "run_id": "44d0eecb-b5da-4c09-b1e1-c38b0d1d09ca",
+    "target_revision": "7130ee7689f8cc14efacb606bcbc4c05f373298c",
+    "candidate_sha256": "2751f6b40a2125a83ee10bc6047beee378ec617bff0817c0e26666fc76d00ee6",
+    "state": "failed",
+    "version": 22,
+    "host_disposition": "reject",
+    "accept_allowed": false,
+    "review_verdict": "findings",
+    "finding": "r6-probe-ownership-unavailable",
+    "severity": "high",
+    "identity": {"harness":"codex","harness_version":"codex-cli 0.159.2","model_id":"gpt-6.1-sol","effort":"low","verification":"verified","permission_policy":"read_only"},
+    "usage": {"source":"native_reported","input_tokens":276520,"output_tokens":2246,"total_tokens":278766},
+    "usage_limitation": "Not a subscription invoice or an estimate of Plus five-hour windows",
+    "artifact_hashes_verified": [
+      "c82d6c3d20b6b93ba93a3e0d1f6cac22bb6d5a80d453e47432dbd40120c0dd79",
+      "cdfe7b8dd8023747ac76539dd835f5b5b0fe3e71f833c31593287dc77b78e39c",
+      "8c911a4fa0be95aeeba341a75978dcb109f977b7bab91462d4e9150150e4e721",
+      "3ed7a9a766d3f19c0ff73c956dbb196ee550c15d86f58bf38827cb75820eca51"
+    ],
+    "checks": [
+      {"id":"candidate-diff-check","status":"passed","integrity":"verified","duration_ms":20},
+      {"id":"detected-tests","status":"passed","integrity":"verified","duration_ms":16912},
+      {"id":"user-check-1","status":"invalidated","integrity":"violated","duration_ms":90564,"tests_ran":66,"test_seconds":89.977,"test_runner_result":"OK","reason":"check:undeclared_inputs_changed"},
+      {"id":"user-check-2","status":"not_run","reason":"prior_check_invalidated_candidate"}
+    ]
+  },
   "independent_followup": {"revision": "31a8a68b", "result": "clean_bounded_scope", "tests": 6, "seconds": 9.120, "source_blobs_before_after": "unchanged", "full_five_file_diff_sha256": "b4c742fa400932d216d698e483af40abaa733c741325aebd3eaaf56776accf40", "final_original_event_hunk_review": {"revision": "e7e9042c", "result": "clean_bounded_scope", "tests": 1, "negative_subcases": 13, "seconds": 0.208, "source_before_after_committed": "equivalent", "two_file_diff_sha256": "39ba13f6e5b0cf06da5c55d619d7bd0b2a3684780129d16f8493640736b8cc65"}},
   "fresh_install_scope": {
     "providers": "offline native CLI protocol fixtures only",
@@ -83,8 +128,9 @@
     "unrelated_servers_or_settings": "not changed"
   },
   "remaining_gates": [
-    "Frozen full gate",
-    "Independent exact R6 review and accepted immutable checkpoint",
+    "Fail-closed unavailable process ownership regression/repair and independent exact follow-up",
+    "Final frozen integration full gate; baseline554 pass is not repaired-source acceptance",
+    "Independent exact R6 acceptance and immutable checkpoint",
     "Safe installed update, non-generating live readiness, idempotence/drift and actual installed SDK tests",
     "Separate Claude Code-tab if accessible, updated Antigravity CLI and R7/R8 gates; Antigravity IDE not required by user clarification"
   ]
