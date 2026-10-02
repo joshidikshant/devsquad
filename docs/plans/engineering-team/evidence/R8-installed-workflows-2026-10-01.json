@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "status": "initial_475_test_workflow_passed_revision_failed_no_changes",
+  "fresh_byte_correction": {"run_id": "360a4993-d016-406e-8bb4-ae6d57dfe6cf", "state_at_checkpoint": "running", "version": 4, "target": "af994e948eb38764884d27fd61665efa776cb47b", "scope": "two writable files, no revisions, two workers, 1800s wall budget; original frozen task unchanged", "mandatory_checks": "diff, Bash and full spawn-safe core suite with explicit offline build interpreter", "operator_red": {"case": "real Git index/tree non-UTF-8 documentation and test filenames", "result": "both raise UnicodeDecodeError on af994", "fixture_note": "Git plumbing inserts byte names into the index; macOS APFS rejects such working-tree names"}, "next": "finish candidate/native review/full gates, then narrow full-combined review, integration, offline install and one Gemini recheck"},
   "source_checkpoint": "c7ccc02",
   "installation": {
     "previous_release": "0.1.0-py31214-9e5cdea2aa99-mcp-a26bc88afbef",

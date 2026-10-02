@@ -20,7 +20,13 @@ The earlier first iteration genuinely passed Claude → independent Codex →
 found strict UTF-8 Git filename decoding. Retain that passing historical gate
 and the later failed terminal receipt separately. Do not mutate either.
 
-Next: one fresh narrow issue-delivery task from `af994e9`, with the byte-safe
+**Fresh task `360a4993-d016-406e-8bb4-ae6d57dfe6cf` is running/version 4**,
+started at approximately 01:15 UTC with a new 1,800s budget, no revisions and
+two worker invocations. The previous frozen budget/receipts are unchanged.
+Private `observe-run.py` advances its ready candidate review, then stops at
+handoff or a terminal state. Only one full core gate may run at a time.
+
+Next: finish this fresh narrow issue-delivery task from `af994e9`, with the byte-safe
 decoder and real-Git regression as its primary goal, only two writable files,
 verified Claude writer/Codex reviewer and mandatory full/Bash gates. After a
 clean accepted candidate, perform the exact five-file combined review from
