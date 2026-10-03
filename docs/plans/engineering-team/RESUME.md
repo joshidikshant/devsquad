@@ -31,6 +31,21 @@ root complete33 module PASSED29.820s/no failures/errors/skips. Root Bash259/
 11files/reference/JSON/diff passed. Corrected checkpoint/push/new exact-head
 public CI pending. No merge/tag.
 
+Corrected remote candidate f40c618caefd100637c4686660673e159899ecb7 is now
+pushed; PR CI37086958301: Bash/MCP passed, Python3.11.9 FAILED137/191.313s
+at delivery repair recovery1001 (ownership_ambiguous !=retain_ownership).
+Python3.14 still active, not accepted; duplicate push37086954389 cancelled.
+Freeze this exact remote candidate. Any later local docs-only checkpoint is
+recovery metadata, not a change to the tested/publication target. Root must
+merge/tag the remotely tested f40 candidate, then record published outcomes.
+
+New bounded isolated repair: test SIGKILLs attempt_runner, not coordinator,
+then assumes.1s implies blocked. Correct running import returns safe
+ownership_ambiguous before typed blocked recovery. Positively wait for the
+same dead runner and blocked/current attempt ownership_ambiguous before one
+explicit retain request. Preserve exactly3 attempts/no new writer/launchedfalse/
+source/cancel assertions; no core edit. Independent review pending. No merge.
+
 ## Accepted gates — do not repeat unchanged
 
 - Frozen core b83dda7fbf691503d3adf3c9ea6ecebd4071ba16 passed604 tests/
