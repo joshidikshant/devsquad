@@ -77,6 +77,12 @@ independent exact-old shape exits1, corrected exits0/.362s, packaging9 passes.
 Root Bash261/11 passes. Checkpoint/push/PR2/fullCI/merge0.11.1 and actual
 installed no-error validation remain. Original core/full/live gates stay valid.
 
+Corrective remote headbefc7e8a00c9b9251af0a83e3a77f12adae5db11 is frozen.
+PR2 https://github.com/joshidikshant/devsquad/pull/2 is attached; final PR CI
+37090495321 active, optionalMCP passed; duplicate push37090462788 cancelled. Keep
+later local docs checkpoints local until release. Require all four CI jobs;
+merge only this tested head and prove merged tree equality before0.11.1 tag.
+
 Rejected private diagnostic RELEASE+cancel cleanup overlapped import and
 raised stale-phase ConflictError. Independent read-only triage: fail-closed
 completion fence, no duplicate-writer/false-cancel evidence. No error-time
@@ -138,8 +144,7 @@ and plugin list without errors. Do not claim local plugin usability yet.
 
 ## Exact next action
 
-1. Checkpoint/push independently reviewed0.11.1 hook correction. Create PR2
-   to main and freeze its exact head for final all-four public CI gates.
+1. Await all-four final PR CI37090495321 on exact frozenbefc7e8 head.
 2. Merge exact tested head, prove merged tree equality; regenerate source/
    plugin0.11.1 archives from exact merge, reuse unchanged core wheel only
    after tree/hash equality. Publish/verify tag, release and downloads.

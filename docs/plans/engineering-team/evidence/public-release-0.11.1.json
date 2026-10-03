@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-10-02",
-  "status": "narrow_hook_envelope_correction_local_pass_review_ci_pending",
+  "status": "narrow_hook_envelope_correction_reviewed_local_pass_final_ci_active",
   "authorization": "Corrective patch within authorized public GitHub release and safe local plugin update; preserve original0.11.0 tag/assets",
   "baseline_release": "https://github.com/joshidikshant/devsquad/releases/tag/v0.11.0",
   "failure": {
@@ -32,5 +32,17 @@
     "independent_actual_validator": {"claude": "2.1.220", "corrected_exit": 0, "corrected_seconds": 0.362, "exact_old_shape_exit": 1, "exact_old_shape_seconds": 0.237},
     "root_bash": {"assertions": 261, "files": 11, "failures": 0, "timings_seconds": {"fast": 0.280, "ignored_TERM": 0.236, "pre_open_cancel": 0.218, "TERM_resistant": 3.269, "slow_ps": 1.315}}
   },
-  "remaining": "Complete independent review/Bash checkpoint, push corrected candidate and PR2; final exact-head public CI, merge, verified0.11.1 assets, actual installed plugin validation and zero loader errors. Do not rerun unchanged paid/live workflows or claim whole-plan completion."
+  "final_ci": {
+    "head": "befc7e8a00c9b9251af0a83e3a77f12adae5db11",
+    "pull_request": "https://github.com/joshidikshant/devsquad/pull/2",
+    "run_id": 37090495321,
+    "url": "https://github.com/joshidikshant/devsquad/actions/runs/37090495321",
+    "status": "active_not_yet_accepted",
+    "duplicate_push_run": 37090462788,
+    "duplicate_push_status": "completed_cancelled",
+    "optional_mcp": "completed_success; counts from final job log pending",
+    "required": ["Legacy Bash3.2", "Core Python3.11", "Core Python3.14", "Optional MCP2.2.0"],
+    "later_local_docs": "Recovery metadata only; merge/tag only accepted remote head and identical-tree merge"
+  },
+  "remaining": "Require all-four final exact-head public CI37090495321 onbefc7e8, merge PR2, verified0.11.1 assets, actual installed plugin validation and zero loader errors. Do not rerun unchanged paid/live workflows or claim whole-plan completion."
 }
