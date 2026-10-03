@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "status": "narrow_hook_envelope_correction_local_pass_review_ci_pending",
+  "authorization": "Corrective patch within authorized public GitHub release and safe local plugin update; preserve original0.11.0 tag/assets",
+  "baseline_release": "https://github.com/joshidikshant/devsquad/releases/tag/v0.11.0",
+  "failure": {
+    "installed_plugin": "0.11.0",
+    "claude_version": "2.1.220",
+    "updater_exit": 0,
+    "loader": "Hook load failed: hooks expected record received undefined",
+    "actual_installed_validator_exit": 1,
+    "cause": "Old event-only hooks/hooks.json omitted the required top-level hooks object",
+    "official_format": "https://code.claude.com/docs/en/hooks#hook-locations"
+  },
+  "patch": {
+    "diff_sha256": "0542f696c655c801a541d6b7066e37bddf2ea59066a83c4f0ab1bf992ad509da",
+    "hook_blob": "fdbd2f3299951aa4e98c2bb354ae05667e8939f0",
+    "packaging_test_blob": "95d6361f96c51cacd8236c86149ffc5f729f25b5",
+    "scope": "Required hooks envelope, plugin/marketplace0.11.1, changelog/release validation instructions, offline envelope/negative-shape/version tests",
+    "commands_matchers_timeouts": "unchanged",
+    "core_tree": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+    "core_payload_digest": "303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52",
+    "core_runtime_changes": 0
+  },
+  "local": {
+    "actual_claude_source_validator": "passed",
+    "offline_packaging_assertions": 9,
+    "old_event_only_shape": "rejected",
+    "independent_review": "clean; frozen six-file diff and blobs unchanged before/after bounded independent checks",
+    "independent_event_values": "parsed exact equality to old inner event map; commands/matchers/timeouts unchanged",
+    "independent_actual_validator": {"claude": "2.1.220", "corrected_exit": 0, "corrected_seconds": 0.362, "exact_old_shape_exit": 1, "exact_old_shape_seconds": 0.237},
+    "root_bash": {"assertions": 261, "files": 11, "failures": 0, "timings_seconds": {"fast": 0.280, "ignored_TERM": 0.236, "pre_open_cancel": 0.218, "TERM_resistant": 3.269, "slow_ps": 1.315}}
+  },
+  "remaining": "Complete independent review/Bash checkpoint, push corrected candidate and PR2; final exact-head public CI, merge, verified0.11.1 assets, actual installed plugin validation and zero loader errors. Do not rerun unchanged paid/live workflows or claim whole-plan completion."
+}

@@ -64,3 +64,7 @@ tests cover Claude-free installation, idempotence, actual payload drift,
 plugin contents and an active run surviving a release switch. The operator
 commands and supported/deferred surface boundaries live in
 [docs/RUNTIME-GUIDE.md](docs/RUNTIME-GUIDE.md).
+
+When Claude is installed, run `claude plugin validate ./plugin` before
+publication and validate the actual installed plugin after its normal update.
+An updater exit code of zero alone does not prove that plugin hooks loaded.
