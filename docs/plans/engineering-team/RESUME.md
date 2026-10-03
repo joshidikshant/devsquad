@@ -12,6 +12,21 @@ Release version0.11.0 includes core0.1.0; Council stays native-unavailable and
 automatic OFF. Whole-plan completion is not claimed. Root owns publication,
 final frozen/full/native gates and local install. No tag/release/push yet.
 
+Release candidate `fb64e43a28e9b8eab6670be3d7da8e4fd0fcaa97` passed the
+actual accepted-R5 pristine trusted check:60 tests/33.182s, full fingerprints
+unchanged, zero ignored/untracked/bytecode before and after. Input fingerprint
+131755f0ae8bfe75831607ffd840e1346172aa4f7452f3b2394cdd58614d5216 is NOT
+a branch-review candidate identity. The exact owned clean worktree was removed
+nonforce; private proof retained. First final combined full suite stopped at
+45 tests/27.541s with one ordinary finish mock/call-contract failure: Council
+forwarded four optionalNone kwargs. Narrow repair preserves the existing
+three-argument ordinary call, forwards only opt-in Council choice, and adds
+explicit forwarding coverage. Root32 CLI/Council tests/25.365s pass;
+independent narrow review clean with two tests/0.012s and unchanged blobs;
+Bash227/reference/diff pass. The five preflight EOF/diagnostic/fixture paths
+are unchanged by this isolated CLI repair. Next freeze the repaired candidate
+and run final full/native gates; retain the failed first gate truthfully.
+
 EOF/fixture repair `4f01456189b38252a678938e7197ac2f12a6838e` is now integrated
 at source level: wait for natural exit without reaping under the original
 deadline, then owned cleanup; true version/auth status survives delayed exit.

@@ -17,6 +17,21 @@
     "093ed0f397289bffe9ea249c10796cb436027f00",
     "4f01456189b38252a678938e7197ac2f12a6838e"
   ],
+  "release_candidate_preflight": {
+    "target_revision": "fb64e43a28e9b8eab6670be3d7da8e4fd0fcaa97",
+    "trusted_core": "immutable accepted R5 review_worker._run_check, prepare_check_workspace, candidate_input_state imported using installed Python -P/-B",
+    "argv": ["env","PYTHONDONTWRITEBYTECODE=1","DEVSQUAD_BUILD_PYTHON=/Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3.12","PYTHONPATH=plugin/core/src:test/core","PYTHONWARNINGS=error::ResourceWarning","python3","-m","unittest","test_diagnostics","test_task_entry"],
+    "tests":60,"seconds":33.182,"trusted_seconds":33.854,"returncode":0,"failures":0,"errors":0,
+    "input_fingerprint_before_and_after":"131755f0ae8bfe75831607ffd840e1346172aa4f7452f3b2394cdd58614d5216",
+    "tracked_payload_fingerprint":"3a0baeb9f87bcc8e1f1776a3b64b07cdeac1fce554ee535a87738d78f2c167bd",
+    "full_payload_fingerprint":"a59b2bd8e47995a93786019cc454cbf3373bf2844518f04290c7bebc5de9ddfa",
+    "tracked_files":333,"ignored_untracked_additions":0,"bytecode_before_and_after":0,"unchanged":true,
+    "fingerprint_limitation":"Input fingerprint only, NOT branch-review candidate identity",
+    "validated_owned_worktree_removed":"nonforce, returncode0",
+    "first_final_full": {"tests":45,"seconds":27.541,"failures":1,"errors":0,"unraisable":[],"reason":"ordinary finish mock/call contract received new optionalNone Council kwargs","acceptance":"failed"},
+    "narrow_cli_repair": {"behavior":"Preserve3arg ordinary finish; forward any explicit Council field without inference; unchanged omittedrun resolver","root_affected":{"tests":32,"seconds":25.365,"failures":0,"errors":0},"independent_review":"clean narrow diff","independent_tests":2,"independent_seconds":0.012,"cli_blob":"ea9b622952478c423aa79d1c5d6a0f89159931ec","test_cli_blob":"698d0dda97803bc356b44084c68a5856d4c4f293","bash_assertions":227,"generated_reference":"current","diff":"passed"},
+    "preflight_source_equivalence":"The five affected EOF/diagnostic/fixture paths are unchanged by the subsequent isolated CLI forwarding repair"
+  },
   "eof_followup": {
     "run_id": "d2355cd0-603d-4e6a-b1a2-b05b0e99d53a",
     "target_revision": "8242eff68b24538aacc1b40b67b2e88e96b04d52",

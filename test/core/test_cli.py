@@ -281,6 +281,24 @@ class CliTest(unittest.TestCase):
                 service.finish.assert_called_once_with("run-1", disposition, "Exact evidence assessed.")
                 service.resolve_run_id.assert_not_called()
 
+    def test_finish_forwards_explicit_council_choice_without_inference(self):
+        service = mock.Mock()
+        response = {"run_id": "run-1", "state": "succeeded", "disposition": "accept"}
+        service.finish.return_value = response
+        code, payload, stderr = self.invoke([
+            "finish", "run-1", "--accept", "--reason", "Exact evidence assessed.",
+            "--choose", "synthesis", "--supported-claim", "bounded retries",
+            "--discarded-alternative", "unbounded retries", "--validation", "checks pass",
+            "--runtime-dir", str(self.runtime), "--json",
+        ], service)
+        self.assertEqual((code, stderr), (0, ""))
+        self.assert_success_envelope(payload, response)
+        service.finish.assert_called_once_with(
+            "run-1", "accept", "Exact evidence assessed.", chosen="synthesis",
+            supported_claims=["bounded retries"], discarded_alternatives=["unbounded retries"],
+            validation="checks pass",
+        )
+
     def test_normal_doctor_default_is_readable_and_keeps_unknown_proof_unknown(self):
         report = {"core_version": "fixture", "ready": False, "adapters": [{
             "adapter": "claude", "status": "supported", "version": "fixture",

@@ -476,11 +476,15 @@ def command_resume(args: argparse.Namespace) -> tuple[dict, int]:
 
 def command_finish(args: argparse.Namespace) -> tuple[dict, int]:
     service = _service(args)
-    return envelope(data=service.finish(
-        _selected_run(args, service), args.disposition, args.reason,
-        chosen=args.choose, supported_claims=args.supported_claim,
-        discarded_alternatives=args.discarded_alternative, validation=args.validation,
-    )), 0
+    run_id = _selected_run(args, service)
+    choice = {
+        "chosen": args.choose, "supported_claims": args.supported_claim,
+        "discarded_alternatives": args.discarded_alternative, "validation": args.validation,
+    }
+    # Ordinary R6 completion keeps its call contract; Council fields are opt-in.
+    if all(value is None for value in choice.values()):
+        return envelope(data=service.finish(run_id, args.disposition, args.reason)), 0
+    return envelope(data=service.finish(run_id, args.disposition, args.reason, **choice)), 0
 
 
 def command_handoff_claim(args: argparse.Namespace) -> tuple[dict, int]:
