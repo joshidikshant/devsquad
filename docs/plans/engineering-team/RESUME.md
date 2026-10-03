@@ -6,6 +6,23 @@ remain recoverable in Git; detailed receipts and failed gates stay in evidence.
 
 ## Current checkpoint — October 2, 2026
 
+**Latest live gates:** PR1 is open at
+https://github.com/joshidikshant/devsquad/pull/1. Exact b83dda7 native EOF audit
+`cb68f3ae-bea0-4744-90c4-96f25418fb8c` is succeeded22/accepted: verified
+Codex0.159.2/gpt-6.1-sol/low/read_only, clean, four required checks passed with
+unchanged integrity;60 affected tests/36.416s and all artifact hashes verified.
+Sole frozen full core suite exec12430 on b83 PASSED604 tests/793.462s,
+two optionalSDK skips, zero failures/errors/unraisable; UTC/monotonic793.88s
+agree. Source/tests/scripts remained unchanged. No full core suite remains
+active; do not repeat unchanged accepted core tests. Production remains
+R5/schema16 pending safe local update. Public CI exposed true legacy deadline drift
+(poll counts include expensive ps overhead); superseded push/PR runs cancelled
+after recorded Bash failure, optionalMCP passed, core not accepted. Full-history
+checkout is also needed for immutable migration fixtures. Delegated isolated
+codex/release-watchdog repair/independent review is underway; integrate only
+after frozen full completes. No main merge, tag or public release yet.
+[Release evidence](evidence/public-release-0.11.0.json) is the current matrix.
+
 **Public release authorized:** the user selected a public GitHub release in
 the existing `joshidikshant/devsquad` repository (no registry or hosted service).
 Release version0.11.0 includes core0.1.0; Council stays native-unavailable and

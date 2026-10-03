@@ -1,0 +1,43 @@
+{
+  "schema_version":1,
+  "recorded_on":"2026-10-02",
+  "status":"release_gates_in_progress_not_published",
+  "authorization":"User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
+  "pull_request":"https://github.com/joshidikshant/devsquad/pull/1",
+  "frozen_core_candidate":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
+  "frozen_core_tree":"62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+  "native_eof_followup":{
+    "run_id":"cb68f3ae-bea0-4744-90c4-96f25418fb8c",
+    "base":"8242eff68b24538aacc1b40b67b2e88e96b04d52",
+    "target":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
+    "candidate_sha256":"f3243afeae0f011321d69fca1dc2f2225e4651f2a35e3452c1266cfa3da58791",
+    "verdict":"clean", "findings":[],"state":"succeeded","version":22,"host_disposition":"accept",
+    "identity":{"harness":"codex","harness_version":"codex-cli0.159.2","model_id":"gpt-6.1-sol","effort":"low","verification":"verified","permission_policy":"read_only"},
+    "checks":{"diff":"passed","bash":"passed","affected_tests":60,"seconds":36.416,"reference":"passed","all_required":true,"all_integrity":"verified_unchanged"},
+    "artifact_hashes_verified":["0dcb6d16b34c4f9c6e3eed6aa7e0161bf1d46c5f7f61370a7f8b80008dae5b69","46b3f1b3c8c1d8a7e824e4fef4502eb88841f27e1deaddf1b166359937f97283","d0f0b5b3e2169e34ed4ae63eacc7cdedce82b68fd9de4a904d01323f6910253f","182acd24afa59bc37c539f6fa8f0e6b1dd01275cfcd784970c2ffd8e21f00e32"],
+    "usage":{"source":"native_reported","input_tokens":95453,"output_tokens":517,"total_tokens":95970},
+    "limits":"Narrow EOF/fixture audit only, not whole-plan or native Council acceptance; usage is not invoice/Plus-window estimate"
+  },
+  "first_ci":{
+    "push_run":37082086201,"pr_run":37082130929,
+    "status":"cancelled_superseded_after_confirmed_legacy_failure",
+    "legacy":"Actual Bash3.2 deadline failure: poll-count timing stretched1s to4s and3s to6.123s/8.644s",
+    "optional_mcp":"passed_both_runs",
+    "core":"cancelled_not_accepted; shallow checkout cannot provide immutable f4fa657/bf3 migration fixtures",
+    "repair":"Isolated actual sleep deadline and unchanged timing bounds; full-history core checkout and tracked spawn-safe failfast runner; independent review pending",
+    "no_passing_failure_claim":true
+  },
+  "fresh_install_b83":{
+    "actual_core_only":true,"version":"squad0.1.0","changed":true,"reinstall_changed":false,"status_changed":false,"all_drift":false,"manifest_matches":true,
+    "digest":"303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52",
+    "wheel_schemas":11,"wheel_migrations":17,"all_packaged_bytes_match_source":true,
+    "proof_sha256":"a0c7914ad5228276834ac242602fd510601f65562e406dd3dd75b31d107931ed",
+    "initial_failed_gate":"Whole-production filesystem equality invalidated by separately authorized concurrent root native ledger activity; perfield attribution unavailable, no unchanged-ledger claim",
+    "subsequent_validation":"Stable selector/manifest/installstate/launcher observed unchanged; unique private install/runtime/bin only",
+    "provider_or_network_calls":0,"production_update":false
+  },
+  "final_full":{"target":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16","exec_session":12430,"tests":604,"seconds":793.462,"monotonic_seconds":793.8633149590023,"utc_seconds":793.881373,"failures":0,"errors":0,"optional_sdk_skips":2,"unraisable":[],"status":"passed","source_tests_scripts_frozen":true},
+  "installation":"production remains accepted R5/schema16 until full/repair gates",
+  "limitations":{"council":"native-unavailable, automaticOFF, fixture comparison inconclusive; no more network attempts","jev":"OFF; authorized single pilot spent","claude_desktop_code_tab":"unverified/TCC, not substituted by CLI proof","antigravity":"agyCLI1.2.14 final-release status pending; IDE out of scope","whole_plan":"not complete"},
+  "remaining":"Complete frozen core suite; integrate independently reviewed legacy deadline/CI repair; safe actual installation/SDK/agyCLI; final green public CI; merge/tag/release verified assets"
+}
