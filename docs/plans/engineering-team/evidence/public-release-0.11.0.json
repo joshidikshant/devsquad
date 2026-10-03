@@ -1,60 +1,192 @@
 {
-  "schema_version":1,
-  "recorded_on":"2026-10-02",
-  "status":"release_gates_in_progress_not_published",
-  "authorization":"User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
-  "pull_request":"https://github.com/joshidikshant/devsquad/pull/1",
-  "frozen_core_candidate":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
-  "frozen_core_tree":"62eea7fa31153ef732fd5e9dfd97951d95b367d8",
-  "native_eof_followup":{
-    "run_id":"cb68f3ae-bea0-4744-90c4-96f25418fb8c",
-    "base":"8242eff68b24538aacc1b40b67b2e88e96b04d52",
-    "target":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
-    "candidate_sha256":"f3243afeae0f011321d69fca1dc2f2225e4651f2a35e3452c1266cfa3da58791",
-    "verdict":"clean", "findings":[],"state":"succeeded","version":22,"host_disposition":"accept",
-    "identity":{"harness":"codex","harness_version":"codex-cli0.159.2","model_id":"gpt-6.1-sol","effort":"low","verification":"verified","permission_policy":"read_only"},
-    "checks":{"diff":"passed","bash":"passed","affected_tests":60,"seconds":36.416,"reference":"passed","all_required":true,"all_integrity":"verified_unchanged"},
-    "artifact_hashes_verified":["0dcb6d16b34c4f9c6e3eed6aa7e0161bf1d46c5f7f61370a7f8b80008dae5b69","46b3f1b3c8c1d8a7e824e4fef4502eb88841f27e1deaddf1b166359937f97283","d0f0b5b3e2169e34ed4ae63eacc7cdedce82b68fd9de4a904d01323f6910253f","182acd24afa59bc37c539f6fa8f0e6b1dd01275cfcd784970c2ffd8e21f00e32"],
-    "usage":{"source":"native_reported","input_tokens":95453,"output_tokens":517,"total_tokens":95970},
-    "limits":"Narrow EOF/fixture audit only, not whole-plan or native Council acceptance; usage is not invoice/Plus-window estimate"
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "status": "integrated_release_candidate_public_ci_pending",
+  "authorization": "User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
+  "pull_request": "https://github.com/joshidikshant/devsquad/pull/1",
+  "frozen_core_candidate": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
+  "frozen_core_tree": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+  "native_eof_followup": {
+    "run_id": "cb68f3ae-bea0-4744-90c4-96f25418fb8c",
+    "base": "8242eff68b24538aacc1b40b67b2e88e96b04d52",
+    "target": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
+    "candidate_sha256": "f3243afeae0f011321d69fca1dc2f2225e4651f2a35e3452c1266cfa3da58791",
+    "verdict": "clean",
+    "findings": [],
+    "state": "succeeded",
+    "version": 22,
+    "host_disposition": "accept",
+    "identity": {
+      "harness": "codex",
+      "harness_version": "codex-cli0.159.2",
+      "model_id": "gpt-6.1-sol",
+      "effort": "low",
+      "verification": "verified",
+      "permission_policy": "read_only"
+    },
+    "checks": {
+      "diff": "passed",
+      "bash": "passed",
+      "affected_tests": 60,
+      "seconds": 36.416,
+      "reference": "passed",
+      "all_required": true,
+      "all_integrity": "verified_unchanged"
+    },
+    "artifact_hashes_verified": [
+      "0dcb6d16b34c4f9c6e3eed6aa7e0161bf1d46c5f7f61370a7f8b80008dae5b69",
+      "46b3f1b3c8c1d8a7e824e4fef4502eb88841f27e1deaddf1b166359937f97283",
+      "d0f0b5b3e2169e34ed4ae63eacc7cdedce82b68fd9de4a904d01323f6910253f",
+      "182acd24afa59bc37c539f6fa8f0e6b1dd01275cfcd784970c2ffd8e21f00e32"
+    ],
+    "usage": {
+      "source": "native_reported",
+      "input_tokens": 95453,
+      "output_tokens": 517,
+      "total_tokens": 95970
+    },
+    "limits": "Narrow EOF/fixture audit only, not whole-plan or native Council acceptance; usage is not invoice/Plus-window estimate"
   },
-  "first_ci":{
-    "push_run":37082086201,"pr_run":37082130929,
-    "status":"cancelled_superseded_after_confirmed_legacy_failure",
-    "legacy":"Actual Bash3.2 deadline failure: poll-count timing stretched1s to4s and3s to6.123s/8.644s",
-    "optional_mcp":"passed_both_runs",
-    "core":"cancelled_not_accepted; shallow checkout cannot provide immutable f4fa657/bf3 migration fixtures",
-    "repair":"Isolated actual sleep deadline and unchanged timing bounds; full-history core checkout and tracked spawn-safe failfast runner; independent review pending",
-    "no_passing_failure_claim":true
+  "first_ci": {
+    "push_run": 37082086201,
+    "pr_run": 37082130929,
+    "status": "cancelled_superseded_after_confirmed_legacy_failure",
+    "legacy": "Actual Bash3.2 deadline failure: poll-count timing stretched1s to4s and3s to6.123s/8.644s",
+    "optional_mcp": "passed_both_runs",
+    "core": "cancelled_not_accepted; shallow checkout cannot provide immutable f4fa657/bf3 migration fixtures",
+    "repair": "Integrated3fdc6bd FIFO real-deadline watchdog, unchanged timing limits/caller EXIT restoration; full-history checkout and tracked spawn-safe failfast runner. Independent final source review clean.",
+    "no_passing_failure_claim": true
   },
-  "fresh_install_b83":{
-    "actual_core_only":true,"version":"squad0.1.0","changed":true,"reinstall_changed":false,"status_changed":false,"all_drift":false,"manifest_matches":true,
-    "digest":"303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52",
-    "wheel_schemas":11,"wheel_migrations":17,"all_packaged_bytes_match_source":true,
-    "proof_sha256":"a0c7914ad5228276834ac242602fd510601f65562e406dd3dd75b31d107931ed",
-    "initial_failed_gate":"Whole-production filesystem equality invalidated by separately authorized concurrent root native ledger activity; perfield attribution unavailable, no unchanged-ledger claim",
-    "subsequent_validation":"Stable selector/manifest/installstate/launcher observed unchanged; unique private install/runtime/bin only",
-    "provider_or_network_calls":0,"production_update":false
+  "fresh_install_b83": {
+    "actual_core_only": true,
+    "version": "squad0.1.0",
+    "changed": true,
+    "reinstall_changed": false,
+    "status_changed": false,
+    "all_drift": false,
+    "manifest_matches": true,
+    "digest": "303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52",
+    "wheel_schemas": 11,
+    "wheel_migrations": 17,
+    "all_packaged_bytes_match_source": true,
+    "proof_sha256": "a0c7914ad5228276834ac242602fd510601f65562e406dd3dd75b31d107931ed",
+    "initial_failed_gate": "Whole-production filesystem equality invalidated by separately authorized concurrent root native ledger activity; perfield attribution unavailable, no unchanged-ledger claim",
+    "subsequent_validation": "Stable selector/manifest/installstate/launcher observed unchanged; unique private install/runtime/bin only",
+    "provider_or_network_calls": 0,
+    "production_update": false
   },
-  "final_full":{"target":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16","exec_session":12430,"tests":604,"seconds":793.462,"monotonic_seconds":793.8633149590023,"utc_seconds":793.881373,"failures":0,"errors":0,"optional_sdk_skips":2,"unraisable":[],"status":"passed","source_tests_scripts_frozen":true},
-  "installation":{
-    "release":"0.1.0-py31214-303a0e0a6c87-mcp-a26bc88afbef","source_digest":"303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52",
-    "python":"3.12.14","mcp":"2.2.0","ledger_schema":17,"nonterminal_runs_before_and_after":0,"private_pre16_online_backup":"retained0600_integrity_ok",
-    "first_changed":true,"reinstall_changed":false,"all_drift":false,"manifest_matches":true,"pip_check":"passed","previous_releases_retained":true,"downloads":0,
-    "installed_sdk":{"tests":9,"seconds":3.126,"failures":0,"errors":0,"skips":0,"origin":"selected immutable release/core/src, not primary checkout"},
-    "sdk_harness_first_assertion":"Initial helper assumed site-packages origin and aborted before tests; installer intentionally imports its immutable copied core/src. Corrected origin assertion retains release-bound/no-primary-source check; nine tests then passed.",
-    "doctor":{"ready":true,"branch_review_ready":true,"issue_delivery_ready":true,"matching_registrations":4,"claude_subscription_authenticated":true,"codex_subscription_authenticated":true,"council_native_ready":false,"grok_antigravity_worker_readiness":"unverified/unknown, not implied by MCP registration"},
-    "saved_run_continuity":{"run_id":"cb68f3ae-bea0-4744-90c4-96f25418fb8c","state":"succeeded","version":22}
+  "final_full": {
+    "target": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
+    "exec_session": 12430,
+    "tests": 604,
+    "seconds": 793.462,
+    "monotonic_seconds": 793.8633149590023,
+    "utc_seconds": 793.881373,
+    "failures": 0,
+    "errors": 0,
+    "optional_sdk_skips": 2,
+    "unraisable": [],
+    "status": "passed",
+    "source_tests_scripts_frozen": true
   },
-  "updated_antigravity_cli":{
-    "version":"1.2.14","observed_init_model":"gemini-3.8-flash-low","mode":"plan/sandbox; native request-review","operation":"one devsquad/squad_status call","run_id":"cb68f3ae-bea0-4744-90c4-96f25418fb8c","observed_state":"succeeded","observed_version":22,
-    "seconds":18.65435924999838,"returncode":0,"timed_out":false,"native_result":"SUCCESS",
-    "stdout_sha256":"cc6045878de2124b845adab33401ecd1f52317dd1f6e654b2b439041b2da1863","stderr_sha256":"3a7f8550106d86abb322e8ed0fb30a0296c0e97c6be03d5a8033b99d16737459",
-    "actual_mcp_output_sha256":"d22dccedbcf001999c59d6167820e04a833484f70a2d738e2e7f5c708b9a98f8",
-    "native_file_reads":"Own DevSquad MCP schema and provider-generated tool result file only; not zero file reads. Actual tool-result envelope independently parsed and matched saved run; no project files, other servers or mutations.",
-    "limits":"CLI MCP operation proof only; not Antigravity IDE, automatic writer/reviewer, cost savings or whole-plan acceptance"
+  "installation": {
+    "release": "0.1.0-py31214-303a0e0a6c87-mcp-a26bc88afbef",
+    "source_digest": "303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52",
+    "python": "3.12.14",
+    "mcp": "2.2.0",
+    "ledger_schema": 17,
+    "nonterminal_runs_before_and_after": 0,
+    "private_pre16_online_backup": "retained0600_integrity_ok",
+    "first_changed": true,
+    "reinstall_changed": false,
+    "all_drift": false,
+    "manifest_matches": true,
+    "pip_check": "passed",
+    "previous_releases_retained": true,
+    "downloads": 0,
+    "installed_sdk": {
+      "tests": 9,
+      "seconds": 3.126,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "origin": "selected immutable release/core/src, not primary checkout"
+    },
+    "sdk_harness_first_assertion": "Initial helper assumed site-packages origin and aborted before tests; installer intentionally imports its immutable copied core/src. Corrected origin assertion retains release-bound/no-primary-source check; nine tests then passed.",
+    "doctor": {
+      "ready": true,
+      "branch_review_ready": true,
+      "issue_delivery_ready": true,
+      "matching_registrations": 4,
+      "claude_subscription_authenticated": true,
+      "codex_subscription_authenticated": true,
+      "council_native_ready": false,
+      "grok_antigravity_worker_readiness": "unverified/unknown, not implied by MCP registration"
+    },
+    "saved_run_continuity": {
+      "run_id": "cb68f3ae-bea0-4744-90c4-96f25418fb8c",
+      "state": "succeeded",
+      "version": 22
+    }
   },
-  "codex_app_existing_connection":{"operation":"squad_status cb68","result":"SCHEMA_UNSUPPORTED","reason":"existing long-running server is bound to old package; reconnect only DevSquad connection to select new release","new_cli_and_agy_same_run":"succeeded22","user_action":"async reconnect request pending; no global restart/settings changes"},
-  "limitations":{"council":"native-unavailable, automaticOFF, fixture comparison inconclusive; no more network attempts","jev":"OFF; authorized single pilot spent","claude_desktop_code_tab":"unverified/TCC, not substituted by CLI proof","antigravity":"agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope","whole_plan":"not complete"},
-  "remaining":"Integrate independently reviewed legacy deadline/CI repair; final green public CI; merge/tag/release verified assets. Existing CodexApp connection needs scoped reconnect; core604/native/installed9SDK/agyCLI gates already passed, do not repeat unchanged."
+  "updated_antigravity_cli": {
+    "version": "1.2.14",
+    "observed_init_model": "gemini-3.8-flash-low",
+    "mode": "plan/sandbox; native request-review",
+    "operation": "one devsquad/squad_status call",
+    "run_id": "cb68f3ae-bea0-4744-90c4-96f25418fb8c",
+    "observed_state": "succeeded",
+    "observed_version": 22,
+    "seconds": 18.65435924999838,
+    "returncode": 0,
+    "timed_out": false,
+    "native_result": "SUCCESS",
+    "stdout_sha256": "cc6045878de2124b845adab33401ecd1f52317dd1f6e654b2b439041b2da1863",
+    "stderr_sha256": "3a7f8550106d86abb322e8ed0fb30a0296c0e97c6be03d5a8033b99d16737459",
+    "actual_mcp_output_sha256": "d22dccedbcf001999c59d6167820e04a833484f70a2d738e2e7f5c708b9a98f8",
+    "native_file_reads": "Own DevSquad MCP schema and provider-generated tool result file only; not zero file reads. Actual tool-result envelope independently parsed and matched saved run; no project files, other servers or mutations.",
+    "limits": "CLI MCP operation proof only; not Antigravity IDE, automatic writer/reviewer, cost savings or whole-plan acceptance"
+  },
+  "codex_app_existing_connection": {
+    "operation": "squad_status cb68",
+    "result": "SCHEMA_UNSUPPORTED",
+    "reason": "existing long-running server is bound to old package; reconnect only DevSquad connection to select new release",
+    "new_cli_and_agy_same_run": "succeeded22",
+    "user_action": "async reconnect request pending; no global restart/settings changes"
+  },
+  "limitations": {
+    "council": "native-unavailable, automaticOFF, fixture comparison inconclusive; no more network attempts",
+    "jev": "OFF; authorized single pilot spent",
+    "claude_desktop_code_tab": "unverified/TCC, not substituted by CLI proof",
+    "antigravity": "agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope",
+    "whole_plan": "not complete"
+  },
+  "remaining": "Push final candidate; require exact-head public CI green, merge PR1 and publish v0.11.0 exact-commit verified assets; local Claude plugin normal update. Existing CodexApp connection needs scoped reconnect. Core604/native/installed9SDK/agyCLI gates already passed; do not repeat unchanged. Whole-plan/Council/desktop residuals remain separate.",
+  "integrated_legacy_gate": {
+    "source_checkpoint": "3fdc6bd065c577a9ed59566573fdce399e9b585a",
+    "adapter_blob": "1847357c19677f276b06886386e2ac93e586b203",
+    "test_blob": "8cc3fe9f9ee9df77b2fcb2d75c76c236a1f8d13a",
+    "independent_review": "clean; committed bytes equal independently reviewed/tested candidate",
+    "root_bash": {
+      "assertions": 259,
+      "files": 11,
+      "failures": 0,
+      "timings_seconds": {
+        "fast": 0.267,
+        "ignored_TERM": 0.211,
+        "pre_open_cancel": 0.207,
+        "TERM_resistant": 3.259,
+        "slow_ps": 1.291
+      }
+    },
+    "root_affected_python": {
+      "tests": 45,
+      "seconds": 0.927,
+      "failures": 0,
+      "errors": 0
+    },
+    "reference": "passed",
+    "core_tree_unchanged": true,
+    "failure_history": "evidence/legacy-watchdog-release-repair.json"
+  }
 }

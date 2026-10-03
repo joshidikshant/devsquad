@@ -13,16 +13,16 @@
   "review_followup": "SOL-REVIEW-FOLLOWUP.md",
   "requested_delivery_scope": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "C1"],
   "status": "in_progress",
-  "next_milestone": "M5",
-  "next_work_package": "R6",
+  "next_milestone": "M7",
+  "next_work_package": "R8",
   "partial_implementation_checkpoint": {
     "recorded_on": "2026-10-02",
-    "baseline_revision": "dfe9976",
+    "baseline_revision": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
     "status": "partial",
-    "artifact": "evidence/R5-closure-2026-10-02.json",
-    "scope": "R3/R4/R5 accepted; installed schema16 objective outcomes/public trials with 504-test full gate, exact native repair review, safe old-schema upgrade tests and nine installed SDK tests. Earlier accepted Claude delivery/handoff and Grok/Gemini receipts retained separately.",
-    "next_action": "Integrate and verify delegated R6 terminal/readiness changes, then R7/C1 Council and final R8 acceptance. Do not repeat unchanged accepted proofs.",
-    "limitations": "Whole-plan closure is not claimed. Claude Code-tab proof remains unverified with latest TCC control denial. User clarified Antigravity CLI, not IDE; final updated agy CLI proof remains, not IDE trust. Grok/Gemini MCP status does not prove automatic writer/reviewer roles. Jev remains off with its one-request allowance spent; no paid API fallback or reset use authorized."
+    "artifact": "evidence/public-release-0.11.0.json",
+    "scope": "R3-R6 core runtime accepted: frozen604-test core, exact native EOF audit clean/accepted, pristine trusted-check integrity, installed schema17/no drift, nine actual installed SDK tests, updated agy1.2.14 actual MCP status. Legacy watchdog3fdc6bd independently reviewed and integrated without core source changes. Earlier accepted Claude delivery/handoff and Grok receipts retained separately.",
+    "next_action": "Complete final integrated Bash/affected checks, exact-head public CI, PR1 merge and verified v0.11.0 GitHub release; normal local Claude plugin update. Preserve original R7/C1 and R8 residual gates separately; do not repeat unchanged accepted proofs.",
+    "limitations": "Whole-plan closure is not claimed. Council is integrated/offline-tested but native-unavailable, comparison inconclusive and automaticOFF. Claude Code-tab proof remains unverified/TCC. Antigravity means agy CLI, not IDE; Grok/agy MCP status does not prove automatic writer/reviewer roles. Current CodexApp MCP connection needs DevSquad-only reconnect after schema17 upgrade. Jev off/single pilot spent; no paid API fallback or reset use authorized."
   },
   "planning_checkpoint": {
     "recorded_on": "2026-10-01",
@@ -47,9 +47,9 @@
     {"id": "R3", "title": "Independent experiment and held-out evidence", "status": "complete", "milestones": ["M6"], "depends_on": [], "items": ["F3"], "evidence": "evidence/R3-closure-2026-10-02.json", "checkpoint": "Accepted immutable 39b95f1 R3 package: independent verified native Codex review clean; mandatory diff/Bash/51 affected tests pass, unchanged integrity. Six R3 source blobs exactly match prior accepted 477-test full candidate. Correction/race/revision, stale rollback/fallback and historical public read/proposal proof matrix complete. R5 public controller/outcome integration and R8 desktop acceptance remain separate."},
     {"id": "R4", "title": "Normal routing, catalog lifecycle and quota", "status": "complete", "milestones": ["M6", "M7"], "depends_on": ["R1", "R2", "R3"], "items": ["F4", "G2"], "evidence": "evidence/R4-closure-2026-10-02.json", "checkpoint": "Accepted source 913abc1 and installed scoped native catalog/quota package. High shared-pool partition finding repaired and independently re-reviewed clean. 102 focused, 484 full tests (two optional SDK skips/no unraisable), 227 Bash assertions, installed normal dry-run and nine installed SDK transport tests pass. Account-wide capacity fence remains separate from discovery/qualification scopes. R5/R6/R7/R8 remain separate."},
     {"id": "R5", "title": "Public saved-run outcomes and bounded experiments", "status": "complete", "milestones": ["M6"], "depends_on": ["R3", "R4"], "items": ["G1"], "evidence": "evidence/R5-closure-2026-10-02.json", "checkpoint": "Accepted dfe9976/source equivalent f87060b and installed schema16. Initial native findings repaired; exact follow-up e046a174 clean/accepted. Full 504 tests/511.241s, two optional SDK skips/no errors/failures/unraisable; nine actual installed SDK tests pass/no skips. Public complete trial/evaluate/qualify/promote/new-run/held-out regression/rollback, shared call/active deadline and all terminal projection origins pass. Safe old-schema upgrade and idempotence/drift gates pass. Failed history retained; automatic experimentation and Jev stay off."},
-    {"id":"R6","title":"Normal terminal experience and readiness","status":"in_progress","milestones":["M5","M7"],"depends_on":["R1","R2","R4","R5"],"items":["G3","G4"],"evidence":"evidence/R6-terminal-readiness-partial-2026-10-02.json","checkpoint":"Ownership093 and EOF4f integrated with Council reconciliation0e/schema17. Rejected native44 and d235 findings and invalidated bytecode checks retained; strict40 tests each3.12/3.14, root34diagnostics/11.159s and8reconciliation/SDK21.651s pass. Plain-wheel all-schema regression red1/2.657s then green1/2.831s. Pristine exact trusted-check proof, narrow EOF native acceptance, final combined full and safe installed acceptance pending. User authorizes public GitHub core0.11 release in existing repository; Council disabled/native-unavailable."},
-    {"id": "R7", "title": "Complete Council within existing runner", "status": "in_progress", "milestones": ["C1"], "depends_on": ["R1", "R2", "R3", "R4", "R5", "R6"], "items": ["G5"], "checkpoint": "Isolated42979ba4/72ae4130/eee6db7: Council/epoch17/cancellation/comparison and actual immutable16-to17 temporary install proof pass. Active/recoverable16 defer unchanged, cancel/reconcile safely permits17; actual long-lived/fresh old16 clients reject Council mutation, ledger unchanged, new lead succeeds. Matched/heldout fixture comparison inconclusive; automatic use off, native quality/usage unknown. Native HTTPS attestation fails closed before generation; diagnostic paused for R6 ownership P1. Shared R6 authority/formatter reconciliation isolated on codex/council-integration; integrated full/native/installed acceptance remain open."},
-    {"id":"R8","title":"Installed proofs, external gates and closure audit","status":"in_progress","milestones":["M4","M5","M6","M7","C1"],"depends_on":["R1","R2","R3","R4","R5","R6"],"items":[],"note":"Core installed proofs may proceed before R7; full-delivery closure also requires R7. Auth/key-dependent subgates remain separately blocked.","evidence":"evidence/R8-installed-workflows-2026-10-01.json","checkpoint":"Requested runtime slice passes: safe update, actual Claude handoff, accepted Claude-to-Codex 477-test workflow, Grok MCP and final Gemini CLI/MCP. Broader dependencies, desktop UI and full closure audit remain open."}
+    {"id":"R6","title":"Normal terminal experience and readiness","status":"complete","milestones":["M5","M7"],"depends_on":["R1","R2","R4","R5"],"items":["G3","G4"],"evidence":"evidence/public-release-0.11.0.json","checkpoint":"Accepted core terminal/readiness package: exact native EOF cb68 succeeded22/clean, pristine60 trusted-check integrity, frozen604 full tests/793.462s and installed schema17/nine SDK tests/no drift. Independently reviewed legacy watchdog3fdc6bd integrated with unchanged core tree;259 Bash/45 affected agent gates pass, root integrated gates recorded in release evidence. Public CI/publication remain release gates; desktop UI/Council residuals remain separate."},
+    {"id":"R7","title":"Complete Council within existing runner","status":"in_progress","milestones":["C1"],"depends_on":["R1","R2","R3","R4","R5","R6"],"items":["G5"],"checkpoint":"Council reconciliation0e7dd319/EOF4f integrated, schema17 actually installed; mechanical comparison/cancel/recovery/old16 fences and frozen604 core gate pass. Final nongenerating diagnostic exhausted: sandbox network_request_failed/noHTTP and unsandboxed strict-response rejection, zero generating calls. Native quality/usage unavailable; fixture comparison inconclusive; automaticOFF. No more network attempts or permission widening. Original C1 native acceptance remains incomplete, not a core-publication blocker under user-selected release scope."},
+    {"id":"R8","title":"Installed proofs, external gates and closure audit","status":"in_progress","milestones":["M4","M5","M6","M7","C1"],"depends_on":["R1","R2","R3","R4","R5","R6"],"items":[],"note":"Core installed proofs may proceed before R7; full-delivery closure also requires R7. Auth/key-dependent subgates remain separately blocked.","evidence":"evidence/R8-installed-workflows-2026-10-01.json","checkpoint":"Safe updated schema17 install/no drift/nine actual SDK tests and updated agy1.2.14 actual saved-run MCP proof accepted; earlier live Claude handoff/delivery and Grok MCP retained. PR1/v0.11.0 public release pending exact-head CI/merge/assets. Existing CodexApp old MCP server needs scoped reconnect; Claude desktop Code-tab/TCC and whole-plan closure remain separate."}
   ],
   "milestones": [
     {
@@ -443,7 +443,7 @@
           "availability": "tracked_fixture_and_tests"
         }
       ],
-      "blocker": "Independent R3-R5 evidence, routing, learning and observation integration remains. The single-request Jev smoke is complete but does not prove production quality; runtime guidance remains off and Laya remains conditional."
+      "blocker": "R3-R5 evidence/routing/learning/outcome integration is accepted and installed. Whole-milestone closure audit remains separate. Jev single-request smoke does not prove production quality; runtime off and Laya conditional."
     },
     {
       "id": "M7",
@@ -451,7 +451,7 @@
       "depends_on": ["M6"],
       "status": "in_progress",
       "acceptance_section": "M7 — Package, migrate and prove every requested surface",
-      "open_review_items": ["F4", "G3", "G4"],
+      "open_review_items": [],
       "evidence": [
         {
           "kind": "packaging_checkpoint",
@@ -490,7 +490,7 @@
           "availability": "portable_redacted"
         }
       ],
-      "blocker": "R4 catalog/quota, remaining R6 UX and desktop UI acceptance remain open. Actual Claude delivery/handoff, Grok MCP and Gemini CLI/MCP receipts pass; old login/expired-Grok blockers are superseded."
+      "blocker": "Core R4/R6 and updated schema17 installation are accepted. Actual Claude CLI delivery/handoff, Grok MCP and updated agy1.2.14 MCP receipts pass. Claude desktop Code-tab remains unverified/TCC; current CodexApp DevSquad-only MCP reconnect and final public CI/publication remain. No automatic Grok/agy worker claim."
     }
   ],
   "extensions": [
@@ -499,11 +499,11 @@
       "title": "Selective evidence-based Council decisions",
       "optional": true,
       "depends_on": ["M6"],
-      "status": "pending",
+      "status": "in_progress",
       "specification": "SELECTION-AND-COUNCIL.md",
       "acceptance_section": "C1 — Optional Council extension after M6",
-      "evidence": [],
-      "blocker": null
+      "evidence": [{"kind":"integrated_partial_acceptance","revision":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16","artifact":"evidence/r7-final-nongenerating-network-diagnostic.json","outcome":"Integrated schema17 Council mechanics/offline tests and actual install pass. Native generating acceptance unavailable; fixture comparison inconclusive, automaticOFF. No more network attempts authorized."}],
+      "blocker": "Native Council network/response attestation unavailable after final nongenerating diagnostic; original C1 acceptance incomplete, not a user-selected core release blocker."
     }
   ]
 }

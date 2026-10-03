@@ -28,6 +28,8 @@ jobs:
         python: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -41,7 +43,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
           PYTHONPATH: plugin/core/src
           PYTHONWARNINGS: error::ResourceWarning
-        run: python -m unittest discover -s test/core -q
+        run: python scripts/run-core-tests.py --failfast
 
   optional-mcp:
     name: Optional MCP 2.2.0 (provider-offline)

@@ -55,6 +55,38 @@ _adapter_signal_snapshot() {
   done < "$snapshot_file"
 }
 
+# Bash's own job table tracks our directly-owned children without spawning
+# ps/tr for every poll. Timer cancellation below never signals a numeric PID.
+_adapter_job_running() {
+  local pid="$1" running
+  running=$(jobs -pr)
+  case $'\n'"$running"$'\n' in
+    *$'\n'"$pid"$'\n'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_adapter_stop_timer() {
+  local timer_pid="${1:-}" control_file="${2:-}"
+  [[ -n "$timer_pid" ]] || return 0
+  # Duplex open cannot block if the timer has already exited. Keep it open
+  # through wait so an early cancellation remains buffered until the timer
+  # opens its reader. The command-local descriptor restores the caller's FD9.
+  # No numeric PID signal is ever sent to a timer that may have exited/reaped.
+  {
+    printf 'cancel\n' >&9
+    wait "$timer_pid" 2>/dev/null || true
+  } 9<>"$control_file"
+}
+
+_adapter_cleanup_timer() {
+  _adapter_stop_timer "${timer_pid:-}" "${timer_control_file:-}"
+  if [[ -n "${timer_dir:-}" ]]; then
+    rm -f "$timer_dir/control" "$timer_dir/deadline" "$timer_dir/processes"
+    rmdir "$timer_dir" 2>/dev/null || true
+  fi
+}
+
 # Resolve model: agent-specific (agent_models.<DEVSQUAD_AGENT>) >
 # global (.preferences.<pref_key>) > "" (CLI default).
 # Values may be exact model names OR tiers ("tier:fast" / "tier:frontier"),
@@ -144,7 +176,10 @@ _adapter_invoke() {
   local stderr_file stdout_file
   stderr_file=$(mktemp)
   stdout_file=$(mktemp)
-  trap 'rm -f "${stderr_file:-}" "${stdout_file:-}"' EXIT
+  local timer_pid="" timer_dir="" timer_control_file=""
+  local previous_exit_trap
+  previous_exit_trap=$(builtin trap -p EXIT)
+  trap '_adapter_cleanup_timer; rm -f "${stderr_file:-}" "${stdout_file:-}"' EXIT
 
   local exit_code=0
   if [[ -n "$timeout_cmd" ]]; then
@@ -157,21 +192,44 @@ _adapter_invoke() {
     # Portable watchdog: every call is bounded even on hosts with no
     # timeout/gtimeout binary (observed live: an unauthenticated CLI
     # waiting on OAuth blocks forever)
+    timer_dir=$(mktemp -d)
+    timer_control_file="$timer_dir/control"
+    local timer_deadline_file="$timer_dir/deadline"
+    mkfifo -m 600 "$timer_control_file"
+    # Bash read's real deadline is independent of polling/inspection cost.
+    # Its private FIFO is cancellation authority: no timer-PID signalling,
+    # orphan sleep, inherited ignored TERM, or retained capture descriptors.
+    (
+      trap - EXIT
+      local timer_message="" timer_status=0
+      if IFS= read -r -t "$timeout_secs" timer_message <>"$timer_control_file"; then
+        [[ "$timer_message" == "cancel" ]] || printf 'error\n' >"$timer_deadline_file"
+      else
+        timer_status=$?
+        if [[ "$timer_status" -eq 1 || "$timer_status" -gt 128 ]]; then
+          printf 'timeout\n' >"$timer_deadline_file"
+        else
+          printf 'error\n' >"$timer_deadline_file"
+        fi
+      fi
+    ) </dev/null >/dev/null 2>&1 &
+    timer_pid=$!
     if [[ -n "${ADAPTER_STDIN_FILE:-}" ]]; then
       "$cli" "${ADAPTER_ARGS[@]}" <"$ADAPTER_STDIN_FILE" >"$stdout_file" 2>"$stderr_file" &
     else
       "$cli" "${ADAPTER_ARGS[@]}" >"$stdout_file" 2>"$stderr_file" &
     fi
     local cli_pid=$!
-    local process_snapshot="${stdout_file}.processes" timed_out="false"
-    local polls_remaining=$(( timeout_secs * 20 )) state=""
-    # Poll the directly-owned child. This avoids a background sleep/watchdog
-    # retaining capture descriptors after fast completion.
-    while :; do
-      state=$(ps -p "$cli_pid" -o stat= 2>/dev/null | tr -d ' ' || true)
-      [[ -z "$state" || "$state" == Z* ]] && break
-      if [[ "$polls_remaining" -le 0 ]]; then
-        timed_out="true"
+    local process_snapshot="$timer_dir/processes" timed_out="false" monitor_failed="false"
+    while _adapter_job_running "$cli_pid"; do
+      # Observe completion, not an in-progress marker write. The completed
+      # timer has published either its actual deadline or a monitor failure.
+      if ! _adapter_job_running "$timer_pid"; then
+        if [[ "$(cat "$timer_deadline_file" 2>/dev/null || true)" == "timeout" ]]; then
+          timed_out="true"
+        else
+          monitor_failed="true"
+        fi
         _adapter_snapshot_tree "$cli_pid" > "$process_snapshot"
         _adapter_signal_snapshot "$process_snapshot" TERM
         sleep 0.1
@@ -179,8 +237,9 @@ _adapter_invoke() {
         break
       fi
       sleep 0.05
-      polls_remaining=$(( polls_remaining - 1 ))
     done
+    _adapter_stop_timer "$timer_pid" "$timer_control_file"
+    timer_pid=""
     if wait "$cli_pid"; then
       exit_code=0
     else
@@ -189,13 +248,23 @@ _adapter_invoke() {
     if [[ "$timed_out" == "true" ]]; then
       _adapter_signal_snapshot "$process_snapshot" KILL
       exit_code=124
+    elif [[ "$monitor_failed" == "true" ]]; then
+      exit_code=125
     fi
-    rm -f "$process_snapshot"
+    _adapter_cleanup_timer
+    timer_dir=""
+    timer_control_file=""
   fi
 
   local stdout stderr_content
   stdout=$(cat "$stdout_file" 2>/dev/null)
   stderr_content=$(cat "$stderr_file" 2>/dev/null)
+  rm -f "$stderr_file" "$stdout_file"
+  # Cleanup uses invocation locals only while they are live. Restore the
+  # caller's shell-generated trap before any classification/return unwinds
+  # that scope, so same-named caller globals can never become cleanup targets.
+  builtin trap - EXIT
+  if [[ -n "$previous_exit_trap" ]]; then eval "$previous_exit_trap"; fi
 
   # CLI-specific auth signal (may appear on stdout with exit 0, e.g. grok's
   # sign-in banner) — checked before the success path
