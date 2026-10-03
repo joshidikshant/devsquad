@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "status": "source_partial_not_accepted_or_installed",
+  "base_revision": "d3f7c0b",
+  "source_schema": 16,
+  "installed_schema": 15,
+  "requirements": [
+    {"requirement": "idempotent objective final projection from preparation failure/cancel, worker failure, host/headless completion and crash replay", "proof": "test_objective_outcomes public Service transitions", "result": "focused_pass"},
+    {"requirement": "append-only late corrections, no manual public replacement final, scoped corruption isolation and public report replay", "proof": "test_objective_outcomes and test_service", "result": "focused_pass"},
+    {"requirement": "public predeclared assignments and automatic finals, not preparation monkeypatch or manual import", "proof": "ExperimentRuntimeFixture now calls Service.trial_start; public reviewer and implementer pair tests", "result": "focused_pass"},
+    {"requirement": "one shared experiment reservation cap across concurrent arms and fallback", "proof": "test_public_trials actual concurrent public resumes and fallback failure", "result": "focused_pass"},
+    {"requirement": "evaluate, qualify, reviewed promotion for a new run, held-out regression and rollback", "proof": "test_public_trials complete Service API chain with actual offline worker processes", "result": "focused_pass"},
+    {"requirement": "declaration-time experiment wall deadline and precise headless lead-repair attribution", "proof": "test_public_trials deadline regression and final affected learning/lifecycle run", "result": "behavioral_pass_in_71_test_gate_with_two_stale_schema_assertions"}
+  ],
+  "passed_gates": [
+    {"command": "python3 -m unittest test_check_integrity_runtime test_objective_outcomes test_review_runtime test_delivery_workflow", "tests": 66, "seconds": 125.322, "resource_warnings": "promoted_to_errors", "result": "pass_after_headless_test_transition_fix"},
+    {"command": "python3 -m unittest test_objective_outcomes test_public_trials test_store test_supervisor test_m2_supervisor_gate", "tests": 54, "seconds": 48.572, "resource_warnings": "promoted_to_errors", "result": "pass_after_independent_findings_repair"},
+    {"command": "python3 -m unittest test_objective_outcomes test_public_trials test_cli test_store test_service", "tests": 88, "seconds": 61.236, "resource_warnings": "promoted_to_errors", "offline_build_interpreter": "explicit_python3.12", "result": "pass_before_final_deadline_and_lead_attribution_refinement"},
+    {"command": "python3 -m unittest test_public_trials.PublicTrialTest.test_public_outcomes_evaluate_qualify_promote_new_run_and_roll_back", "tests": 1, "seconds": 12.300, "result": "pass"}
+  ],
+  "failure_history": [
+    "Initial seven public terminal-origin tests failed because no automatic finals existed (7 failures/9.322s).",
+    "First projection implementation had wrong criterion-status and incomplete worker-failure mapping (1 failure/4 errors in 7 tests/9.356s).",
+    "Headless receipt attempts do not include IDs on successful semantic records; keyed failure lookup was corrected (1 error in 7 tests/9.472s).",
+    "Existing generic fake-runner native exit receipt lacks managed run/state fields; explicitly fixture-gated normalization now preserves that original receipt (1 error in 3 tests/15.093s).",
+    "New whole-chain test used an invalid invented template mode human_reviewed; corrected to the existing reviewed contract, not a source policy relaxation (1 error in 6 tests/6.586s).",
+    "An exploratory fixture diagnostic requested a nonexistent exit_code column and failed before printing; the corrected diagnostic used finally cleanup. This is not a passing test or a production fault.",
+    "The 71-test frozen affected learning/lifecycle gate completed in 233.881s with two stale schema-15 assertion failures (test_learning and test_lifecycle). No behavioral errors; the assertions were updated to schema 16, not removed. The two direct checks and another 22 migration/capacity/decision tests (1.208s) then passed.",
+    "Independent native audit rejected exact 14b3a391 for pending-projection nested transaction and active-worker experiment deadline gaps, despite passing required diff/Bash/16 public tests/reference checks.",
+    "Controlled 3s experiment / 6s worker diagnostic reached resume_candidate_review after 7.274s, confirming the deadline gap. Temporary diagnostic run was cancelled and cleaned.",
+    "Root full gate on that rejected candidate was intentionally SIGINT-stopped at verified PID 77765, exit 130; not a timeout or pass. unittest interruption skipped cleanup and emitted TemporaryDirectory and SQLite finalizer ResourceWarnings; no scoped remaining process was found.",
+    "Three public red regressions reproduced proposal nested BEGIN, generic TIMEOUT receipt normalization and active-worker deadline overrun (1 failure/2 errors/14.842s). Fixed source passes the 54-test affected gate.",
+    "The next complete fail-fast core invocation stopped after 17 tests/10.494s (one failure, no errors/skips/unraisable): the integrity test inspected a terminal receipt during the transient headless awaiting_host-to-queued lead transition. The isolated test passed in 2.719s; the test now waits for terminal state only in headless mode, retaining every integrity/source-preservation assertion. All 66 integrity/outcome/review/delivery tests pass in 125.322s. This is not a quota timeout or a passing full gate.",
+    "Frozen bf3de086 fail-fast gate stopped after 188 tests/274.410s, one stale test_handoff_store schema-four upgrade expectation (15 vs actual 16), no errors/skips/unraisable; UTC/monotonic both 274.50s. Corrected only the current-schema expected value; all schema_migrations expectations were searched to distinguish preserved historical schemas. Direct migration regression passes in 0.090s. This is not a runtime migration defect, quota timeout or passing full gate."
+  ],
+  "rejected_independent_review": {
+    "run_id": "5a70f3db-91a8-4606-9809-c0b993b988b1", "state": "failed", "version": 22, "host_disposition": "reject",
+    "base_revision": "d3f7c0b3cc1c704dee32f96a87500a3284572d9b", "target_revision": "14b3a3910972484074ed52d99f70123944e56fd0",
+    "candidate_sha256": "2aa50bf50541ebabe337ce7d9f1df99ce7151c0a888f08a195efd6dc0239c6f9",
+    "identity": {"harness": "codex", "harness_version": "codex-cli 0.159.2", "model_id": "gpt-6.1-sol", "effort": "low", "verification": "verified", "permission_policy": "read_only"},
+    "findings": [{"id": "R5-001", "severity": "medium", "title": "Pending projection breaks transactional policy proposal reads", "status": "source_repaired_focused_pass_followup_pending"}, {"id": "R5-002", "severity": "high", "title": "Experiment wall deadline only fences reservations", "status": "source_repaired_focused_pass_followup_pending"}],
+    "review_sha256": "912c79e25ebef6cd51ed00fb118aa761b80a6301f19937ca948298d570e52529",
+    "checks_sha256": "42204bc469b2298e66602e3864f70c8a9e7e70f9d4131da37b322c72c343c9ca",
+    "receipt_sha256": "c63483b4835fc5eb27afa30dd657436a9b5e595166d8ba765ead35ead934e3e5",
+    "checks": {"diff_bash_reference": "pass", "public_tests": 16, "seconds": 37.184, "integrity": "verified_unchanged"},
+    "usage": {"source": "native_reported", "input_tokens": 196084, "output_tokens": 1316, "total_tokens": 197400}
+  },
+  "accepted_independent_repair_review": {
+    "run_id": "e046a174-55ce-4496-973e-2fc97c68a493", "state": "succeeded", "version": 22, "host_disposition": "accept",
+    "base_revision": "14b3a3910972484074ed52d99f70123944e56fd0", "target_revision": "f87060b7980a9fbe95314bb0986f84e424eccd3e",
+    "candidate_sha256": "564e2e937dc01d1127378537b45b7a9170b91c8a90545e7d3775321025640aa2",
+    "verdict": "clean", "findings": [], "closed_findings": ["R5-001", "R5-002"],
+    "identity": {"harness": "codex", "harness_version": "codex-cli 0.159.2", "model_id": "gpt-6.1-sol", "effort": "low", "verification": "verified", "permission_policy": "read_only"},
+    "review_sha256": "a448ab152287e163ac4610850bee574939f97fb822863d31e8d8050fdf09ac6f",
+    "checks_sha256": "a1a74d34c4fda3960d880ea018fbf30f67e38f92d026cfe63f40e56b207c86de",
+    "receipt_sha256": "58eea09f033104b98b0dd5ef086ecbaf65faa050802d39bb4da4bf08d8c5b254",
+    "checks": {"diff_bash_reference": "pass", "public_tests": 13, "seconds": 10.729, "integrity": "verified_unchanged"},
+    "usage": {"source": "native_reported", "input_tokens": 131692, "output_tokens": 1078, "total_tokens": 132770},
+    "scope": "Only the declared repair diff is accepted; whole R5 still requires the full and installation gates. Subsequent change is test-only headless observation timing."
+  },
+  "open_gates": ["full core suite", "schema-16 safe upgrade and installed transport proof", "R6/R7/R8 separate acceptance"],
+  "policy": {"automatic_experiments": "off", "automatic_promotion": "not_enabled", "bounded_native_review_runs": 2, "paid_api_fallback": false, "legacy_outcomes_rewritten": false},
+  "limits": "Fixture outcomes demonstrate runtime/provenance behavior, not real model superiority or subscription cost savings. Installed runtime remains the accepted R4 release until acceptance gates pass."
+}

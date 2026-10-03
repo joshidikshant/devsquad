@@ -6,6 +6,9 @@
 git clone https://github.com/joshidikshant/devsquad.git
 cd devsquad
 bash test/run.sh    # no network, no real CLIs required — should be all green
+PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src \
+  python3 scripts/run-core-tests.py
+python3 scripts/generate-core-reference.py --check
 ```
 
 The test suite (`test/run.sh`) is the contract. It runs offline against fake
@@ -54,3 +57,10 @@ Bump the version in `plugin/.claude-plugin/plugin.json` and both entries in
 `.claude-plugin/marketplace.json`, add a `CHANGELOG.md` entry, then after
 pushing run `claude plugin update devsquad@devsquad-marketplace`. Never point
 hook commands at a versioned cache dir — that freezes hooks at install time.
+
+Before a release, also run a fresh standalone install into temporary
+`DEVSQUAD_INSTALL_ROOT` and `DEVSQUAD_BIN_DIR` locations. The tracked installer
+tests cover Claude-free installation, idempotence, actual payload drift,
+plugin contents and an active run surviving a release switch. The operator
+commands and supported/deferred surface boundaries live in
+[docs/RUNTIME-GUIDE.md](docs/RUNTIME-GUIDE.md).

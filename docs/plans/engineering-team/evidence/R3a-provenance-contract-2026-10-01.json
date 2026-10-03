@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "work_package": "R3a",
+  "status": "partial_source_verified",
+  "implementation_revision": "672e383",
+  "recorded_on": "2026-10-01",
+  "scope": "Outcome uniqueness, v2 provenance contracts, schema-14 fenced prelaunch assignments and pure normalized-chain evaluation; not end-to-end R3 closure",
+  "baseline_reproductions": [
+    "Five new reused-outcome tests failed before production changes: repeated pair, cross-arm reuse, cross-split reuse, evaluator acceptance and invalid persisted evaluation. All five now pass.",
+    "The first v2 contract run had one failure and seven errors across nine tests because the new schema/module did not exist; this is a missing-feature baseline, not eight reproduced production exploits.",
+    "A subsequent regression confirmed that unbound v2 outcome labels could still be evaluated after schema support; requiring saved-project and normalized provenance now rejects them.",
+    "An independent normalized-chain test exposed the incorrect late-correction kind check; the strict valid correction now changes the evidence digest and blocks the proposal.",
+    "Review exposed omitted tested-role fallback policy and native execution context. Dedicated regressions failed before the fixes; fallback settings now affect pair context and each arm explicitly predeclares its profile/native execution fingerprint."
+  ],
+  "acceptance_mapping": [
+    {"requirement": "No global outcome reuse across arms/cases/splits or invalid new evaluation persistence", "tests": "test/core/test_experiment_reuse.py: 5 regressions"},
+    {"requirement": "Strict v2 profile/execution/assignment contracts and distinct corpus versus controlled-pair fingerprints", "tests": "test/core/test_experiment_provenance.py: 12 contract regressions"},
+    {"requirement": "Assignments precede attempts under the preparation fence; rebinding, duplicate arms, changed specs and invalid input fail atomically", "tests": "test/core/test_experiment_assignment_store.py: 8 persistence/migration regressions"},
+    {"requirement": "Normalized chains reject reused runs/attempts and crossed profiles/inputs even with missing partners; failures, missingness and corrections remain visible", "tests": "test/core/test_experiment_v2_evaluation.py: 10 pure evaluator regressions"}
+  ],
+  "verification": {
+    "focused_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core python3 -m unittest test_experiment_reuse test_experiment_provenance test_experiment_assignment_store test_experiment_v2_evaluation test_learning test_lifecycle",
+    "focused_result": "47 tests passed in 1.470 seconds after the final source change",
+    "migration_checks": "Nine independently run targeted migration tests passed, including both installed-wheel upgrade checks; existing schema-version expectations were updated without changing unrelated run-version fixtures",
+    "independent_review": "Bounded R3a audit found tested native execution metadata was not bound. The repaired predeclared per-arm execution hash passed an independent two-test follow-up in 0.098 seconds, with no remaining concrete finding in those changes. The deferred reader/lifecycle/public-controller paths were outside this audit.",
+    "bash": "11 files and 227 assertions passed before the source checkpoint",
+    "generated_reference": "python3 scripts/generate-core-reference.py --check: current",
+    "core": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src python3 -m unittest discover -s test/core -v",
+      "result": "OK (skipped=2)",
+      "tests_run": 402,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2,
+      "suite_seconds": 213.208,
+      "wrapper_wall_seconds": 213.376,
+      "wrapper_monotonic_seconds": 213.376,
+      "exit_code": 0,
+      "notes": "Source remained fixed at 672e383. Two official MCP SDK tests skipped because that optional dependency is absent in this interpreter. An ignored finalizer ResourceWarning for an unclosed SQLite connection appeared during a cross-process test; it remains R5 and the suite is not warning-free."
+    }
+  },
+  "source_sha256": {
+    "plugin/core/src/devsquad/learning.py": "4558b53cc97ac1c00a1a6f3480f757859dc4fa6164ba3a7a257658050393f8b8",
+    "plugin/core/src/devsquad/experiment_provenance.py": "c0e98d3371679f50ddaa0652092382b434bac46bca6a9fdb6e5b4bace34a1934",
+    "plugin/core/src/devsquad/store.py": "362b815eb818054c013c33e13573595222acf4b48ff62c77ee82a72e13e8345e",
+    "plugin/core/src/devsquad/migrations/014_experiment_assignments.sql": "e0675f9c71df3ded92467835972792a90f78ae17a4a86e5a88335eb90262afa7"
+  },
+  "test_sha256": {
+    "test/core/test_experiment_reuse.py": "8f1b9916867c0192de3d10b8ea7231a44261766b93407d2f5ae20039dbdc0dc0",
+    "test/core/test_experiment_provenance.py": "eece72a69ae68dda7caf20205864b0deef188307ddfca8911cfcf38601f21c91",
+    "test/core/test_experiment_assignment_store.py": "ca1d39f1f725e5f45eabcb9ac9d0890c09f184e6e71cba372c4891df8ff7e3ab",
+    "test/core/test_experiment_v2_evaluation.py": "5f1da4d399082ce6510a60126d3095481ae1d4d22718b6cb18a75b96deb5046a"
+  },
+  "remaining_requirements": [
+    "R3b must build v2 chains from immutable assignment records, actual saved attempts and outcome/correction rows. Store's current public evaluation reader does not yet supply that provenance, so v2 evaluation fails closed.",
+    "R3b must share current-evidence eligibility across evaluation/qualification replay, new qualification, promotion, regression rollback and catalog fallback. Existing v1 label-based positives are not proof of repaired eligibility.",
+    "R3c must preserve readable legacy audit/proposal evidence without authorizing new decisions; schema migration preserving bytes alone does not complete that requirement.",
+    "Public end-to-end realistic experiment/lifecycle fixtures and the R5 paired-trial controller are still required. Pure normalized witnesses in this artifact are deliberately fabricated unit inputs, not saved-run authority or live model proof.",
+    "The full R1-R8/M1-M7+C1 objective remains active. No provider call, installed runtime refresh, paid API fallback or global setting change occurred."
+  ]
+}

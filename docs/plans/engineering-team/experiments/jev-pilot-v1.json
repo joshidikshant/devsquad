@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "experiment_id": "jev-devsquad-routing-pilot-v1",
+  "status": "ready_for_live_run",
+  "model": "jev-1.13.0",
+  "endpoint": "https://api.typesafe.ai/v1/systemone",
+  "pricing": {
+    "checked_at": "2026-09-26",
+    "usd_per_million_input_tokens": 0.042,
+    "max_cost_usd": 0.01
+  },
+  "budget": {
+    "max_billable_requests": 1,
+    "retries": 0,
+    "timeout_seconds": 30,
+    "data_class": "synthetic_public_fixture"
+  },
+  "purposes": [
+    {
+      "id": "task_family",
+      "instructions": "Classify the specified engineering task by its primary purpose. Use uncertain when the task lacks enough information.",
+      "criteria": {
+        "bug_fix": "Correct a known faulty behavior or regression.",
+        "implementation": "Build or materially change a feature.",
+        "investigation": "Diagnose a cause or analyze evidence without an already-defined fix.",
+        "review_validation": "Review, test, audit, or verify existing work.",
+        "documentation": "Primarily change explanatory documentation.",
+        "operations": "Operate or recover development tooling, source control, packaging, or deployment state.",
+        "uncertain": "The request is too vague or conflicting to classify safely."
+      }
+    },
+    {
+      "id": "execution_tier",
+      "instructions": "Choose the least costly sufficient execution tier for the specified task. This is advisory only; permissions and verified capabilities are filtered separately.",
+      "criteria": {
+        "economy_read": "Low-risk read-only or documentation reasoning with clear scope.",
+        "standard_write": "Bounded, well-specified code or documentation change with ordinary tests.",
+        "frontier_analysis": "Difficult diagnosis, architecture, concurrency, or security reasoning without an immediately safe write.",
+        "frontier_write": "High-risk or complex implementation requiring strong reasoning and mandatory independent verification.",
+        "lead_clarification": "The task should not be delegated until scope, requirements, or authority are clarified."
+      }
+    },
+    {
+      "id": "specialist_skill",
+      "instructions": "Choose at most one specialist skill that is important for the specified task. Choose none when ordinary engineering instructions are sufficient.",
+      "criteria": {
+        "git_safety": "Recovery, branch, worktree, history, or uncommitted-work safety is central.",
+        "security_review": "Security boundaries, authentication, authorization, secrets, or vulnerability analysis is central.",
+        "browser_qa": "A browser UI must be operated or visually validated.",
+        "data_analysis": "Structured data quality, metrics, statistical analysis, or reporting is central.",
+        "none": "No listed specialist skill is central.",
+        "uncertain": "The request lacks enough information to select safely."
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "T01",
+      "task": "Correct two spelling mistakes in a committed README section. No commands beyond the documentation link checker are required.",
+      "expected": {
+        "task_family": "documentation",
+        "execution_tier": "standard_write",
+        "specialist_skill": "none"
+      }
+    },
+    {
+      "id": "T02",
+      "task": "Fix a deterministic parser off-by-one error in src/parser.py. The failing unit test, allowed file, and acceptance result are supplied.",
+      "expected": {
+        "task_family": "bug_fix",
+        "execution_tier": "standard_write",
+        "specialist_skill": "none"
+      }
+    },
+    {
+      "id": "T03",
+      "task": "Diagnose an intermittent SQLite lease race observed only across two processes. Preserve all evidence and do not change code until the cause is established.",
+      "expected": {
+        "task_family": "investigation",
+        "execution_tier": "frontier_analysis",
+        "specialist_skill": "none"
+      }
+    },
+    {
+      "id": "T04",
+      "task": "Repair an authorization bypass in the worker handoff endpoint. The change touches the access-control boundary and must receive security review and mandatory tests.",
+      "expected": {
+        "task_family": "bug_fix",
+        "execution_tier": "frontier_write",
+        "specialist_skill": "security_review"
+      }
+    },
+    {
+      "id": "T05",
+      "task": "Verify a browser settings workflow at desktop and mobile breakpoints, including the visible success state. Do not modify the application.",
+      "expected": {
+        "task_family": "review_validation",
+        "execution_tier": "economy_read",
+        "specialist_skill": "browser_qa"
+      }
+    },
+    {
+      "id": "T06",
+      "task": "Make the project better using whichever models and tools seem best.",
+      "expected": {
+        "task_family": "uncertain",
+        "execution_tier": "lead_clarification",
+        "specialist_skill": "uncertain"
+      }
+    },
+    {
+      "id": "T07",
+      "task": "Analyze a CSV of task outcomes for missing values, routing accuracy, rework rate, and confidence intervals. Produce a source-backed report only.",
+      "expected": {
+        "task_family": "investigation",
+        "execution_tier": "frontier_analysis",
+        "specialist_skill": "data_analysis"
+      }
+    },
+    {
+      "id": "T08",
+      "task": "Recover valuable uncommitted changes after work continued on the wrong Git branch. Preserve every edit and do not rewrite shared history.",
+      "expected": {
+        "task_family": "operations",
+        "execution_tier": "frontier_write",
+        "specialist_skill": "git_safety"
+      }
+    }
+  ]
+}

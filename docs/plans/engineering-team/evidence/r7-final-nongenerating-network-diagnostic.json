@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "scope": "isolated_private_default_deny_nongenerating_diagnostic_only",
+  "status": "failed_backend_attestation_native_remains_unready",
+  "source_context_commit": "72ae4130190169096415436952f7c83498bd4d59",
+  "council_reconciliation_commit": "0e7dd319b56802329187007738970e26b5609b1d",
+  "production_profile_changed": false,
+  "production_native_ready": false,
+  "automatic_enabled": false,
+  "generating_requests": 0,
+  "paid_api_fallbacks": 0,
+  "native": {
+    "executable": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "executable_sha256": "50ac633af64851511f9bbc71032cdae7f1ba20b3234c189687d61ba846c354c5",
+    "verified_version": "codex-cli 0.159.2",
+    "sandbox_version_returncode": 0,
+    "sandbox_version_output_matches_expected": true,
+    "rpc_argv_suffix": ["--disable", "apps", "--disable", "plugins", "app-server", "--listen", "stdio://"],
+    "methods_sent": ["initialize", "initialized", "account/rateLimits/read"]
+  },
+  "immutable_shared_helpers": {
+    "commit": "4f01456189b38252a678938e7197ac2f12a6838e",
+    "probe_process_git_blob": "f97ee3a1d19af929f096f0821df16b2cfed1182b",
+    "diagnostics_git_blob": "40c5849324b47b9014aee6f508116263375f155b",
+    "probe_process_sha256": "26668bfdd9a0e04cb98cf15859170ca0bcb9d8477377841b0e8888ff161d0e1f",
+    "diagnostics_sha256": "e8ef0b8315cf97c5586ee16ce1e3ec1be223991cccf54d9ee0aaea9aa6c18161",
+    "archive_mode": "0700",
+    "only_archived_source_files": ["diagnostics.py", "probe_process.py"],
+    "immediate_missing_identity_refusal": true,
+    "exclusive_popen_reaping_and_shared_cleanup": true,
+    "root_acceptance": "separate_root_owned_gate_not_claimed_by_this_diagnostic"
+  },
+  "profile": {
+    "baseline_profile_sha256": "f363999d789c6bd75e0d579c5f9f25270a43c74e4e7c3a8a426db3b013048711",
+    "diagnostic_variant_profile_sha256": "70a1e58436302aec7d3f179fd8a468e0490bd175b95f1d3347bebe2745c393ed",
+    "actual_private_scratch_profile_sha256": "253c66503f0be900e9c35a089401c2addf317033d60464e88910d42f12305840",
+    "additions": [
+      "(allow mach-lookup (global-name \"com.apple.system.opendirectoryd.libinfo\") (global-name \"com.apple.mDNSResponder\") (global-name \"com.apple.SystemConfiguration.configd\") (global-name \"com.apple.networkd\"))",
+      "(allow network-outbound (remote udp \"*:53\"))",
+      "(allow system-info (info-type \"net.link.addr\"))",
+      "(allow file-read* (literal \"/private/etc/hosts\"))",
+      "(allow network-outbound (literal \"/private/var/run/mDNSResponder\"))"
+    ],
+    "system_info_filter_syntax_authority": "/usr/share/sandbox/mDNSResponder.sb:151",
+    "cat_and_shell_execution_exceptions": "exact binaries added only to separate file-rule probes, never to native backend profile",
+    "broad_filesystem_or_mach_or_network_exceptions": false,
+    "managed_config_or_mcp_exceptions": false
+  },
+  "actual_isolation_checks": {
+    "own_evidence_positive_control": {"returncode": 0, "output_bytes": 54},
+    "peer_proposal": {"returncode": 1, "output_bytes": 0},
+    "runtime_ledger": {"returncode": 1, "output_bytes": 0},
+    "private_log": {"returncode": 1, "output_bytes": 0},
+    "saved_artifact": {"returncode": 1, "output_bytes": 0},
+    "own_directory_symlink_to_peer": {"returncode": 1, "output_bytes": 0},
+    "inherited_child_runtime_ledger": {"returncode": 1, "output_bytes": 0},
+    "unapproved_child_execution": {"returncode": 71, "output_bytes": 0},
+    "all_eight_checks_preserved": true
+  },
+  "sandbox_backend_request": {
+    "initialize_result": true,
+    "native_elapsed_seconds": 0.049,
+    "rpc_error_code": -32603,
+    "error_class": "network_request_failed",
+    "http_status": null,
+    "successful_native_response": false,
+    "owned_identity_captured": true,
+    "owned_group_cleanup_confirmed": true
+  },
+  "single_unsandboxed_nongenerating_control": {
+    "reason": "separate_local_boundary_failure_from_backend_service_unavailable",
+    "initialize_result": true,
+    "native_elapsed_seconds": 0.49,
+    "non_error_rpc_result_received": true,
+    "strict_rate_limits_schema_valid": false,
+    "valid_window_count": 0,
+    "error_class": "invalid_or_empty_native_rate_limits",
+    "successful_native_response": false,
+    "owned_identity_captured": true,
+    "owned_group_cleanup_confirmed": true,
+    "schema_rejection_detail": "raw account/quota payload intentionally not retained; exact offending field is unknown, so no backend-success or service-outage conclusion"
+  },
+  "backend_validator": {
+    "plain_dictionary_or_cached_catalog_is_insufficient": true,
+    "required_top_level_keys": ["rateLimits", "rateLimitsByLimitId"],
+    "allowed_snapshot_keys": ["limitId", "limitName", "primary", "secondary", "credits", "planType"],
+    "required_snapshot_keys": ["primary", "secondary"],
+    "window_fields": ["usedPercent", "windowDurationMins", "resetsAt"],
+    "window_requirements": "finite nonboolean usage 0..100; positive integer duration; integer future reset; at least one valid window",
+    "credits_requirements": "exact hasCredits/unlimited boolean and bounded nullable balance shape",
+    "strings_and_map_keys": "bounded nonempty strings; optional nullable fields remain nullable",
+    "successful_schema_validated_receipts": 0
+  },
+  "bounded_execution": {
+    "paired_backend_deadline_seconds": 12,
+    "sandbox_backend_attempts": 1,
+    "unsandboxed_backend_controls": 1,
+    "further_network_attempts": 0,
+    "python_version": "3.12.14",
+    "resource_warnings": "error",
+    "bytecode_writes": "disabled by -B and sys.dont_write_bytecode",
+    "native_pid_absence_independently_checked_after_cleanup": true
+  },
+  "privacy_and_preservation": {
+    "only_auth_json_copied": true,
+    "private_scratch_mode": "0700",
+    "temporary_auth_copy_mode": "0600",
+    "temporary_auth_copy_removed": true,
+    "original_auth_unchanged": true,
+    "original_diagnostic_script_sha256_unchanged": "e6f2cb9cdc371c595cc0826a99f7614e65a1aa797ff4c8c883d9b1b183a7dc23",
+    "original_diagnostic_result_sha256_unchanged": "6f334467e4dc0beb3a57bfc395427db24e42fa73587dbddbf642ef5480ab8ae3",
+    "raw_provider_messages_auth_account_and_quota_values_tracked": false,
+    "final_private_script_sha256": "1480f38dd83fe45a30bf79ab92da387fa01a34f5bacb4efae9c7d811a4b08e90",
+    "final_private_redacted_receipt_sha256": "c125c3283e994f7c7dad8322e9e0889008f46a7c7935d3c0164e7891ce40d8c1"
+  },
+  "retained_early_aborts": [
+    {
+      "helper_commit": "093ed0f397289bffe9ea249c10796cb436027f00",
+      "stage": "sandbox_version_gate_before_file_checks_or_backend_rpc",
+      "returncode": null,
+      "cause": "exact return code not recorded; do not attribute it to the known EOF helper defect without evidence",
+      "private_redacted_receipt_sha256": "c8ef5f89b0fcfdd6a7831b01044c84a339bf030bf8f83cde1365a3130e83d2a9"
+    },
+    {
+      "helper_commit": "4f01456189b38252a678938e7197ac2f12a6838e",
+      "stage": "sandbox_version_gate_before_file_checks_or_backend_rpc",
+      "returncode": 65,
+      "cause": "bare net.link.addr token in system-info rule was an unbound variable; exact no-auth/no-native compiler check proved syntax defect, corrected with OS-defined info-type filter",
+      "private_redacted_receipt_sha256": "fa39261aba4fbe4f56112cd39f991f7cceb1801558405190f5bffc1e8d0f27c9"
+    },
+    {
+      "stage": "first_no_auth_no_native_compiler_check_invocation",
+      "cause": "command helper correctly refused replacing the frozen executable before profile construction; corrected invocation retained frozen profile then used a denied true executable solely for parser diagnostics",
+      "backend_requests": 0
+    }
+  ],
+  "scoped_previous_pid_log_query": {
+    "pid": 63678,
+    "info": true,
+    "debug": true,
+    "predicate_scope": "only exact codex PID sandbox deny messages, excluding the log query process",
+    "matching_denials": 0,
+    "missing_facility_inference": "none; no specific additional OS facility has been demonstrated necessary or sufficient"
+  },
+  "next_action": "Stop network attempts. Root may investigate the exact local boundary and validator contract separately; Council remains fail-closed before native role generation. This diagnostic is not production readiness, a minimum-boundary proof, native quality evaluation, or release acceptance.",
+  "verification": {
+    "bash": {"command": "bash test/run.sh", "status": "passed", "test_files": 11, "assertions": 227},
+    "generated_reference": {"command": "python3 -B scripts/generate-core-reference.py --check", "status": "passed"},
+    "diff": {"command": "git diff --check", "status": "passed"},
+    "json_parse": {"command": "python3 -B -m json.tool docs/plans/engineering-team/evidence/r7-final-nongenerating-network-diagnostic.json", "status": "passed"}
+  }
+}

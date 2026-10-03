@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "status": "accepted_source_and_installed_public_outcomes_trials",
+  "source_revision": "dfe9976224e9ff2166a016b802e074aa1f763c4b",
+  "reviewed_source_revision": "f87060b7980a9fbe95314bb0986f84e424eccd3e",
+  "source_scope_equivalence": "git diff --exit-code f87060b dfe997 -- plugin/core passed; later changes only test expectations/observation and checkpoint documents",
+  "full_gate": {"command": "env DEVSQUAD_BUILD_PYTHON=<offline-python3.12> PYTHONPATH=plugin/core/src:test/core PYTHONWARNINGS=error::ResourceWarning python3 scripts/run-core-tests.py --failfast", "tests": 504, "seconds": 511.241, "failures": 0, "errors": 0, "skips": 2, "unraisable": [], "monotonic_seconds": 511.3239737499989, "utc_seconds": 511.325922, "source_and_tests_frozen": true},
+  "focused_gates": [{"tests": 54, "seconds": 48.572, "scope": "review repairs/outcomes/trials/store/process ownership", "result": "pass"}, {"tests": 66, "seconds": 125.322, "scope": "integrity/outcomes/review/delivery", "result": "pass"}],
+  "independent_review": {
+    "initial_run": "5a70f3db-91a8-4606-9809-c0b993b988b1", "initial_disposition": "reject", "findings": ["R5-001", "R5-002"],
+    "repair_run": "e046a174-55ce-4496-973e-2fc97c68a493", "state": "succeeded", "version": 22, "disposition": "accept", "verdict": "clean", "remaining_findings": [],
+    "identity": {"harness": "codex", "harness_version": "codex-cli 0.159.2", "model_id": "gpt-6.1-sol", "effort": "low", "verification": "verified", "permission_policy": "read_only"},
+    "candidate_sha256": "564e2e937dc01d1127378537b45b7a9170b91c8a90545e7d3775321025640aa2",
+    "review_sha256": "a448ab152287e163ac4610850bee574939f97fb822863d31e8d8050fdf09ac6f",
+    "checks_sha256": "a1a74d34c4fda3960d880ea018fbf30f67e38f92d026cfe63f40e56b207c86de",
+    "receipt_sha256": "58eea09f033104b98b0dd5ef086ecbaf65faa050802d39bb4da4bf08d8c5b254",
+    "checks": {"diff_bash_reference": "pass", "public_tests": 13, "seconds": 10.729, "integrity": "verified_unchanged"}
+  },
+  "requirements": [
+    {"requirement": "one objective final per new public run from every terminal origin; replay after terminal/projection crash", "proof": "test_objective_outcomes public preparation failure/cancel, worker failure, host/headless completion, timeout and replay tests", "result": "pass"},
+    {"requirement": "failed/fallback/revision/finding/lead-repair attribution; no invented independent success or criterion-level test proof", "proof": "test_objective_outcomes, learning/lifecycle and full gate", "result": "pass"},
+    {"requirement": "append-only late corrections; legacy history unchanged; scoped pending projection repair and consistent proposal read", "proof": "public report/proposal replay, manual final replacement rejection, corruption isolation and native R5-001 follow-up", "result": "pass"},
+    {"requirement": "public bounded trials freeze predeclared spec/assignment before real attempts, with one shared all-attempt cap", "proof": "test_public_trials concurrency/fallback/declaration replay; fixture now calls trial_start without preparation monkeypatch or manual final import", "result": "pass"},
+    {"requirement": "experiment wall deadline stops already launched work with owned-child cleanup", "proof": "public actual delayed worker regression, runner ownership tests and native R5-002 follow-up", "result": "pass"},
+    {"requirement": "full public pair/evaluate/qualify/reviewed promotion/new-run/held-out regression/rollback chain", "proof": "test_public_trials.PublicTrialTest.test_public_outcomes_evaluate_qualify_promote_new_run_and_roll_back", "result": "pass_offline_actual_workers"},
+    {"requirement": "safe schema-changing upgrade and installed SDK transport", "proof": "full installer old schema13 active/recoverable deferral, cancellation/resume and migration-to16 tests; installed SDK nine tests", "result": "pass"}
+  ],
+  "installation": {
+    "release": "0.1.0-py31214-90f1e87fb9ac-mcp-a26bc88afbef", "source_digest": "90f1e87fb9acf7756dad46780672de9b84fe75e3631322857a310f089280345e",
+    "python": "3.12.14", "mcp": "2.2.0", "ledger_schema": 16, "nonterminal_runs_before": 0, "nonterminal_runs_after": 0,
+    "legacy_projection_jobs_after_migration": 0, "first_changed": true, "reinstall_changed": false, "payload_drift": false, "manifest_matches": true, "pip_check": "pass", "network_downloads": false, "previous_releases_retained": true,
+    "installed_sdk": {"tests": 9, "seconds": 2.674, "skips": 0, "failures": 0, "errors": 0, "origin": "resolved installed release, not source"},
+    "normal_review_dry_run": {"model": "gpt-6.1-sol", "effort": "low", "selection_mode": "bounded_trial", "run_created": false, "task_sha256": "2f71ea5247b55aa4335e737f069b0d84d4ef13e7afc18d0dc9406e4f5185e1ab"},
+    "matching_host_registrations": 4,
+    "doctor_note": "R5 doctor still describes installation/registration, not full authenticated or operation-verified readiness; R6 repairs this distinction"
+  },
+  "other_gates": {"bash_assertions": 227, "generated_reference": "current", "git_diff_check": "pass"},
+  "failure_history": "R5-public-integration-partial-2026-10-02.json preserves rejected native findings, red tests, interrupted and failed full invocations",
+  "limits": "Actual offline workers prove runtime/provenance, not model superiority or subscription savings. Automatic experimentation/promotion and Jev remain off. R6 usability, R7/C1 Council and R8 final desktop/live acceptance remain separate."
+}

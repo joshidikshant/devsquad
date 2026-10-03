@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devsquad.local/schemas/profiles-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profiles", "bindings"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "profile.schema.json"}
+    },
+    "bindings": {
+      "type": "object",
+      "propertyNames": {"minLength": 1},
+      "additionalProperties": {"$ref": "#/$defs/binding"}
+    }
+  },
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id", "version"],
+      "properties": {
+        "profile_id": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

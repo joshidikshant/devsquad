@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devsquad-core"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp==2.2.0"]
+
+[project.scripts]
+squad = "devsquad.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"devsquad.migrations" = ["*.sql"]
+
+[tool.setuptools.data-files]
+"share/devsquad/adapters/codex" = ["adapters/codex/adapter.json"]
+"share/devsquad/adapters/antigravity" = ["adapters/antigravity/adapter.json"]
+"share/devsquad/adapters/grok" = ["adapters/grok/adapter.json"]
+"share/devsquad/adapters/claude" = ["adapters/claude/adapter.json"]
+"share/devsquad/adapters" = ["adapters/classification-policy.conf"]
+"share/devsquad/schemas" = ["schemas/adapter.schema.json", "schemas/check-result.schema.json", "schemas/council.schema.json", "schemas/execution-identity.schema.json", "schemas/launch-spec.schema.json", "schemas/normalized-result.schema.json", "schemas/policy.schema.json", "schemas/profile.schema.json", "schemas/profiles.schema.json", "schemas/review-result.schema.json", "schemas/task.schema.json"]
+"share/devsquad/profiles" = ["profiles/templates.json"]
+"share/devsquad/integrations/codex" = ["integrations/codex/registration.json"]
+"share/devsquad/integrations/claude-code" = ["integrations/claude-code/registration.json"]
+"share/devsquad/integrations/antigravity" = ["integrations/antigravity/registration.json"]
+"share/devsquad/integrations/grok" = ["integrations/grok/registration.json"]

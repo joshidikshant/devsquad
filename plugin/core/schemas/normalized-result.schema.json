@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devsquad.local/schemas/normalized-result-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "execution_status", "error_code", "output", "artifact_status", "acceptance_status", "requested", "observed", "native_ids", "events"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "execution_status": {"enum": ["succeeded", "failed", "timed_out", "interrupted", "denied", "malformed"]},
+    "error_code": {"type": ["string", "null"]},
+    "output": {"type": ["string", "null"]},
+    "artifact_status": {"enum": ["present", "missing", "not_required", "unknown"]},
+    "acceptance_status": {"enum": ["pending", "accepted", "rejected", "not_evaluated"]},
+    "requested": {"$ref": "execution-identity.schema.json"},
+    "observed": {"oneOf": [{"$ref": "execution-identity.schema.json"}, {"type": "null"}]},
+    "native_ids": {"type": "object", "propertyNames":{"minLength":1}, "additionalProperties": {"type": "string", "minLength":1}},
+    "events": {"type": "array", "items": {"type": "object"}}
+  }
+}

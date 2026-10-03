@@ -72,9 +72,30 @@ CATEOF
 
 CAT="$PLUGIN_ROOT/lib/model-catalog.sh"
 assert_eq "tier fast picks newest flash"      "$(bash "$CAT" resolve gemini fast)"     "Gemini 4.0 Flash (Medium)"
-assert_eq "tier frontier picks highest ver"   "$(bash "$CAT" resolve gemini frontier)" "Claude Opus 4.6 (Thinking)"
+assert_eq "tier frontier stays in family"     "$(bash "$CAT" resolve gemini frontier)" "Gemini 3.1 Pro (High)"
 assert_eq "grok fast"                         "$(bash "$CAT" resolve grok fast)"       "grok-composer-2.5-fast"
 assert_eq "grok frontier non-fast fallback"   "$(bash "$CAT" resolve grok frontier)"   "grok-build"
+
+# Structured compatibility is authoritative: unrelated families and entries
+# without a declared tier cannot participate in selection.
+cat > "$CATDIR/models.json" <<'CATEOF'
+{"fetched_at":"2026-07-06T00:00:00Z",
+ "gemini":{"status":"ok","models":[
+   {"id":"gemini-pro","family":"gemini","compatibility":{"tiers":["frontier"]}},
+   {"id":"claude-opus-99","family":"claude","compatibility":{"tiers":["frontier"]}},
+   {"id":"gemini-unknown","family":"gemini","compatibility":{"tiers":[]}}
+ ]},"grok":{"status":"ok","models":[]},"codex":{"status":"unlistable","models":[]}}
+CATEOF
+assert_eq "structured compatibility stays in family" "$(bash "$CAT" resolve gemini frontier)" "gemini-pro"
+assert_eq "structured unsupported tier is empty" "$(bash "$CAT" resolve gemini fast)" ""
+
+# Restore the legacy-string fixture for the adapter compatibility checks.
+cat > "$CATDIR/models.json" <<'CATEOF'
+{"fetched_at":"2026-07-06T00:00:00Z",
+ "gemini":{"status":"ok","models":["Gemini 3.5 Flash (Medium)","Gemini 4.0 Flash (Medium)","Gemini 3.1 Pro (High)","Claude Opus 4.6 (Thinking)"]},
+ "grok":{"status":"ok","models":["grok-composer-2.5-fast","grok-build"]},
+ "codex":{"status":"unlistable","models":[]}}
+CATEOF
 
 # Adapter integration: tier pin in agent_models resolves through the catalog
 T4=$(mktemp -d); mkdir -p "$T4/.devsquad"
@@ -101,6 +122,24 @@ if bash "$PLUGIN_ROOT/skills/devsquad-config/scripts/update-config.sh" 'agent_mo
 else
   PASS=$((PASS + 1))
 fi
+
+# A failed discovery refresh records the error while retaining the prior
+# successful model set; it is not interpreted as every model being removed.
+REFRESH_BIN=$(mktemp -d)
+cat > "$REFRESH_BIN/agy" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+cat > "$REFRESH_BIN/grok" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+chmod +x "$REFRESH_BIN/agy" "$REFRESH_BIN/grok"
+before_models=$(jq -c '.gemini.models' "$CATDIR/models.json")
+PATH="$REFRESH_BIN:$PATH" bash -c 'source "$1"; refresh_model_catalog' _ "$CAT" >/dev/null 2>&1
+after_models=$(jq -c '.gemini.models' "$CATDIR/models.json")
+assert_eq "failed refresh retains last-good models" "$after_models" "$before_models"
+assert_eq "failed refresh records error" "$(jq -r '.gemini.last_refresh_error' "$CATDIR/models.json")" "error"
 
 echo "  models: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

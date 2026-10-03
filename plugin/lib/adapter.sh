@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # lib/adapter.sh -- Shared CLI adapter core for DevSquad wrappers (D4).
-# Sourced by gemini-/codex-/grok-wrapper.sh. Do not execute directly.
+# Sourced by gemini-/codex-/grok-/claude-wrapper.sh. Do not execute directly.
 #
 # Contract (enforced by test/test_wrapper_contract.sh):
 #   success: response on stdout, exit 0
@@ -32,6 +32,60 @@ set -euo pipefail
 _ADAPTER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${_ADAPTER_LIB_DIR}/model-catalog.sh"
+# shellcheck source=/dev/null
+source "${_ADAPTER_LIB_DIR}/../core/adapters/classification-policy.conf"
+
+# Terminate a bounded subprocess tree without requiring GNU timeout, setsid,
+# or job-control process groups (all absent on a stock macOS Bash 3.2 host).
+# Descendants are collected before the parent so an exiting parent cannot
+# orphan children between discovery and signalling.
+_adapter_snapshot_tree() {
+  local root_pid="$1" child
+  for child in $(pgrep -P "$root_pid" 2>/dev/null || true); do
+    _adapter_snapshot_tree "$child"
+  done
+  printf '%s\n' "$root_pid"
+}
+
+_adapter_signal_snapshot() {
+  local snapshot_file="$1" signal="${2:-TERM}" pid
+  [[ -f "$snapshot_file" ]] || return 0
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] && kill -"$signal" "$pid" 2>/dev/null || true
+  done < "$snapshot_file"
+}
+
+# Bash's own job table tracks our directly-owned children without spawning
+# ps/tr for every poll. Timer cancellation below never signals a numeric PID.
+_adapter_job_running() {
+  local pid="$1" running
+  running=$(jobs -pr)
+  case $'\n'"$running"$'\n' in
+    *$'\n'"$pid"$'\n'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_adapter_stop_timer() {
+  local timer_pid="${1:-}" control_file="${2:-}"
+  [[ -n "$timer_pid" ]] || return 0
+  # Duplex open cannot block if the timer has already exited. Keep it open
+  # through wait so an early cancellation remains buffered until the timer
+  # opens its reader. The command-local descriptor restores the caller's FD9.
+  # No numeric PID signal is ever sent to a timer that may have exited/reaped.
+  {
+    printf 'cancel\n' >&9
+    wait "$timer_pid" 2>/dev/null || true
+  } 9<>"$control_file"
+}
+
+_adapter_cleanup_timer() {
+  _adapter_stop_timer "${timer_pid:-}" "${timer_control_file:-}"
+  if [[ -n "${timer_dir:-}" ]]; then
+    rm -f "$timer_dir/control" "$timer_dir/deadline" "$timer_dir/processes"
+    rmdir "$timer_dir" 2>/dev/null || true
+  fi
+}
 
 # Resolve model: agent-specific (agent_models.<DEVSQUAD_AGENT>) >
 # global (.preferences.<pref_key>) > "" (CLI default).
@@ -98,6 +152,12 @@ _adapter_invoke() {
 
   local cli
   cli=$(_adapter_resolve_cli)
+  if [[ -n "${DEVSQUAD_TEST_ADAPTER_EXECUTABLE:-}" ]]; then
+    case "$DEVSQUAD_TEST_ADAPTER_EXECUTABLE" in
+      /*) [[ -x "$DEVSQUAD_TEST_ADAPTER_EXECUTABLE" ]] && cli="$DEVSQUAD_TEST_ADAPTER_EXECUTABLE" ;;
+      *) _adapter_fail "CLI_ERROR: test adapter executable must be absolute"; return 1 ;;
+    esac
+  fi
   if [[ -z "$cli" ]]; then
     _adapter_fail "CLI_ERROR: ${ADAPTER_MISSING_MSG}"
     return 1
@@ -109,14 +169,17 @@ _adapter_invoke() {
   _adapter_build_args "$final_prompt" "$model" "$timeout_secs"
 
   local timeout_cmd=""
-  if command -v timeout &>/dev/null; then timeout_cmd="timeout"
-  elif command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout"
+  if [[ "${DEVSQUAD_FORCE_PORTABLE_TIMEOUT:-0}" != "1" ]] && command -v timeout &>/dev/null; then timeout_cmd="timeout"
+  elif [[ "${DEVSQUAD_FORCE_PORTABLE_TIMEOUT:-0}" != "1" ]] && command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout"
   fi
 
   local stderr_file stdout_file
   stderr_file=$(mktemp)
   stdout_file=$(mktemp)
-  trap 'rm -f "${stderr_file:-}" "${stdout_file:-}"' EXIT
+  local timer_pid="" timer_dir="" timer_control_file=""
+  local previous_exit_trap
+  previous_exit_trap=$(builtin trap -p EXIT)
+  trap '_adapter_cleanup_timer; rm -f "${stderr_file:-}" "${stdout_file:-}"' EXIT
 
   local exit_code=0
   if [[ -n "$timeout_cmd" ]]; then
@@ -129,30 +192,79 @@ _adapter_invoke() {
     # Portable watchdog: every call is bounded even on hosts with no
     # timeout/gtimeout binary (observed live: an unauthenticated CLI
     # waiting on OAuth blocks forever)
+    timer_dir=$(mktemp -d)
+    timer_control_file="$timer_dir/control"
+    local timer_deadline_file="$timer_dir/deadline"
+    mkfifo -m 600 "$timer_control_file"
+    # Bash read's real deadline is independent of polling/inspection cost.
+    # Its private FIFO is cancellation authority: no timer-PID signalling,
+    # orphan sleep, inherited ignored TERM, or retained capture descriptors.
+    (
+      trap - EXIT
+      local timer_message="" timer_status=0
+      if IFS= read -r -t "$timeout_secs" timer_message <>"$timer_control_file"; then
+        [[ "$timer_message" == "cancel" ]] || printf 'error\n' >"$timer_deadline_file"
+      else
+        timer_status=$?
+        if [[ "$timer_status" -eq 1 || "$timer_status" -gt 128 ]]; then
+          printf 'timeout\n' >"$timer_deadline_file"
+        else
+          printf 'error\n' >"$timer_deadline_file"
+        fi
+      fi
+    ) </dev/null >/dev/null 2>&1 &
+    timer_pid=$!
     if [[ -n "${ADAPTER_STDIN_FILE:-}" ]]; then
       "$cli" "${ADAPTER_ARGS[@]}" <"$ADAPTER_STDIN_FILE" >"$stdout_file" 2>"$stderr_file" &
     else
       "$cli" "${ADAPTER_ARGS[@]}" >"$stdout_file" 2>"$stderr_file" &
     fi
     local cli_pid=$!
-    ( sleep "$timeout_secs"; kill "$cli_pid" 2>/dev/null ) &
-    local watchdog_pid=$!
+    local process_snapshot="$timer_dir/processes" timed_out="false" monitor_failed="false"
+    while _adapter_job_running "$cli_pid"; do
+      # Observe completion, not an in-progress marker write. The completed
+      # timer has published either its actual deadline or a monitor failure.
+      if ! _adapter_job_running "$timer_pid"; then
+        if [[ "$(cat "$timer_deadline_file" 2>/dev/null || true)" == "timeout" ]]; then
+          timed_out="true"
+        else
+          monitor_failed="true"
+        fi
+        _adapter_snapshot_tree "$cli_pid" > "$process_snapshot"
+        _adapter_signal_snapshot "$process_snapshot" TERM
+        sleep 0.1
+        _adapter_signal_snapshot "$process_snapshot" KILL
+        break
+      fi
+      sleep 0.05
+    done
+    _adapter_stop_timer "$timer_pid" "$timer_control_file"
+    timer_pid=""
     if wait "$cli_pid"; then
       exit_code=0
     else
       exit_code=$?
     fi
-    kill "$watchdog_pid" 2>/dev/null || true
-    wait "$watchdog_pid" 2>/dev/null || true
-    # SIGTERM from the watchdog surfaces as 143 — normalize to timeout's 124
-    if [[ $exit_code -eq 143 ]]; then
+    if [[ "$timed_out" == "true" ]]; then
+      _adapter_signal_snapshot "$process_snapshot" KILL
       exit_code=124
+    elif [[ "$monitor_failed" == "true" ]]; then
+      exit_code=125
     fi
+    _adapter_cleanup_timer
+    timer_dir=""
+    timer_control_file=""
   fi
 
   local stdout stderr_content
   stdout=$(cat "$stdout_file" 2>/dev/null)
   stderr_content=$(cat "$stderr_file" 2>/dev/null)
+  rm -f "$stderr_file" "$stdout_file"
+  # Cleanup uses invocation locals only while they are live. Restore the
+  # caller's shell-generated trap before any classification/return unwinds
+  # that scope, so same-named caller globals can never become cleanup targets.
+  builtin trap - EXIT
+  if [[ -n "$previous_exit_trap" ]]; then eval "$previous_exit_trap"; fi
 
   # CLI-specific auth signal (may appear on stdout with exit 0, e.g. grok's
   # sign-in banner) — checked before the success path
@@ -160,7 +272,8 @@ _adapter_invoke() {
     _adapter_fail "AUTH_ERROR: ${agent} CLI is not authenticated. ${ADAPTER_AUTH_HINT}"
   elif [[ $exit_code -eq 0 ]]; then
     if [[ -z "$stdout" ]]; then
-      echo "WARNING: ${agent} returned empty response" >&2
+      _adapter_fail "CLI_ERROR: ${agent} returned an empty response. ${ADAPTER_FALLBACK}"
+      return 1
     fi
     update_agent_stats "$state_dir" "$agent" "true"
     record_usage "$agent" "$chars_in" "${#stdout}"
@@ -169,9 +282,9 @@ _adapter_invoke() {
     return 0
   elif [[ $exit_code -eq 124 ]]; then
     _adapter_fail "TIMEOUT: ${agent} did not respond within ${timeout_secs}s. ${ADAPTER_FALLBACK}"
-  elif echo "$stderr_content" | grep -qiE 'auth|401|403|ineligible|unauthorized'; then
+  elif echo "$stderr_content" | grep -qiE "$DEVSQUAD_AUTH_ERROR_PATTERN"; then
     _adapter_fail "AUTH_ERROR: ${agent} CLI authentication failed. ${ADAPTER_AUTH_HINT}"
-  elif echo "$stderr_content" | grep -qiE '429|rate.?limit|quota|resource.?exhausted|too many requests'; then
+  elif echo "$stderr_content" | grep -qiE "$DEVSQUAD_RATE_LIMIT_PATTERN"; then
     record_rate_limit "$state_dir" "$agent"
     _adapter_fail "RATE_LIMITED: ${agent} hit a rate limit. 2-minute cooldown started. ${ADAPTER_FALLBACK}"
   else

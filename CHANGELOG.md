@@ -4,6 +4,39 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.11.0] — 2026-10-02
+
+### Added
+- Standalone dependency-free Python core (`squad` 0.1.0) with durable saved
+  runs, isolated candidates, bounded Claude implementation, independent Codex
+  review, candidate-bound checks and fenced host acceptance.
+- Guided setup, readiness, review/fix, status/result, finish, cancel and safe
+  resume commands; optional pinned MCP transport for the same local ledger.
+- Catalog-backed profiles, shared subscription-pool capacity fences, explicit
+  outcome/trial reports and guarded qualification/promotion/rollback.
+- Reversible content-addressed installation and guarded schema-17 upgrade.
+  The wheel packages every runtime schema, including the experimental Council
+  contract. Old schema-16 clients cannot mutate the upgraded ledger.
+
+### Fixed
+- Interrupted guided completion now saves exact intent and recovers only
+  matching authority, retaining prior expiry rejection history.
+- Native probes fail closed without process identity. Bounded natural exit
+  preserves version/auth exit status before owned cleanup; controlled Python
+  fixtures cannot invalidate a pristine candidate with undeclared bytecode.
+- Bash 3.2 compatibility, optional-jq behavior and legacy wrapper error
+  contracts remain supported.
+
+### Limitations
+- Council is experimental and native-unavailable; automatic invocation is OFF.
+  Its fixture comparison is inconclusive, not a quality or savings claim.
+- Jev routing remains OFF. Provider operations depend on installed harness
+  capabilities and subscription authentication; paid API fallback is not used.
+- Claude CLI handoff and Claude-to-Codex delivery have live receipts. Claude
+  desktop Code-tab proof is separate and unverified. Antigravity means the
+  `agy` CLI, not its IDE; Grok/Antigravity MCP status does not prove automatic
+  implementation/review roles. See the runtime guide for supported boundaries.
+
 ## [0.10.0] — 2026-07-07
 
 ### Maintainability & scalability review

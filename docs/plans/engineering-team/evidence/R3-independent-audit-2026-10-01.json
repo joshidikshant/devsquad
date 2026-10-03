@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "work_package": "R3",
+  "status": "findings_open",
+  "base_revision": "672e38305fcc764d87d7da6afb5914cbf3c5a3ce",
+  "target_revision": "933419041fc8aa415dda622810e8a17fde41aac5",
+  "run_id": "80fdd336-07e2-445c-8a08-5877cd6534df",
+  "observed_identity": {"harness": "codex", "version": "codex-cli 0.159.2", "model": "gpt-6.1-sol", "effort": "high", "permission": "read_only", "verification": "verified"},
+  "review_sha256": "97c4d5ccd0874fc7eaaf3a24311cb6edbba309c5abdb8ba714b517bafc8fdba8",
+  "attempt_sha256": "1c2b381acf2961bb96557a81b53554fb5dba8e0c7bd7965d8cbf0eff975c720b",
+  "findings": [
+    {"id": "R3-001", "severity": "high", "path": "plugin/core/src/devsquad/experiment_evidence.py", "summary": "Delivery exposure can be accepted without semantically validated implementation/reviewer output and matching import or terminal failure evidence", "status": "open"},
+    {"id": "R3-002", "severity": "medium", "path": "plugin/core/src/devsquad/store.py", "summary": "Latency/usage qualification ratios are trusted from the caller instead of verified saved measurements", "status": "open"}
+  ],
+  "checks": {"diff": "passed", "bash": "Exited 0, but invalidated by undeclared Python bytecode in the check workspace; candidate integrity correctly blocked acceptance"},
+  "host_disposition": "reject",
+  "terminal": {"state": "failed", "version": 22},
+  "native_usage": {"input_tokens": 1642079, "output_tokens": 10733, "source": "native_reported", "worker_invocations": 1, "native_model_requests": null},
+  "limitations": "Source-only audit, not an updated-installation or Claude-to-Codex delivery proof. Full integration pass precedes these findings and does not close them",
+  "next_action": "Reproduce and repair the two bounded findings and bytecode/check friction. Do not repeat the broad review; re-review only repaired boundaries"
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "milestone": "M3",
+  "status": "complete",
+  "implementation_revision": "1737667a3a847bfd09559abd5a53f8ec88745982",
+  "recorded_at": "2026-09-22T20:42:05+05:30",
+  "offline_gate": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=plugin/core/src python3 -W error::ResourceWarning -m unittest discover -s test/core -q",
+    "result": "188 tests passed",
+    "bash_command": "bash test/run.sh",
+    "bash_result": "10 test files and 202 assertions passed"
+  },
+  "live_gate": {
+    "revision": "9478796",
+    "artifact": "M3-native-codex-review-2026-09-17.json",
+    "result": "subscription-backed Codex gpt-5.5/low read-only review succeeded with one supported finding, a passing required check, 53700 native-reported tokens and five terminal report hashes"
+  },
+  "closeout_checkpoints": [
+    {
+      "revision": "9dc795a",
+      "result": "waiting handoff and rich early-terminal report sets"
+    },
+    {
+      "revision": "8f3fa56",
+      "result": "durable host and headless lead paths with distinct fenced attempts"
+    },
+    {
+      "revision": "e1afa4d",
+      "result": "cumulative wall budgets, transactional live pool reservations and complete waiting cancellation reports"
+    },
+    {
+      "revision": "84deb77",
+      "result": "bounded frozen reviewer and lead runtime fallbacks with schema-8 attempt identity"
+    },
+    {
+      "revision": "1737667",
+      "result": "four independent-audit defects fixed with deterministic regressions"
+    }
+  ],
+  "independent_audit": {
+    "target_revision": "84deb77",
+    "findings": [
+      "pre-launch recovery consumed an unused fallback slot",
+      "headless-lead invocation exhaustion stranded an awaiting run",
+      "unknown capacity allowed more than one unresolved trial",
+      "later early-terminal reports omitted completed earlier revisions"
+    ],
+    "closure_revision": "1737667",
+    "closure": "all four reproduced by tracked tests; focused and complete offline gates pass",
+    "follow_up_limit": "the same audit agent could not rerun after the fixes because the shared Plus window was exhausted"
+  },
+  "provider_blockers_outside_m3": [
+    "Claude CLI is not logged in",
+    "Grok authentication is expired",
+    "Antigravity is authenticated but headless scoped trust/permission remains blocked"
+  ],
+  "residual_m3_blockers": []
+}

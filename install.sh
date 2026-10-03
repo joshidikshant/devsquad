@@ -1,117 +1,118 @@
 #!/usr/bin/env bash
-# DevSquad Installer — registers marketplace, installs plugin, and wires hooks
+# DevSquad composite installer: standalone core first, optional Claude plugin.
 set -euo pipefail
 
-REPO_URL="https://github.com/joshidikshant/devsquad.git"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)"
+REPO_URL="${DEVSQUAD_REPO_URL:-https://github.com/joshidikshant/devsquad.git}"
 MARKETPLACE="devsquad-marketplace"
 PLUGIN="devsquad@${MARKETPLACE}"
-SETTINGS="$HOME/.claude/settings.json"
-PLUGIN_INSTALL_DIR="$HOME/.claude/plugins/marketplaces/${MARKETPLACE}"
+CLAUDE_MODE="auto"
+STATUS_MODE=0
+JSON_MODE=0
+CORE_ARGS=()
 
-echo "=== DevSquad Installer ==="
-echo
+usage() {
+  cat <<'EOF'
+Usage: ./install.sh [options]
 
-# Check claude is available
-if ! command -v claude &>/dev/null; then
-  echo "Error: Claude Code CLI not found. Install it first:"
-  echo "  https://docs.anthropic.com/en/docs/claude-code"
+Installs the standalone DevSquad runtime first. Claude is not required.
+When the Claude CLI is available, the legacy plugin is installed or updated
+unless --core-only is supplied.
+
+Composite options:
+  --core-only             Install only the standalone runtime
+  --with-claude           Require and install/update the Claude plugin
+
+Standalone options are passed to scripts/install-core.sh:
+  --source-core PATH      --install-root PATH    --bin-dir PATH
+  --python PATH           --with-mcp              --mcp-wheelhouse PATH
+  --status                --json
+  -h, --help
+EOF
+}
+
+fail() {
+  printf 'devsquad install: %s\n' "$*" >&2
   exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --core-only) CLAUDE_MODE="skip"; shift ;;
+    --with-claude) CLAUDE_MODE="required"; shift ;;
+    --source-core|--install-root|--bin-dir|--python|--mcp-wheelhouse)
+      [ "$#" -ge 2 ] || fail "$1 requires a value"
+      CORE_ARGS+=("$1" "$2"); shift 2 ;;
+    --with-mcp)
+      CORE_ARGS+=("$1"); shift ;;
+    --status)
+      STATUS_MODE=1; CORE_ARGS+=("$1"); shift ;;
+    --json)
+      JSON_MODE=1; CORE_ARGS+=("$1"); shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown option: $1" ;;
+  esac
+done
+
+if [ "$STATUS_MODE" -eq 1 ] && [ "$CLAUDE_MODE" = "required" ]; then
+  fail "--status cannot be combined with --with-claude"
+fi
+if [ "$STATUS_MODE" -eq 1 ]; then
+  CLAUDE_MODE="skip"
+fi
+if [ "$JSON_MODE" -eq 1 ] && [ "$CLAUDE_MODE" != "skip" ]; then
+  fail "--json requires --core-only (or --status); use scripts/install-core.sh for standalone JSON"
+fi
+if [ "$CLAUDE_MODE" = "required" ] && ! command -v claude >/dev/null 2>&1; then
+  fail "--with-claude requested, but the Claude Code CLI is unavailable"
 fi
 
-# Step 1: Register marketplace
-echo "[1/4] Registering marketplace..."
+if [ "$JSON_MODE" -eq 1 ]; then
+  echo "=== DevSquad standalone runtime ===" >&2
+else
+  echo "=== DevSquad standalone runtime ==="
+fi
+if [ "${#CORE_ARGS[@]}" -gt 0 ]; then
+  "$SCRIPT_DIR/scripts/install-core.sh" "${CORE_ARGS[@]}"
+else
+  "$SCRIPT_DIR/scripts/install-core.sh"
+fi
+
+if [ "$CLAUDE_MODE" = "skip" ]; then
+  if [ "$JSON_MODE" -eq 1 ]; then
+    echo "Claude plugin: skipped" >&2
+  else
+    echo "Claude plugin: skipped"
+  fi
+  exit 0
+fi
+if ! command -v claude >/dev/null 2>&1; then
+  echo "Claude plugin: skipped (Claude Code CLI not found)"
+  echo "Standalone DevSquad is ready; install the plugin later with ./install.sh --with-claude."
+  exit 0
+fi
+
+echo
+echo "=== DevSquad legacy Claude plugin ==="
+echo "[1/3] Marketplace"
 if claude plugin marketplace list 2>/dev/null | grep -q "$MARKETPLACE"; then
-  echo "  Marketplace already registered, updating..."
   claude plugin marketplace update "$MARKETPLACE"
 else
   claude plugin marketplace add "$REPO_URL"
 fi
 
-# Step 2: Install plugin
-echo "[2/4] Installing plugin..."
+echo "[2/3] Plugin"
 if claude plugin list 2>/dev/null | grep -q "devsquad@"; then
-  echo "  Plugin already installed, updating..."
-  claude plugin update "$PLUGIN" 2>/dev/null || true
+  claude plugin update "$PLUGIN"
 else
   claude plugin install "$PLUGIN"
 fi
 
-# Step 3: Enable plugin
-echo "[3/4] Enabling plugin..."
-claude plugin enable "$PLUGIN" 2>/dev/null || true
+echo "[3/3] Enable"
+claude plugin enable "$PLUGIN"
 
-# Step 4: Register hooks into ~/.claude/settings.json (global)
-# Hooks point at the MARKETPLACE CLONE (a git checkout that `claude plugin
-# marketplace update` refreshes) — never at a versioned cache dir, which
-# freezes hooks at install-time and silently drops every later fix.
-# Developers hacking on DevSquad itself can point these commands at their
-# source checkout instead to run hooks-at-HEAD (see docs/ARCHITECTURE.md).
-# Note: per-project hook registration happens during /devsquad:setup (onboarding skill Step 3.5).
-echo "[4/4] Registering hooks into global settings.json..."
-
-if [[ ! -f "$SETTINGS" ]]; then
-  echo "  Creating $SETTINGS..."
-  echo '{"hooks":{}}' > "$SETTINGS"
-fi
-
-if ! command -v python3 &>/dev/null; then
-  echo "  Warning: python3 not found. Skipping hook registration."
-  echo "  Hooks must be added to $SETTINGS manually."
-else
-  python3 - <<PYEOF
-import json, os, sys
-
-settings_path = os.path.expanduser("$SETTINGS")
-plugin_root = os.path.expanduser("$PLUGIN_INSTALL_DIR/plugin")
-
-try:
-    with open(settings_path, "r") as f:
-        settings = json.load(f)
-except (json.JSONDecodeError, FileNotFoundError):
-    settings = {}
-
-hooks = settings.setdefault("hooks", {})
-
-def hook_command(script):
-    return f"CLAUDE_PLUGIN_ROOT={plugin_root} bash {plugin_root}/hooks/scripts/{script}"
-
-def already_registered(entries, script_name):
-    """Check if hook script is already in any entry's hooks list."""
-    for entry in entries:
-        for h in entry.get("hooks", []):
-            if script_name in h.get("command", ""):
-                return True
-    return False
-
-new_hooks = [
-    ("SessionStart", "", "session-start.sh", 15),
-    ("PreToolUse",   "Read|WebSearch|Bash|Task", "pre-tool-use.sh", 15),
-    ("PreCompact",   "", "pre-compact.sh", 15),
-    ("Stop",         "", "stop.sh", 15),
-]
-
-added = []
-for event, matcher, script, timeout in new_hooks:
-    entries = hooks.setdefault(event, [])
-    if already_registered(entries, script):
-        continue
-    entry = {"hooks": [{"type": "command", "command": hook_command(script), "timeout": timeout}]}
-    if matcher:
-        entry["matcher"] = matcher
-    entries.append(entry)
-    added.append(script)
-
-with open(settings_path, "w") as f:
-    json.dump(settings, f, indent=2)
-
-if added:
-    print(f"  Registered: {', '.join(added)}")
-else:
-    print("  All hooks already registered (no changes needed).")
-
-PYEOF
-fi
-
-echo
-echo "Done! Restart Claude Code, then run /devsquad:setup in each project."
-echo "  /devsquad:setup registers project-scoped hooks into .claude/settings.json"
+# The plugin's own hooks.json is the single hook registration source. Older
+# installers also wrote the same hooks into ~/.claude/settings.json, which can
+# double-fire them. This installer deliberately does not add or rewrite global
+# hooks without concrete duplicate evidence.
+echo "Claude plugin ready. Restart Claude Code, then run /devsquad:setup per project."

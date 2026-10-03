@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "scope": "Isolated portable legacy watchdog and narrow offline CI plumbing repair; not release publication or whole-plan acceptance.",
+  "baseline_revision": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
+  "branch": "codex/release-watchdog",
+  "preserved_branch": "codex/council-integration",
+  "implementation_blobs": {
+    "plugin/lib/adapter.sh": "1847357c19677f276b06886386e2ac93e586b203",
+    "test/test_m1_legacy.sh": "8cc3fe9f9ee9df77b2fcb2d75c76c236a1f8d13a",
+    ".github/workflows/offline.yml": "2d231113b575a2568d3c51844f4551f0f30d7c70"
+  },
+  "watchdog_diff_sha256": "51fd52c51c51b870d18d98d4d573b3031e0bd7414d9ee85f9434286c703b8cc7",
+  "cause": "The original portable watchdog decremented timeout_secs * 20 polls. Each external ps/tr probe and sleep consumed additional elapsed time, so configured deadlines drifted on macOS Bash 3.2.",
+  "repair": {
+    "deadline": "Background Bash builtin read -t on a private duplex FIFO has a real deadline independent of process-probe/polling cost. The parent observes timer completion before reading its fully published timeout/error marker.",
+    "cancellation": "A command-scoped parent FD9 writes cancel and remains duplex-open through wait. Cancellation before the timer opens remains buffered; cancellation after natural timer exit cannot block. No numeric timer signals or external sleep timer are used.",
+    "ownership": "Bash's owned job table observes direct-child completion. Only the existing CLI/descendant timeout cleanup receives TERM/KILL; no CLI wrapper or new process-authority contract was introduced.",
+    "resources": "mktemp creates the private mode700 directory; FIFO mode is600. Timer stdio is /dev/null, its inherited EXIT trap is reset, and the private FIFO is not inherited by the CLI or descendants. Command-local cancellation redirection restores caller FD9.",
+    "exit_scope": "The original EXIT trap is captured with builtin trap -p. Active-scope interruption still cancels/reaps the timer and cleans owned paths. Normal completion reads and removes capture files, then restores the shell-generated original trap before any classification return; caller globals cannot become cleanup targets.",
+    "compatibility": "Stock macOS Bash3.2, optional jq, no GNU timeout or Python runtime dependency added. Actual CLI nonzero status remains visible in CLI_ERROR; actual deadline retains TIMEOUT and normalized wrapper exit1. Existing descendant escalation and timing thresholds are unchanged."
+  },
+  "failure_history": [
+    {
+      "kind": "reported_CI_release_blocker",
+      "reported_by": "root",
+      "run_id": "37082130929",
+      "job_id": "111084739785",
+      "observation": "macOS legacy gate reported 4s for a1s deadline and6.123s/8.644s for a3s TERM-ignoring root; existing bounds were <4s/<5s.",
+      "agent_log_fetch": "gh run view --log-failed reported logs unavailable while the job was still running; no direct CI pass or complete-log inspection is claimed."
+    },
+    {
+      "kind": "controlled_original_deadline_red",
+      "probe_delay_seconds": 0.2,
+      "deadline_seconds": 1,
+      "observed_elapsed_seconds": 5.848,
+      "initial_legacy_gate": "21 passed/2 failed: delayed-probe deadline plus an initial timer-observation assertion incompatible with the old poll-only implementation. The latter is instrumentation history, not another product defect."
+    },
+    {
+      "kind": "rejected_uncommitted_timer_designs",
+      "observation": "TERM+wait on a sleep timer inherited ignored TERM and took2.096s on the fast path (independent helper2.025s). A jobs snapshot followed by numeric timer kill still had a stale-PID race; the independent signal observer recorded a former PID with kernel_live=false without sending a real unowned signal. These designs were replaced, not accepted."
+    },
+    {
+      "kind": "controlled_EXIT_scope_red",
+      "prior_adapter_blob": "0789aae95e52272c5eb37e65745fdbb114486342",
+      "legacy_gate": "44 passed/6 failed",
+      "observation": "After invocation locals unwound, the new EXIT trap deleted same-named caller timer paths and lost the prior caller EXIT hook on portable success, GNU success and portable natural failure. All six regressions now pass."
+    },
+    {
+      "kind": "test_only_scheduling_failure",
+      "prior_test_blob": "e6534aebed4fd16fd54b738b95e4c8e862650ab7",
+      "bash_gate": "1/11 files failed; legacy49 passed/1 failed",
+      "observation": "A fixed .2s fixture delay did not always force cancellation before FIFO open under combined-gate scheduling. Product timing bounds passed. The fixture now positively gates timer entry until the actual cancellation write succeeds, with parent FD9 retained; no timing assertion was widened."
+    }
+  ],
+  "verified_gates": {
+    "legacy_focused": {
+      "command": "/bin/bash test/test_m1_legacy.sh",
+      "bash": "3.2.57(1)-release arm64-apple-darwin26",
+      "assertions": 50,
+      "failures": 0,
+      "coverage": ["fast completion <1s", "inherited ignored TERM <1s", "actual buffered cancellation before timer FIFO open", "already-exited/reaped timer cancellation without numeric signals", "private directory/FIFO permissions and cleanup", "caller FD9 preservation", "provider/descendant without private FIFO FD", "CLI exit7 retained in CLI_ERROR", "caller EXIT hook and sentinel paths preserved on both branches", "active-scope exit17 cancels/reaps timer", "TERM-resistant root and descendants removed", "deliberately slow ps does not extend1s deadline"]
+    },
+    "bash_all": {
+      "command": "/bin/bash test/run.sh",
+      "files": 11,
+      "assertions": 259,
+      "failures": 0,
+      "timings_seconds": {"fast": 0.273, "ignored_TERM": 0.197, "buffered_pre_open_cancel": 0.209, "TERM_resistant_3s": 3.246, "delayed_ps_1s": 1.243}
+    },
+    "offline_python_affected": {
+      "command": "DEVSQUAD_BUILD_PYTHON=/Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core /Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest test_m1 test_m1_gate_review test_adapters -q",
+      "tests": 45,
+      "seconds": 0.711,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "other": ["/bin/bash -n plugin/lib/adapter.sh test/test_m1_legacy.sh", "scripts/generate-core-reference.py --check", "git diff --check"]
+  },
+  "independent_review": {
+    "reviewer": "r6_readiness",
+    "scope": "Frozen adapter and legacy test only",
+    "result": "clean; all scoped findings resolved",
+    "legacy_assertions": 50,
+    "failures": 0,
+    "timings_seconds": {"fast": 0.194, "ignored_TERM": 0.202, "buffered_pre_open_cancel": 0.216, "TERM_resistant_3s": 3.236, "delayed_ps_1s": 1.244},
+    "before_after_hashes_unchanged": true,
+    "confirmed": "The original private caller-path deletion reproduction now preserves its markers after shell EXIT. The final test-only gate releases FIFO open strictly after a successful cancellation write."
+  },
+  "CI_plumbing": {
+    "core_checkout": "actions/checkout@v4 with fetch-depth:0 supplies historical archived installer fixtures.",
+    "core_runner": "python scripts/run-core-tests.py --failfast retains complete discovery, spawn-safe main, unraisable diagnostics and fail-fast behavior.",
+    "controlled_archive_proof": {
+      "clone": "Unique private local file:// --depth1 --single-branch clone of codex/release-watchdog; exact HEAD b83dda7, is-shallow=true; no network.",
+      "archives": ["f4fa657:plugin/core", "bf3de0867484552d354e6e8b6ba835f31a93aeb3:plugin/core"],
+      "shallow_exit_codes": [128, 128],
+      "shallow_error": "fatal: not a valid object name",
+      "original_full_history_exit_codes": [0, 0]
+    },
+    "remote_CI_rerun": "Pending root integration/publication; no remote CI pass claimed."
+  },
+  "unchanged_core": {
+    "plugin_core_tree": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+    "python_tests_tree": "669eaf8487a7f2f983305162da33c1bda53116b5",
+    "core_runner_blob": "011416767e4e145fce6a49a0a38444cad49a68b7",
+    "prior_root_full_gate": "Root reported604 tests/793.462s, two optional SDK skips, zero failures/errors/unraisable on frozen b83dda7. This agent did not repeat the full suite."
+  },
+  "boundaries": "No root source/ledger/installation changes, live providers, native audits, full core suite, publication or global AI settings. RESUME/backlog remain root-owned. Private controlled fixtures are outside Git.",
+  "next_action": "Root reviews CI config and integrates this checkpoint, records authoritative RESUME, rebuilds only changed final source/plugin assets, and owns remaining release/CI gates."
+}

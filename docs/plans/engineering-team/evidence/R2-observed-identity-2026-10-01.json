@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "work_package": "R2",
+  "status": "source_verified",
+  "implementation_revision": "ef988897e2dda495482dd26e7c583bc428086ba0",
+  "recorded_on": "2026-10-01",
+  "scope": "Claude native reported-model identity, actual-attempt import binding, different-model delivery acceptance and durable failed evidence; offline proof only",
+  "baseline_reproduction": {
+    "revision": "6848f11",
+    "artifact": "R2-identity-red-baseline-2026-09-29.json",
+    "result": "16 worker tests exposed 39 assertion/subtest failures and four errors before the repair. The original red artifact is preserved."
+  },
+  "acceptance_mapping": [
+    {
+      "requirement": "Concrete reported identity and supported family aliases are validated; missing, wrong, malformed or multiple native model identities fail closed; unreported effort/revision stays unknown",
+      "tests": "test/core/test_claude_identity.py: 16 tests"
+    },
+    {
+      "requirement": "Strict JSON, typed native metadata and session/usage/provenance binding reject tampered evidence before candidate finalization",
+      "tests": "test/core/test_implementation_identity_evidence.py: 12 tests including the exact-attempt and native-byte regressions"
+    },
+    {
+      "requirement": "The imported selected profile must equal the durable attempt's frozen profile, not merely another allowed fallback",
+      "tests": "test_implementation_identity_evidence.test_import_must_match_actual_attempt_not_another_allowed_fallback"
+    },
+    {
+      "requirement": "Invalid UTF-8 and CRLF output retain their original native byte hashes; invalid stderr cannot preempt a valid result",
+      "tests": "test_implementation_identity_evidence.test_invalid_utf8_stdout_retains_original_native_byte_hash, test_failed_result_hash_preserves_crlf_native_bytes, test_invalid_utf8_stderr_cannot_preempt_valid_result_parsing"
+    },
+    {
+      "requirement": "Exact and alias-resolved identities complete public delivery; host and headless acceptance reject the same reported model behind different labels",
+      "tests": "test/core/test_delivery_identity_runtime.py: exact/alias positive cases and host/headless independence cases"
+    },
+    {
+      "requirement": "Invalid identity cannot publish a candidate; failed diagnostics, native usage and stream references survive fallback, cancellation and replay",
+      "tests": "test_delivery_identity_runtime.test_invalid_identity_never_publishes_candidate_and_retains_failed_evidence, test_native_fallback_keeps_failed_identity_and_usage_in_success_receipt, test_cancellation_keeps_prior_failed_native_identity_and_usage"
+    },
+    {
+      "requirement": "Historical v1 receipts remain readable and exact completed acceptance replays; unverified old evidence cannot authorize new acceptance",
+      "tests": "test_delivery_identity_runtime.test_legacy_identity_cannot_authorize_new_acceptance_but_rejection_replays and test_historical_successful_legacy_receipt_reads_and_exact_acceptance_replays"
+    }
+  ],
+  "verification": {
+    "core": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src python3 -m unittest discover -s test/core -v",
+      "result": "OK (skipped=2)",
+      "tests_run": 367,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2,
+      "suite_seconds": 215.886,
+      "wrapper_wall_seconds": 216.021,
+      "wrapper_monotonic_seconds": 216.020,
+      "exit_code": 0,
+      "notes": "The command ran inside a subprocess timing wrapper. The source stayed unchanged during discovery. Two official MCP SDK conformance tests skipped because the optional SDK is absent in this interpreter."
+    },
+    "bash": "bash test/run.sh: 11 test files, 227 assertions passed before the planning/evidence checkpoint",
+    "generated_reference": "python3 scripts/generate-core-reference.py --check: current",
+    "independent_review": "A bounded source audit found actual-attempt profile binding and exact native-byte retention gaps. Both were reproduced and repaired; a follow-up independently ran four targeted regressions successfully and reported no additional actionable finding in those fixes.",
+    "earlier_runs": [
+      "An earlier 363-test integration run passed with two optional-SDK skips before the last two audit fixes; it is not final-source proof.",
+      "The first final-source 367-test run completed in 230.999 seconds with six failures and two skips. Four failures showed preflight budget expiry or approximately 15-17 minute UTC gaps, supporting a timing explanation but not establishing the cause of all six failures.",
+      "All six failing cases reran unchanged successfully in 18.998 seconds with per-test UTC and monotonic elapsed measurements agreeing. The subsequent complete 367-test gate above passed."
+    ],
+    "warning": "An ignored finalizer exception reported an unclosed SQLite connection during test_running_cancel_race_reaps_runner_and_worker_once. PYTHONWARNINGS=error::ResourceWarning did not turn that finalizer exception into a failing suite. Cleanup remains R5; this result is not warning-free."
+  },
+  "source_sha256": {
+    "plugin/core/src/devsquad/claude_identity.py": "765c09b06d9005e88ce14ad735ff033ace88e29bd9c2c5abb77bb45c29edc8c7",
+    "plugin/core/src/devsquad/claude_delivery_worker.py": "62493f26927c8bd24bce2b39a9ac604290d5fb656f5eeac428eb982a24367450",
+    "plugin/core/src/devsquad/workflows.py": "6e0be346a78a50927913762fe78e989a3b73f56f84808fdbda3886de7edf00ef",
+    "plugin/core/src/devsquad/supervisor.py": "b9732da56ec43cb9235c36ed19c9b982bd81674b4c04dfddba9d76ae9af8d89f",
+    "plugin/core/src/devsquad/service.py": "07671078c8ac337778ac1e0ba10b1475074b5dfcb3cd0bad030b44d5d54e86c2",
+    "plugin/core/src/devsquad/reports.py": "df30017e12cb2fd4cd1b39576bb5a2296365ce0611b961ab3a7c437d6d71fef6"
+  },
+  "test_sha256": {
+    "test/core/test_claude_identity.py": "c18f2f91ff547f2e3c90902bb3516550e20c39e8c9a01f7c8b8ec3ad8f2a2d99",
+    "test/core/test_implementation_identity_evidence.py": "42ea920c2c31a3df2fd10477d1521f789a69bfbd5ee381fdd20f88e2ad98515c",
+    "test/core/test_delivery_identity_runtime.py": "b107f3a1c5b4a25b8d9c21bcf76f42d19598ea08b631eebd12fda8b1a6ba044a"
+  },
+  "limitations": [
+    "This checkpoint records already implemented source and completed offline verification; the planning update made no production source changes.",
+    "No real provider generation, installation refresh, authentication reprobe or global provider-setting change occurred. The installed runtime predates R1/R2; affected installed/live proof remains R8.",
+    "Native modelUsage establishes the bounded reported-model scope only. Unreported effective effort/backing revision remains null; pricing canonicalModel is not serving identity authority; multiple entries do not identify a unique writer.",
+    "The genuine Claude implementation to different-model review receipt and real Claude host handoff remain blocked on last-observed normal Claude login. No fresh authentication check is claimed.",
+    "R3-R6 integration, C1/R7, other R8 gates and the SQLite cleanup warning remain open. This is not full M5 or product completion.",
+    "Raw diagnostics stay outside tracked evidence; this portable record contains only source hashes, test results and bounded observations."
+  ]
+}

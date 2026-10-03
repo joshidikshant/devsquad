@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "status": "accepted_source_package",
+  "target_revision": "39b95f1c89ca89a73148cd88dfe5565f4d5dc377",
+  "independent_review": {
+    "run_id": "f0a4f86b-b305-4839-88a2-cb5fed8739ab",
+    "base_revision": "672e38305fcc764d87d7da6afb5914cbf3c5a3ce",
+    "state": "succeeded",
+    "version": 22,
+    "candidate_sha256": "010aa83f442fb6f275c1793b9131e5769b4481fd905ad9a1e83163ac1fc7c315",
+    "identity": {"harness": "codex", "harness_version": "codex-cli 0.159.2", "model_id": "gpt-6.1-sol", "effort": "low", "verification": "verified", "permission_policy": "read_only"},
+    "verdict": "clean",
+    "findings": [],
+    "review_sha256": "c2a03b32bc382c2a5f9985d0a71e15e847b10fbe11bca93dc65f12b3ee413ccc",
+    "checks_sha256": "60567b4ef724ce176ed6bdba63164d182c5ce49e94524754edab07c08b16524f",
+    "receipt_sha256": "b013baa9fc4979c3dd979286753131067cc8e5d44f6f37b0f3e8d48a5cceb552",
+    "mandatory_checks": {"diff": "passed", "bash": "passed", "focused": {"tests": 51, "seconds": 200.684, "result": "pass"}, "candidate_integrity": "verified_unchanged_for_all_checks"},
+    "usage": {"source": "native_reported", "input_tokens": 337192, "output_tokens": 2173, "total_tokens": 339365}
+  },
+  "full_integration": {
+    "run_id": "360a4993-d016-406e-8bb4-ae6d57dfe6cf",
+    "candidate_revision": "f8c4f8c83f170870eb37d564e54eee6188fc233c",
+    "tests": 477,
+    "seconds": 455.860,
+    "skips": 2,
+    "errors": 0,
+    "failures": 0,
+    "unraisable": [],
+    "applicability": "git diff --exit-code confirms all six R3 source-module blobs identical between the accepted full-gate candidate and the independent audit target; no duplicate full run required"
+  },
+  "requirements": [
+    {"requirement": "immutable prelaunch and independent paired assignment", "proof": ["test_experiment_saved_runs", "test_experiment_evidence_integrity.test_trial_reservation_rejects_changed_inputs_before_any_worker", "test_experiment_v2_evaluation"], "result": "pass"},
+    {"requirement": "branch-review and issue-delivery stream/input/import provenance", "proof": ["test_experiment_evidence_integrity", "test_delivery_experiment_integrity"], "result": "pass"},
+    {"requirement": "honest failed, missing, fallback and cancelled arms", "proof": ["test_experiment_saved_runs", "test_delivery_experiment_integrity.test_real_failed_writer_requires_an_exact_terminal_receipt"], "result": "pass"},
+    {"requirement": "unmeasured ratios cannot satisfy finite qualification gates", "proof": ["test_experiment_eligibility.test_unmeasured_ratios_cannot_bypass_finite_qualification_gates"], "result": "pass"},
+    {"requirement": "correction after evaluation and qualification blocks new authority atomically", "proof": ["test_experiment_eligibility.test_correction_after_evaluation_blocks_new_qualification_atomically", "test_experiment_eligibility.test_correction_after_qualification_blocks_replay_and_new_promotion", "test_experiment_eligibility.test_correction_cannot_commit_between_qualification_validation_and_commit"], "result": "pass"},
+    {"requirement": "valid promotion/rollback, stale rollback and catalog fallback gates", "proof": ["test_lifecycle.test_qualification_cas_promotion_and_rollback_are_replay_safe", "test_lifecycle.test_catalog_unavailable_incumbent_uses_only_qualified_predecessor", "test_experiment_eligibility.test_stale_regression_cannot_roll_back_until_explicit_current_review", "test_experiment_eligibility.test_stale_qualified_target_blocks_regression_and_is_skipped_by_catalog_fallback"], "result": "pass"},
+    {"requirement": "append-only explicit revision, historical completed replay and duplicate-outcome upgrade read/proposal paths", "proof": ["test_experiment_eligibility.test_explicit_revision_keeps_original_bytes_and_reuses_original_assignments", "test_experiment_eligibility.test_completed_decision_replay_preserves_historical_receipt_after_correction", "test_experiment_eligibility.test_upgraded_reused_outcome_history_remains_readable_but_cannot_authorize_new_decisions"], "result": "pass"}
+  ],
+  "preserved_history": ["R3-audit-repairs-2026-10-01.json", "R3b2-eligibility-partial-2026-10-01.json", "R8-upgrade-review-2026-10-01.json", "R8-installed-workflows-2026-10-01.json"],
+  "separate_open_scope": ["R4 catalog/quota package acceptance", "R5 automatic final outcomes and public trial controller", "R6 terminal UX/readiness", "R7 Council", "R8 whole-delivery and desktop UI acceptance"],
+  "qualification_note": "Public offline fixtures establish machinery/provenance, not real-model superiority; original finite sample and budget gates remain unchanged"
+}

@@ -2,11 +2,13 @@
 
 # DevSquad
 
-### Your AI coding agent ignores your rules. Hooks don't.
+### A local engineering team with saved work and verifiable results
 
-**DevSquad turns Claude Code into an engineering manager that _physically intercepts_ tool calls and routes the grunt work to Gemini, Codex, and Grok — then runs a live A/B test on whether that even helps.**
+**DevSquad coordinates bounded implementation, independent review, tests and
+host acceptance across your installed AI harnesses. Runs and evidence survive
+closing a client. The standalone runtime does not require Claude's plugin.**
 
-[![tests](https://img.shields.io/badge/tests-177%20passing-brightgreen)](test/)
+[![tests](https://github.com/joshidikshant/devsquad/actions/workflows/offline.yml/badge.svg)](https://github.com/joshidikshant/devsquad/actions/workflows/offline.yml)
 [![bash](https://img.shields.io/badge/bash-3.2%2B-blue)](CONTRIBUTING.md)
 [![jq](https://img.shields.io/badge/jq-optional-blue)](CONTRIBUTING.md)
 [![license](https://img.shields.io/badge/license-MIT-black)](LICENSE)
@@ -21,6 +23,48 @@
 </div>
 
 ---
+
+## Standalone runtime quickstart
+
+Requires a Unix-like host, Python 3.11+ and existing provider CLI subscription
+logins. Installation is local and does not download Python dependencies:
+
+```bash
+git clone https://github.com/joshidikshant/devsquad.git
+cd devsquad
+./install.sh --core-only
+export PATH="$HOME/.local/bin:$PATH"
+squad doctor
+squad review --base main --dry-run
+```
+
+In the project you want to work on, commit the inputs, inspect the dry run,
+then use `squad review --base main --wait` or
+`squad fix "the bounded issue" --write-path src --wait`. The saved run stops
+at a host handoff with checks and the exact finish command; assess the evidence
+before accepting. `squad status`, `squad result RUN_ID`, `squad cancel RUN_ID`
+and `squad resume RUN_ID` operate on the same saved work.
+
+For Codex/Claude/Antigravity CLI/Grok MCP setup, safe updates, supported
+operations and troubleshooting, read the [runtime guide](docs/RUNTIME-GUIDE.md).
+The optional MCP transport needs an explicitly prepared pinned wheelhouse;
+it is not silently downloaded. Existing paid accounts do not imply that every
+harness supports every worker role. No paid API fallback is enabled.
+
+Council is native-unavailable and automatic use is OFF. Jev routing is OFF;
+no production quality, cost savings or Plus-window savings are claimed.
+Claude CLI handoff and implementation → independent Codex review → tests have
+live receipts; Claude desktop Code-tab proof remains unverified. Antigravity
+means `agy`, not the IDE.
+
+Continuing development after an interruption? Read the
+[recovery checkpoint](docs/plans/engineering-team/RESUME.md) and
+[implementation plan](docs/plans/engineering-team/START-HERE.md).
+
+## Legacy Claude plugin
+
+The sections below describe the separately supported Claude hook plugin,
+not automatic worker-role coverage in the standalone runtime.
 
 ## The 30-second version
 

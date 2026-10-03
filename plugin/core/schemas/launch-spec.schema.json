@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devsquad.local/schemas/launch-spec-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "adapter", "transport", "argv", "cwd", "stdin_path", "timeout_seconds", "requested", "environment"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "adapter": {"type": "string", "minLength": 1},
+    "transport": {"enum": ["cli_exec", "native_protocol"]},
+    "argv": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "cwd": {"type": "string", "minLength": 1},
+    "stdin_path": {"oneOf": [{"type": "string", "minLength": 1}, {"type": "null"}]},
+    "timeout_seconds": {"type": "integer", "minimum": 1},
+    "requested": {"$ref": "execution-identity.schema.json"},
+    "environment": {"type": "object", "additionalProperties": false, "properties": {"DEVSQUAD_WORKER":{"type":"string"},"DEVSQUAD_RUN_ID":{"type":"string"},"DEVSQUAD_ATTEMPT_ID":{"type":"string"},"DEVSQUAD_DELEGATION_DEPTH":{"type":"string"}}}
+  }
+}

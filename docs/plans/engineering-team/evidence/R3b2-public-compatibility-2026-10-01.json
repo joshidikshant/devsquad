@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "work_package": "R3b.2/R3c",
+  "status": "source_offline_verified_independent_audit_pending",
+  "recorded_at": "2026-10-01T21:29:24Z",
+  "baseline_revision": "4e6297f",
+  "source_sha256": {
+    "plugin/core/src/devsquad/experiment_eligibility.py": "66d1c4d079e4824daf5cd349fa03a35f09b70d2b54367447b2633092d60a5baa",
+    "plugin/core/src/devsquad/store.py": "881398323a238d0f5538c6ce2cfeb8b9dc630a5b617ee5c2c794597c1099c8c6",
+    "test/core/experiment_runtime_fixture.py": "cf98bc312665b138e4d4d9a9633f888ef2f2e48ecba55a56037103402afa7646",
+    "test/core/test_experiment_eligibility.py": "940d6fb19cf9baa5685c633094b2b309b261504f5546785acee6c227b453f897",
+    "test/core/test_experiment_saved_runs.py": "68ce3265c5c342805dbf433760172d2b531694b821421e3ee1f9d1d24bba9240"
+  },
+  "verification": {
+    "stale_rollback_and_fallback": "2 tests in 26.432 seconds passed: stale regression blocked, explicit revision permitted valid rollback; stale qualified target blocked rollback and was skipped by catalog fallback; proven bootstrap preserved",
+    "race_and_proposal": "Both targeted tests passed during a 3-test 11.138-second run; the third historical fixture test failed, so that combined run is not a pass",
+    "historical_failure": "Historical fixture stored /var project path instead of resolved /private/var path and proposal returned no_evaluated_experiment; corrected the fixture to match old Store normalization",
+    "historical_green": "Schema-13 duplicate-outcome upgrade/report/proposal/new-authority rejection test passed separately in 0.074 seconds",
+    "cli": "Original and explicit-revision dispatch tests passed, 2 tests in 0.006 seconds",
+    "delivery_fixture_failures": "New fixture first used an invalid internal implementation shape (0.555 seconds), then waited on an internal phase (20.605 seconds), then mistook pre-daemon candidate readiness for reviewed completion (1.426 seconds). These were test-helper defects, not runtime findings",
+    "delivery_green": "Four public paired issue-delivery arms with 8 real worker attempts, mandatory checks and source preservation passed in 7.988 seconds",
+    "fresh_reviewed_qualification": "1 test in 5.449 seconds passed; fresh reviewed revision qualifies and pins the new binding decision",
+    "revision_and_wheel": "2 tests in 8.102 seconds passed: revision arguments/predecessor checks and installed-wheel current schema-15 content/migration",
+    "bash": "227 assertions in 11 files passed",
+    "generated_reference_and_whitespace": "Both checks passed",
+    "full_core": "At 5de6655: 441 tests in 372.506 seconds FAILED (1 missing-receipt error, 2 optional-SDK skips); UTC elapsed 372.689586 and monotonic 372.691304 seconds. Not a passing gate",
+    "failed_case_recheck": "The exact headless delivery check-integrity case passed unchanged (1 test in 2.760 seconds); all 9 check-integrity cases passed in 19.194 seconds. Cause remains unproven; added status/artifact-name diagnostics",
+    "sqlite_cleanup": "Found installer test transaction context that did not close its SQLite connection; replaced with contextlib.closing. Active-release test passed in 6.837 seconds under ResourceWarning=error, forced collection and zero unraisable exceptions. Full 441-test rerun at dc4e110 had zero unraisable exceptions and no SQLite warning",
+    "full_core_rerun": "At dc4e110: 441 tests in 374.998 seconds OK (2 optional-SDK skips); UTC elapsed 375.114707 and monotonic 375.116386 seconds; forced collection, zero unraisable exceptions. Earlier failed gate retained",
+    "independent_audit": "Not completed"
+  },
+  "remaining": [
+    "Bounded independent R3 audit",
+    "R4-R6 runtime repairs and R8 safe updated installation/live Claude, Grok and Gemini proofs"
+  ],
+  "external_actions": "No provider request, installation refresh, purchase, reset, global settings change or push"
+}

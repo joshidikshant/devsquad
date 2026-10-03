@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "antigravity",
+  "display_name": "Antigravity",
+  "executable_paths": [],
+  "executable_names": ["agy", "antigravity"],
+  "server_name": "devsquad",
+  "surface": "antigravity",
+  "register_argv": ["{host_executable}", "mcp", "add", "{server_name}", "--", "{squad_executable}", "mcp", "serve", "--surface", "{surface}"],
+  "remove_argv": null,
+  "inspect_argv": ["{host_executable}", "mcp", "list"],
+  "inspect_format": "text"
+}

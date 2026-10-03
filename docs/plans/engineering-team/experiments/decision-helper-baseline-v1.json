@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "experiment_id": "devsquad-decision-helper-baseline-v1",
+  "status": "frozen_offline_baseline",
+  "purpose": "Validate optional decision-helper mechanics and authority boundaries without claiming routing quality.",
+  "corpus": {
+    "path": "jev-pilot-v1.json",
+    "sha256": "473aed2c431bd1ce8218124a6fe3fd3139fdf869468a72cbc8cf184c428d9822",
+    "data_class": "synthetic_public_fixture",
+    "contains_private_content": false,
+    "case_ids": ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08"]
+  },
+  "split": {
+    "mechanics": ["T01", "T02", "T03", "T04", "T05", "T06"],
+    "held_out": ["T07", "T08"]
+  },
+  "modes": ["off", "shadow", "advisory"],
+  "resource_ceiling": {
+    "max_calls_per_cache_key": 1,
+    "max_input_bytes": 4096,
+    "wall_seconds": 2,
+    "max_cost_usd": 0.01,
+    "network_calls_in_baseline": 0
+  },
+  "acceptance": {
+    "off_mode_route_divergences": 0,
+    "unauthorized_candidate_selections": 0,
+    "pin_overrides": 0,
+    "invalid_output_route_changes": 0,
+    "duplicate_billable_calls_on_replay": 0,
+    "raw_private_payloads_persisted": 0
+  },
+  "adoption": {
+    "advisory_authorized_by_baseline": false,
+    "runtime_default": "off",
+    "reason": "Synthetic mechanics and boundary tests cannot establish production routing quality or benefit."
+  }
+}

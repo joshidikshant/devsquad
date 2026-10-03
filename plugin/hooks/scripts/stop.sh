@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Hook depth guard -- skip in agent subshells
-if [[ "${DEVSQUAD_HOOK_DEPTH:-0}" -ge 1 ]]; then
+# Recursion guard -- durable workers must not receive legacy stop logic.
+if [[ "${DEVSQUAD_WORKER:-0}" != "0" ]] \
+    || [[ "${DEVSQUAD_DELEGATION_DEPTH:-0}" != "0" ]] \
+    || [[ "${DEVSQUAD_HOOK_DEPTH:-0}" != "0" ]]; then
   exit 0
 fi
 

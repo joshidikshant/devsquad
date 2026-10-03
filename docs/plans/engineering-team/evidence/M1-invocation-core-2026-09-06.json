@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "milestone": "M1",
+  "status": "complete",
+  "implementation_revision": "97a10f0",
+  "verification_revision": "7b5c41c",
+  "recorded_at": "2026-09-07T08:30:00+05:30",
+  "evidence": [
+    {
+      "kind": "offline_test",
+      "command_or_action": "/bin/bash test/run.sh",
+      "outcome": "10 test files passed; 202 shell assertions passed, including forced portable timeout, fast cleanup, descendant cleanup and TERM-ignoring-root escalation",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "offline_test",
+      "command_or_action": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s test/core -v",
+      "outcome": "34 tests passed, including eight independent reviewer regressions",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "package_test",
+      "command_or_action": "bundled Python 3.12: pip wheel --no-deps plugin/core; install into temporary venv; import packaged classifier and resolve shared policy resource",
+      "outcome": "wheel built and installed; shared taxonomy loaded outside the checkout",
+      "availability": "reproducible locally"
+    },
+    {
+      "kind": "live_metadata",
+      "command_or_action": "Codex 0.135.0 app-server initialize then model/list with limit 100 on 2026-09-06",
+      "outcome": "initialized; complete single page with 5 account-visible models and model-scoped reasoning efforts; default gpt-5.5/medium",
+      "availability": "redacted portable summary"
+    },
+    {
+      "kind": "live_smoke",
+      "command_or_action": "codex exec --json --sandbox read-only --ephemeral --model gpt-5.5 with model_reasoning_effort=low and a no-tools response probe on 2026-09-06",
+      "outcome": "exit 0; thread.started, turn.started, item.completed and turn.completed observed; final message DEVSQUAD_M1_PROBE_OK",
+      "availability": "redacted portable summary"
+    },
+    {
+      "kind": "live_integrated_probe",
+      "command_or_action": "production preparation and JSON-line peer: initialize response, initialized notification, then model/list or prepared thread/start; bounded per-process low-effort override",
+      "outcome": "Passed at 97a10f0: complete discovery selected gpt-5.5/low, catalog-backed preparation launched a fresh server, and the read-only no-tools turn returned the exact expected output with correlated terminal completion. Both owned process groups were confirmed absent after cleanup. Receipt SHA256: 324c2ce6154936ecf71a8bf913a195befd4251efc6dbb8bbab3dc0dbe1b86df8",
+      "availability": "private receipt and stream hashes retained locally; redacted summary only"
+    }
+  ],
+  "independent_review": {
+    "status": "accepted",
+    "scope": "bounded M1 invocation and preparation",
+    "outcome": "Reviewer reran 34 core tests, relied on the required 202-assertion shell run, verified the receipt and all five private artifact hashes, and inspected requested gpt-5.5/low, readOnly with networkAccess false, and correlated turn completion."
+  },
+  "residual_blockers": []
+}

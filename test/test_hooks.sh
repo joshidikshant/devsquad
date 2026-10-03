@@ -17,6 +17,8 @@ fresh_env() {
   export CLAUDE_PROJECT_DIR="$TEST_DIR"
   export HOME="$FAKE_HOME"
   unset DEVSQUAD_HOOK_DEPTH 2>/dev/null || true
+  unset DEVSQUAD_WORKER 2>/dev/null || true
+  unset DEVSQUAD_DELEGATION_DEPTH 2>/dev/null || true
 }
 
 run_hook() {
@@ -41,6 +43,16 @@ assert_empty() {
   else
     FAIL=$((FAIL + 1))
     echo "  FAIL: $label — expected no output, got: $(printf '%s' "$value" | head -c 120)"
+  fi
+}
+
+assert_path_missing() {
+  local label="$1" path="$2"
+  if [ ! -e "$path" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "  FAIL: $label — unexpected path exists: $path"
   fi
 }
 
@@ -163,6 +175,24 @@ assert_contains "no holdout config -> suggestion shown" "$OUT" "gemini-researche
 fresh_env
 init_state
 assert_contains "state dir self-ignores" "$(cat "$TEST_DIR/.devsquad/.gitignore" 2>/dev/null)" "*"
+
+# --- Group 9: durable worker/delegation recursion guards ---
+fresh_env
+export DEVSQUAD_WORKER=1
+OUT=$(run_hook '{"tool_name":"WebSearch","tool_input":{"query":"nested"}}')
+assert_empty "worker pre-tool hook is silent" "$OUT"
+OUT=$(bash "$PLUGIN_ROOT/hooks/scripts/stop.sh" 2>/dev/null)
+assert_empty "worker stop hook is silent" "$OUT"
+OUT=$(bash "$PLUGIN_ROOT/hooks/scripts/session-start.sh" 2>/dev/null)
+assert_contains "worker session-start returns valid empty context" "$OUT" '"additionalContext":""'
+OUT=$(bash "$PLUGIN_ROOT/hooks/scripts/pre-compact.sh" 2>/dev/null)
+assert_contains "worker pre-compact returns valid hook response" "$OUT" '"hookEventName":"PreCompact"'
+assert_path_missing "worker hooks do not initialize plugin state" "$TEST_DIR/.devsquad"
+
+fresh_env
+export DEVSQUAD_DELEGATION_DEPTH=2
+OUT=$(run_hook '{"tool_name":"WebSearch","tool_input":{"query":"nested-depth"}}')
+assert_empty "delegated pre-tool hook is silent" "$OUT"
 
 echo "  hooks: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

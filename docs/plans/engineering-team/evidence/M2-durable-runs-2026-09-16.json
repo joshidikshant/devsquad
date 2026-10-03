@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "milestone": "M2",
+  "status": "complete",
+  "implementation_revision": "ddb6f51",
+  "recorded_at": "2026-09-16T00:41:03+05:30",
+  "provider_invocations": 0,
+  "evidence": [
+    {
+      "kind": "offline_test",
+      "command_or_action": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s test/core -v",
+      "outcome": "121 tests passed, including real subprocess crash recovery, independent-process races, deterministic SQLite lock contention, exact stdin, bounded cleanup and installed-wheel migration through schema 5",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "offline_test",
+      "command_or_action": "bash test/run.sh",
+      "outcome": "10 Bash test files passed; 202 assertions preserved the Bash 3.2, optional-jq, wrapper and legacy contracts",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "crash_and_race_matrix",
+      "command_or_action": "Spawned-process tests interrupt preparation, attempt reservation, post-runner-identity/pre-gate launch, live-runner coordination, orphan-child cancellation, exit import and artifact finalization before the database commit; independent processes race starts, writers, cancellation, claims and completion",
+      "outcome": "No duplicate run/writer/cleanup, no execution before the gate, no blind relaunch or ambiguous signal, no false completion and idempotent recovery",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "host_handoff",
+      "command_or_action": "Service, CLI and Store tests publish, claim, renew, take over, complete, replay, audit late submissions and cancel schema-5 host handoffs",
+      "outcome": "Run-version and fencing-token ownership is durable; expiry is evaluated after acquiring the SQLite write transaction, including a real lock wait crossing the deadline",
+      "availability": "tracked tests"
+    },
+    {
+      "kind": "package_test",
+      "command_or_action": "Build an offline wheel, install it into a fresh temporary environment outside the checkout with PYTHONPATH removed, and migrate an independent schema-4 fixture",
+      "outcome": "Packaged migrations through 005 are present, schema 4 upgrades to 5, and future schema versions are refused",
+      "availability": "reproducible locally"
+    }
+  ],
+  "independent_review": {
+    "status": "completed_with_findings_resolved",
+    "scope": "M2 crash recovery, host-handoff fencing and final artifact-import additions",
+    "outcome": "The reviewer found two P1 races and no other defect in the bounded target. Checkpoint ddb6f51 moves lease authorization after lock acquisition and makes recovery_cleanup resumable through public cancel; both findings have failing-boundary regressions in the final gate."
+  },
+  "milestone_boundary": "Real branch-review workflow execution begins in M3; public M2 requests return CAPABILITY_UNAVAILABLE.",
+  "residual_blockers": []
+}

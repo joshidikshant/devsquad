@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "milestone": "M7",
+  "status": "in_progress",
+  "implementation_revision": "ccba125e342041ff2ef72fd7e0c9a9b44c356e7d",
+  "recorded_at": "2026-09-29T10:52:08Z",
+  "offline_gate": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src python3 -m unittest discover -s test/core",
+    "result": "300 tests passed with 2 optional-SDK skips",
+    "bash_command": "bash test/run.sh",
+    "bash_result": "11 test files and 227 assertions passed",
+    "installer_focus": "8 fresh-install tests passed, including offline synthetic wheels, one-line JSON and pip check",
+    "installed_sdk_focus": "22 tests passed against the official mcp==2.2.0 environment"
+  },
+  "standalone_install": {
+    "launcher": "/Users/Dikshant/.local/bin/squad",
+    "immutable_release": "/Users/Dikshant/.devsquad/releases/0.1.0-py31214-4c5f034c67bf-mcp-a26bc88afbef",
+    "release_manifest_sha256": "513cb11ff54fae31cb994c2e8931cd7cd86476642c92d92bcc1cbf3d0ed5e5f8",
+    "source_digest": "4c5f034c67bf1f83a185df0a8910058f38bfdfc7b38e4430923ab1167d08a048",
+    "mcp_environment_digest": "a26bc88afbef7b5a1ed23014ebece205902a8c43c047fec7afb893da945e66b2",
+    "python": "3.12.14",
+    "mcp_sdk": "2.2.0",
+    "pip_check": "passed",
+    "second_install": "changed=false with source/plugin/installed drift all false",
+    "doctor": "ready; four installed local apps and four matching registrations",
+    "second_setup": "all four hosts unchanged"
+  },
+  "packaging_and_migration": {
+    "fresh_without_claude": "passed",
+    "legacy_plugin_contents": "passed",
+    "legacy_launcher_migration": "known DevSquad release symlink adopted; arbitrary launcher refused",
+    "active_run_update_survival": "passed with the old immutable release retained",
+    "duplicate_registration": "second setup changed no host",
+    "json_contract": "optional MCP install emitted exactly one JSON line",
+    "dependency_integrity": "installer now runs pip check before publishing an MCP release"
+  },
+  "fresh_home_walkthrough": {
+    "home": "private temporary directory outside the repository",
+    "base_install": "documented composite --core-only command succeeded without Claude and squad --version returned 0.1.0",
+    "mcp_update": "documented offline wheelhouse command selected a second immutable release",
+    "dry_run": "all four installed hosts returned would_add without mutation",
+    "setup": "all four hosts returned added and matching inside the temporary home",
+    "doctor": "ready with four installed/configured hosts and exact mcp==2.2.0",
+    "setup_dry_run_sha256": "3d282aa80d94e3f7b8acbf32ee94bca21bc37aa6c8ffca4431cfb3a68a7ec2ef",
+    "setup_sha256": "104aa74642aa8b523b3e14d7a37d66fd57897d1ad4c9ced62b1748df05866ea1",
+    "doctor_sha256": "15697608ea6d6a1cf9be21017de7d698cfbf1e496947fa20c7da75b2d1cbe936",
+    "finding": "the required normal squad review/fix/council entry commands are absent; M7 remains in progress while the shared task-entry layer is implemented"
+  },
+  "codex_compatibility": {
+    "binary": "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "version": "codex-cli 0.155.0-alpha.9.2",
+    "native_probe": "initialize and complete model/list succeeded without a model generation; seven models, one default, reasoning-effort metadata present",
+    "resolver": "verified bundled binary wins over unverified PATH codex-cli 0.135.0",
+    "status": "supported"
+  },
+  "cross_surface_run": {
+    "run_id": "f121e96b-502a-4986-a3c3-7ba8ab418bb3",
+    "terminal_start_state": "awaiting_host",
+    "terminal_start_version": 14,
+    "observed_release": "0.1.0-py31214-6a705bf7d65d-mcp-a26bc88afbef",
+    "terminal_cancel_state": "cancelled",
+    "terminal_cancel_version": 20,
+    "handoff_status": "cancelled",
+    "private_probe_state_sha256": "b44f0efa04b1a3a52f316b530d24bb7b15ffff77785ad98f9a3e46e907eb3c85",
+    "same_run_id_across_surfaces": true
+  },
+  "antigravity_live_receipt": {
+    "version": "1.2.13",
+    "model": "gemini-3.8-flash-low",
+    "permission": "project-scoped mcp(devsquad/squad_status) only",
+    "tool": "squad_status",
+    "tool_result": {
+      "run_id": "f121e96b-502a-4986-a3c3-7ba8ab418bb3",
+      "state": "awaiting_host",
+      "version": 14,
+      "next_action": "claim_handoff"
+    },
+    "duration_seconds": 42.290051,
+    "usage": {
+      "input_tokens": 29629,
+      "cache_read_tokens": 20388,
+      "output_tokens": 170,
+      "thinking_tokens": 0
+    },
+    "private_result_sha256": "6cab24e6905c5e4e35c2218320b548efc4dfc4835d4e96e21f8720b4d2cb8fec"
+  },
+  "codex_live_receipt": {
+    "version": "codex-cli 0.155.0-alpha.9.2",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "session": "ephemeral; user configuration and history ignored; only the DevSquad MCP server configured",
+    "permission": "read-only sandbox with approval policy never",
+    "tool": "squad_status",
+    "tool_result": {
+      "run_id": "f121e96b-502a-4986-a3c3-7ba8ab418bb3",
+      "state": "awaiting_host",
+      "version": 14,
+      "next_action": "claim_handoff"
+    },
+    "usage": {
+      "input_tokens": 56834,
+      "cached_input_tokens": 47360,
+      "output_tokens": 148,
+      "reasoning_output_tokens": 0
+    },
+    "private_events_sha256": "67fb9ba8061f8fe5a8845f53c1330e4dc3ae64e9cd25d62cad6dcf7ed9bb9d9b",
+    "private_last_message_sha256": "739df4cb90c4b2d1d3604b2456e15ae0527cebd9081d2584929292b95abb3f3a"
+  },
+  "remaining_live_gates": {
+    "normal_task_entry": "squad review and squad fix are not yet implemented; squad council belongs to the separately gated C1 extension",
+    "claude_code": "M4 handoff and M5 implementation-to-Codex delivery require normal Claude login; claude auth status reports loggedIn=false",
+    "grok_build": "registration matches, but provider authentication is expired",
+    "installed_delivery": "the required genuine installed Claude implementation followed by a different-model Codex review/check/disposition remains blocked with M5",
+    "jev": "the optional capped M6-D2 measurement remains blocked on TYPESAFE_API_KEY and is not required for normal routing"
+  }
+}

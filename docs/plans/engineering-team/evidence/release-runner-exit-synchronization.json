@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "scope": "Test-only positive runner-death synchronization in the before-gate crash case; no core or recovery changes.",
+  "baseline_revision": "edfcf65b92eeee97323b20db6d252b18e2fbc99a",
+  "branch": "codex/release-runner-exit-sync",
+  "preserved_branch": "codex/release-receipt-sync",
+  "test_blob": "5456e21d10f7e65b06445a266ac0b177d8bd2066",
+  "test_diff_sha256": "e20bc04a593e35a9d5612591c19ab54081f974e3ba57256c3ba927007de0f7b0",
+  "root_integration_failure": {
+    "reported_by": "root",
+    "tests": 33,
+    "seconds": 32.435,
+    "failures": 1,
+    "test": "test_service.ServiceTest.test_crash_after_runner_identity_before_gate_requeues_without_execution",
+    "assertion": "ambiguous != dead at original test_service.py:598",
+    "context": "Root ran the complete service module while Bash was also active after integrating edfc. Bash259 passed. This agent did not repeat or edit that root gate."
+  },
+  "cause": "The existing waiter continued only while inspect_process returned live. A dying runner can legitimately be ambiguous when its start identity was observed but getpgid then loses the PID, or the group inventory is inconclusive. Ambiguous is not confirmed dead. The test exited its waiter on that intermediate classification, then asserted dead. The product classifier correctly fails closed and is unchanged.",
+  "controlled_diagnostic": {
+    "scope": "Only the test_service.inspect_process alias is wrapped; devsquad.supervisor.inspect_process and platform calls are untouched.",
+    "method": "For the same captured pid/pgid/start identity, delegate real inspection first. Preserve actual live classifications. At the first genuine dead boundary, return ambiguous for two successive observations, then delegate genuine classifications. Two ambiguous observations exercise both the original loop condition and its final assertion without permitting early recovery.",
+    "trace_both_versions": ["live", "live", "live", "live", "ambiguous", "ambiguous"],
+    "identity_binding": "Every observation asserts the original pid/pgid/start tuple is unchanged. The injected observations each follow an actual dead classification, so the owned runner is already gone before any failed-test fixture teardown.",
+    "original_red": {
+      "python312": {"version": "3.12.14", "tests": 1, "failures": 1, "errors": 0, "seconds": 0.445},
+      "python314": {"version": "3.14.6", "tests": 1, "failures": 1, "errors": 0, "seconds": 0.458},
+      "assertion": "ambiguous != dead at598 on both versions"
+    },
+    "corrected_green": {
+      "python312": {"version": "3.12.14", "tests": 1, "failures": 0, "errors": 0, "seconds": 0.856},
+      "python314": {"version": "3.14.6", "tests": 1, "failures": 0, "errors": 0, "seconds": 0.946},
+      "final_trace": ["dead", "dead"]
+    }
+  },
+  "repair": {
+    "changed_code": "Only3 inserted/1 removed lines in the existing method: change while == live to while != dead and add two explanatory comments.",
+    "bounds": "The original5s monotonic deadline and .02s polling interval are unchanged. No sleep-only widening or product timeout change.",
+    "positive_boundary": "Require an actual dead classification of the original attempt identity before continuing; the final dead assertion is unchanged. Persistent ambiguous/live ownership still fails this test instead of being accepted as death.",
+    "preserved_assertions": "Coordinator exits24 before releasing the runner gate; original child_record and execution marker remain absent; resume launches one continuation, succeeds, never executes the blocked command, records exactly recovery_required then finished attempts and exactly one run.unstarted_attempt_recovered event. Existing live-runner refusal and receipt exact-once tests remain unchanged."
+  },
+  "affected_service_gates": {
+    "environment": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core",
+    "command": "INTERPRETER -B -m unittest test_service -q",
+    "python312": {"version": "3.12.14", "tests": 33, "seconds": 32.621, "failures": 0, "errors": 0, "skips": 0},
+    "python314": {"version": "3.14.6", "tests": 33, "seconds": 35.470, "failures": 0, "errors": 0, "skips": 0},
+    "coverage": "Complete service module, including unstarted recovery, live-owner refusal, receipt import, orphan cancellation and concurrent exact-once import."
+  },
+  "independent_review": {
+    "reviewer": "r6_readiness",
+    "scope": "Frozen test diff and classifier semantics; read-only offline focused checks, no core edits.",
+    "source_review": "clean; same bound and all final death, gate absence and exact requeue assertions retained",
+    "focused_tests": ["test_crash_after_runner_identity_before_gate_requeues_without_execution", "test_dead_supervisor_with_live_child_never_relaunches", "test_coordinator_crash_imports_runner_receipt_once"],
+    "python312": {"version": "3.12.14", "tests": 3, "seconds": 2.816, "failures": 0, "errors": 0},
+    "python314": {"version": "3.14.6", "tests": 3, "seconds": 3.515, "failures": 0, "errors": 0},
+    "independent_controlled_green": {"python312_seconds": 0.988, "python314_seconds": 0.947, "tests_each": 1, "failures": 0},
+    "result": "clean; real ownership/refusal/receipt cases and exact alias-only diagnostic pass, with exactly two transient ambiguity observations followed by two genuine dead observations",
+    "before_after_hashes_unchanged": true
+  },
+  "core_tree_unchanged": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+  "other_gates": {
+    "bash": {"command": "PYTHONDONTWRITEBYTECODE=1 /bin/bash test/run.sh", "test_files": 11, "assertions": 259, "failures": 0, "legacy_assertions": 50},
+    "watchdog_seconds": {"fast": 0.276, "ignored_TERM": 0.214, "early_cancel": 0.213, "tree": 1, "resistant": 3.258, "slow_probe": 1.26},
+    "generated_reference": "current",
+    "JSON_and_diff": "pass"
+  },
+  "limitations": "Local3.14 is3.14.6, not public CI3.14.7. No full604 suite, provider/native request, installation, publication, global settings or root source/docs action. Root owns integration and the next exact-head public CI candidate."
+}

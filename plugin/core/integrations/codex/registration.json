@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "codex",
+  "display_name": "Codex",
+  "executable_paths": ["/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex", "/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex"],
+  "executable_names": ["codex"],
+  "server_name": "devsquad",
+  "surface": "codex-app",
+  "register_argv": ["{host_executable}", "mcp", "add", "{server_name}", "--", "{squad_executable}", "mcp", "serve", "--surface", "{surface}"],
+  "remove_argv": null,
+  "inspect_argv": ["{host_executable}", "mcp", "get", "{server_name}", "--json"],
+  "inspect_format": "json"
+}

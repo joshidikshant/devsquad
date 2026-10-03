@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "work_package": "M6-D2",
+  "status": "complete_smoke_only",
+  "executed_at": "2026-10-01T20:35:46.511565+00:00",
+  "implementation_revision": "0d37764",
+  "experiment_id": "jev-devsquad-routing-pilot-v1",
+  "spec_sha256": "473aed2c431bd1ce8218124a6fe3fd3139fdf869468a72cbc8cf184c428d9822",
+  "probe_sha256": "cf665296d40d2c7b556efbfd8e8cc619e583e92f70715ee2c8eccfbecd80765b",
+  "request_sha256": "ae5d7f39d64cd35cd8e6c11ad78a8b00f4264755d8fe1cd557c64d80980e32e7",
+  "command": "python3 test/core/probes/jev_decision_eval.py --env-file .env --execute --output /Users/Dikshant/.devsquad/private-probes/jev-pilot-v1-20261001T203515Z.json",
+  "result": {
+    "exit_code": 0,
+    "client_request_count": 1,
+    "retries": 0,
+    "requested_model": "jev-1.13.0",
+    "observed_model": "jev-1.13.0",
+    "elapsed_ms": 187,
+    "cases": 8,
+    "questions": 24,
+    "input_tokens": 5373,
+    "output_tokens": 1762,
+    "task_family": {"correct": 8, "total": 8},
+    "specialist_skill": {"correct": 8, "total": 8},
+    "execution_tier": {"correct": 6, "total": 8}
+  },
+  "pricing": {
+    "rechecked_on": "2026-10-01",
+    "usd_per_million_input_tokens": 0.042,
+    "output_tokens_charge": "free per current published pricing",
+    "documented_max_request_cost_usd": 0.002688,
+    "estimated_cost_usd_from_reported_usage": 0.00022567,
+    "authorized_ceiling_usd": 0.01,
+    "invoice_verified": false,
+    "source": "https://docs.typesafe.ai/models"
+  },
+  "api_conformance": {
+    "source": "https://docs.typesafe.ai/api",
+    "rechecked_on": "2026-10-01",
+    "validated": "Pinned model, exact answer IDs, typed choices, finite probability distributions, confidence bounds and reported usage"
+  },
+  "tier_disagreements": [
+    {
+      "case_id": "T07",
+      "expected": "frontier_analysis",
+      "choice": "economy_read",
+      "confidence": 0.92
+    },
+    {
+      "case_id": "T08",
+      "expected": "frontier_write",
+      "choice": "standard_write",
+      "confidence": 0.23
+    }
+  ],
+  "private_receipt": {
+    "path": "/Users/Dikshant/.devsquad/private-probes/jev-pilot-v1-20261001T203515Z.json",
+    "sha256": "fcf9e71f16e93f0b96cbf162d23ed92909c52cb3792e4b10a0c1c2a1f72e31c6",
+    "permissions": "600",
+    "contents": "Redacted scored synthetic result; no API key or task text"
+  },
+  "checkpoint_verification": {
+    "bash": "11 files, 227 assertions passed",
+    "json_generated_reference_whitespace": "passed",
+    "credential_protection": "Local .env remains ignored and untracked; no key stored in this evidence",
+    "source_changes": "Documentation/evidence only; no full Python rerun. The probe's unchanged source retains its 14 passing focused tests; R3b.1 full integration remains pending."
+  },
+  "decision": {
+    "runtime_mode": "off",
+    "active_policy_changed": false,
+    "scope": "One authenticated typed synthetic smoke, not production quality or speedup proof",
+    "cost_or_access_laya_trigger": false,
+    "quality_gate": "The smoke has no frozen numeric adoption threshold; two tier disagreements do not establish a passed production gate or automatically authorize a new comparison",
+    "additional_hosted_requests_authorized": 0,
+    "next_action": "Finish R3-R6 runtime repairs; predeclare corpus, held-out thresholds and budget before separately authorized shadow/adoption work. Do not repeat this pilot or install Laya without its declared trigger."
+  }
+}

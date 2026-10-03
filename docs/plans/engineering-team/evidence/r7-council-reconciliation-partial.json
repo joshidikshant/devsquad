@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "scope": "isolated_council_r6_source_reconciliation_offline_only",
+  "baseline_commit": "32b94d6",
+  "preserved_council_slices": ["42979ba", "72ae413", "eee6db7"],
+  "supported_schema_version": 17,
+  "automatic_enabled": false,
+  "native_ready": false,
+  "source_blob_sha256": {
+    "plugin/core/src/devsquad/diagnostics.py": "3ba04d754cc17ec6bf7cd32ded1b41d1972afba3d334952c5b87473c2b8bdfb4",
+    "plugin/core/src/devsquad/service.py": "b1d2ccb334f0c981e01e2a3fc5d8292ee7887f4c53d387ca6eb9c036707ba5c9",
+    "plugin/core/src/devsquad/store.py": "e94514dd50f398df26b4b4c9261eea9a4c4108d0da8ac40883ee55bb466fa88e",
+    "plugin/core/src/devsquad/cli.py": "e06d4a22a48a7c65bc53b16bf6e4b10b16d7318827788a8502608ea6a44875e5",
+    "plugin/core/src/devsquad/task_entry.py": "da29929711ea7eec268205855ead98cac9c368bac98e9296185f360a4574e72b",
+    "plugin/core/src/devsquad/council_isolation.py": "e5156c6d918b31fcdcc78b5b05dcdfa1a181392c54aba02ccbf92e53448a196e"
+  },
+  "verification": {
+    "affected_gate": {
+      "command": "PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core python3 -m unittest test_council_contract test_council_entry test_council_runtime test_council_comparison test_council_epoch test_council_install_epoch test_council_isolation test_council_reconciliation test_terminal_ux test_diagnostics test_mcp test_handoff_store test_handoff_service test_task_entry test_router test_validation test_supervisor -q",
+      "python_version": "3.14.6",
+      "tests": 168,
+      "monotonic_seconds_reported_by_unittest": 148.693,
+      "errors": 0,
+      "failures": 0,
+      "skips": 2,
+      "skip_reason": "optional MCP SDK absent in this interpreter",
+      "status": "passed"
+    },
+    "actual_official_sdk": {
+      "command": "PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core ACCEPTED_R5_PYTHON -m unittest test_mcp.OfficialSDKConformanceTest -q",
+      "python_version": "3.12.14",
+      "mcp_version": "2.2.0",
+      "tests": 2,
+      "monotonic_seconds_reported_by_unittest": 2.964,
+      "errors": 0,
+      "failures": 0,
+      "skips": 0,
+      "all_nine_tool_names_and_schema_envelopes_preserved": true,
+      "actual_stdio_disconnect_does_not_cancel_worker": true,
+      "status": "passed"
+    },
+    "bash": {"command": "bash test/run.sh", "test_files": 11, "assertions": 227, "status": "passed"},
+    "generated_reference": {"command": "python3 scripts/generate-core-reference.py --check", "status": "passed"},
+    "diff": {"commands": ["git diff --check", "git diff --cached --check"], "status": "passed"}
+  },
+  "retained_failed_gates": [
+    {
+      "scope": "initial_expanded_headless_reconciliation_test",
+      "errors": 4,
+      "cause": "test wrongly expected inactive completed claims in the public active-claim view",
+      "repair": "assert exact authoritative claim rows; corrected live and expired crash tests pass"
+    },
+    {
+      "scope": "first_final_affected_invocation",
+      "reported_tests": 169,
+      "monotonic_seconds_reported_by_unittest": 145.486,
+      "errors": 1,
+      "failures": 0,
+      "skips": 2,
+      "cause": "nonexistent test_reservation_crash module name produced unittest loader error",
+      "status": "failed_invocation_not_acceptance",
+      "repair": "corrected exact 168-test command above passed unchanged source"
+    }
+  ],
+  "shared_authority": {
+    "store_claim_parameters": ["initial_only", "terminal_decision"],
+    "marker_schema_version": 1,
+    "marker_reader": "Store.terminal_finish_decision",
+    "exact_live_intent_reuses_claim": true,
+    "exact_expired_intent_gets_fresh_fence": true,
+    "same_name_app_claim_not_adopted": true,
+    "guided_expiry_rejection_audited_and_recovered": true,
+    "submitted_crash_recovery_needs_no_new_claim": true,
+    "headless_expiry_retains_rejection_and_completes_saved_lead_without_new_worker": true,
+    "explicit_council_choice_inputs_round_trip_actual_cli": true,
+    "no_automatic_human_choice": true
+  },
+  "preserved_evidence": [
+    "r7-public-fixture-workflow-predeclaration.json",
+    "r7-public-fixture-workflow-comparison.json",
+    "r7-temporary-install-epoch-proof.json",
+    "R7-NATIVE-BOUNDARY-BLOCKER.md"
+  ],
+  "acceptance_dependencies": [
+    {
+      "kind": "shared_owned_probe_cleanup",
+      "isolated_repair_commit": "093ed0f397289bffe9ea249c10796cb436027f00",
+      "root_integrated_commit": "8242eff68b24538aacc1b40b67b2e88e96b04d52",
+      "not_imported_into_this_council_checkpoint": true,
+      "independent_acceptance": "root_owned_pending"
+    },
+    {"kind": "exact_default_deny_native_backend_attestation", "status": "unavailable_fail_closed_before_role_generation"},
+    {"kind": "frozen_combined_full_native_and_installed_acceptance", "status": "root_owned_pending"}
+  ],
+  "limitations": [
+    "No production/root source or ledger changes, network probes, native generations or full suite in this isolated reconciliation",
+    "Public fixtures establish mechanics only; native quality, escaped defects, rework and allowance remain unknown",
+    "Matched and held-out comparison remains inconclusive; no automatic use or R3 promotion authority",
+    "Historical temporary installer evidence names its original exact candidate; the reconciled candidate's installer regression also passed in the final affected command",
+    "Root resolves authoritative RESUME/backlog wording when importing this source-equivalent checkpoint"
+  ]
+}

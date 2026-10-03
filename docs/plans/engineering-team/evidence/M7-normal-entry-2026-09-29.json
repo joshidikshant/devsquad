@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "milestone": "M7",
+  "status": "blocked_external",
+  "implementation_revision": "85aa378cf990687a9889409674bfa530fe4890a7",
+  "recorded_at": "2026-09-29T11:17:22Z",
+  "normal_entry": {
+    "review": "resolves exact base/target commits, uses read-only Codex review and report-only checks, and requires no task/profile/policy JSON",
+    "fix": "uses one isolated Claude writer, different-harness Codex review, required checks, bounded revisions and host lead disposition",
+    "routing": "strict embedded profile registry and policy are canonicalized, hash-frozen and retained in the saved run",
+    "catalog": "Codex model and effort are selected from a complete native model/list without a model generation",
+    "output": "returns role/profile selection, selection reason, scope, checks, run ID/state and a next command without exposing model IDs in the normal response",
+    "wait_behavior": "fix --wait resumes the saved candidate-review phase once and returns at the host handoff"
+  },
+  "offline_gate": {
+    "python_command": "PYTHONWARNINGS=error::ResourceWarning PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=plugin/core/src python3 -m unittest discover -s test/core -v",
+    "python_result": "311 tests passed with 2 optional-SDK skips",
+    "bash_command": "bash test/run.sh",
+    "bash_result": "11 test files and 227 assertions passed",
+    "managed_delivery": "one isolated implementation writer, frozen candidate, independent review, required checks, unchanged source checkout and host handoff passed with offline fixtures",
+    "generated_reference": "current"
+  },
+  "installed_runtime": {
+    "launcher": "/Users/Dikshant/.local/bin/squad",
+    "immutable_release": "/Users/Dikshant/.devsquad/releases/0.1.0-py31214-129b9107ed59-mcp-a26bc88afbef",
+    "release_manifest_sha256": "99debfc9f15c27dc31c13178a91ca4fa05e7aefd75648d3aa519d35ffffa4f63",
+    "source_digest": "129b9107ed59141d1da8462ce47f16a70f478d49de88a2822a187864816aec74",
+    "mcp_environment_digest": "a26bc88afbef7b5a1ed23014ebece205902a8c43c047fec7afb893da945e66b2",
+    "python": "3.12.14",
+    "mcp_sdk": "2.2.0",
+    "pip_check": "passed",
+    "second_install": "changed=false with source/plugin/installed drift all false",
+    "setup": "all four hosts unchanged and matching",
+    "doctor": "ready"
+  },
+  "installed_entry_checks": {
+    "review": {
+      "command_shape": "squad review --base HEAD^ --target HEAD --model gpt-6-luna --effort low --dry-run --json",
+      "result": "exact commits, read-only reviewer, detected checks and deterministic idempotency key returned; no run or generation created"
+    },
+    "fix": {
+      "command_shape": "squad fix ISSUE --write-path PATH --check COMMAND --review-model gpt-6-luna --review-effort low --dry-run --json",
+      "result": "bounded write scope, Claude implementer, different-harness Codex reviewer, detected/user checks and deterministic idempotency key returned; no run or generation created"
+    }
+  },
+  "remaining_live_gates": {
+    "claude_code": "M4 handoff and M5 installed implementation-to-Codex delivery require normal Claude login",
+    "grok_build": "registration matches, but provider authentication is expired",
+    "jev": "M6-D2 remains blocked on TYPESAFE_API_KEY; Laya runs only if the declared Jev fallback trigger fires"
+  }
+}
