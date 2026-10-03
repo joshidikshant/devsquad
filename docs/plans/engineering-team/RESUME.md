@@ -23,6 +23,18 @@ codex/release-watchdog repair/independent review is underway; integrate only
 after frozen full completes. No main merge, tag or public release yet.
 [Release evidence](evidence/public-release-0.11.0.json) is the current matrix.
 
+Newer local gate: immutable core release0.1.0-py31214-303a0e0a6c87-mcp-a26bc88afbef
+is installed, schema17, source303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52.
+Zero nonterminal before/after; pre16 online backup0600/integrityOK retained.
+Reinstallchangedfalse/all driftfalse/manifests match/pipcheck pass; nine actual
+installed SDK tests/3.126s, no skips/errors/failures. Doctor ready for review
+and Claude→Codex delivery; four registrations match. Grok/agy worker-readiness
+stays unknown, Councilnativefalse. Saved cb68 still succeeded22.
+Updated agy1.2.14/Gemini3.8FlashLow actually called DevSquad status once and
+observed cb68 succeeded22 in18.654s. It read its own MCP schema and generated
+tool-result file, not project files/other servers; this is not a zero-file-read
+claim, IDE proof or automatic worker coverage. No IDE settings were changed.
+
 **Public release authorized:** the user selected a public GitHub release in
 the existing `joshidikshant/devsquad` repository (no registry or hosted service).
 Release version0.11.0 includes core0.1.0; Council stays native-unavailable and

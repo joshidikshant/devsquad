@@ -37,7 +37,24 @@
     "provider_or_network_calls":0,"production_update":false
   },
   "final_full":{"target":"b83dda7fbf691503d3adf3c9ea6ecebd4071ba16","exec_session":12430,"tests":604,"seconds":793.462,"monotonic_seconds":793.8633149590023,"utc_seconds":793.881373,"failures":0,"errors":0,"optional_sdk_skips":2,"unraisable":[],"status":"passed","source_tests_scripts_frozen":true},
-  "installation":"production remains accepted R5/schema16 until full/repair gates",
-  "limitations":{"council":"native-unavailable, automaticOFF, fixture comparison inconclusive; no more network attempts","jev":"OFF; authorized single pilot spent","claude_desktop_code_tab":"unverified/TCC, not substituted by CLI proof","antigravity":"agyCLI1.2.14 final-release status pending; IDE out of scope","whole_plan":"not complete"},
-  "remaining":"Complete frozen core suite; integrate independently reviewed legacy deadline/CI repair; safe actual installation/SDK/agyCLI; final green public CI; merge/tag/release verified assets"
+  "installation":{
+    "release":"0.1.0-py31214-303a0e0a6c87-mcp-a26bc88afbef","source_digest":"303a0e0a6c87ff472d1d7b52cb63ea56798a11f345f483736a18669c5f4d2a52",
+    "python":"3.12.14","mcp":"2.2.0","ledger_schema":17,"nonterminal_runs_before_and_after":0,"private_pre16_online_backup":"retained0600_integrity_ok",
+    "first_changed":true,"reinstall_changed":false,"all_drift":false,"manifest_matches":true,"pip_check":"passed","previous_releases_retained":true,"downloads":0,
+    "installed_sdk":{"tests":9,"seconds":3.126,"failures":0,"errors":0,"skips":0,"origin":"selected immutable release/core/src, not primary checkout"},
+    "sdk_harness_first_assertion":"Initial helper assumed site-packages origin and aborted before tests; installer intentionally imports its immutable copied core/src. Corrected origin assertion retains release-bound/no-primary-source check; nine tests then passed.",
+    "doctor":{"ready":true,"branch_review_ready":true,"issue_delivery_ready":true,"matching_registrations":4,"claude_subscription_authenticated":true,"codex_subscription_authenticated":true,"council_native_ready":false,"grok_antigravity_worker_readiness":"unverified/unknown, not implied by MCP registration"},
+    "saved_run_continuity":{"run_id":"cb68f3ae-bea0-4744-90c4-96f25418fb8c","state":"succeeded","version":22}
+  },
+  "updated_antigravity_cli":{
+    "version":"1.2.14","observed_init_model":"gemini-3.8-flash-low","mode":"plan/sandbox; native request-review","operation":"one devsquad/squad_status call","run_id":"cb68f3ae-bea0-4744-90c4-96f25418fb8c","observed_state":"succeeded","observed_version":22,
+    "seconds":18.65435924999838,"returncode":0,"timed_out":false,"native_result":"SUCCESS",
+    "stdout_sha256":"cc6045878de2124b845adab33401ecd1f52317dd1f6e654b2b439041b2da1863","stderr_sha256":"3a7f8550106d86abb322e8ed0fb30a0296c0e97c6be03d5a8033b99d16737459",
+    "actual_mcp_output_sha256":"d22dccedbcf001999c59d6167820e04a833484f70a2d738e2e7f5c708b9a98f8",
+    "native_file_reads":"Own DevSquad MCP schema and provider-generated tool result file only; not zero file reads. Actual tool-result envelope independently parsed and matched saved run; no project files, other servers or mutations.",
+    "limits":"CLI MCP operation proof only; not Antigravity IDE, automatic writer/reviewer, cost savings or whole-plan acceptance"
+  },
+  "codex_app_existing_connection":{"operation":"squad_status cb68","result":"SCHEMA_UNSUPPORTED","reason":"existing long-running server is bound to old package; reconnect only DevSquad connection to select new release","new_cli_and_agy_same_run":"succeeded22","user_action":"async reconnect request pending; no global restart/settings changes"},
+  "limitations":{"council":"native-unavailable, automaticOFF, fixture comparison inconclusive; no more network attempts","jev":"OFF; authorized single pilot spent","claude_desktop_code_tab":"unverified/TCC, not substituted by CLI proof","antigravity":"agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope","whole_plan":"not complete"},
+  "remaining":"Integrate independently reviewed legacy deadline/CI repair; final green public CI; merge/tag/release verified assets. Existing CodexApp connection needs scoped reconnect; core604/native/installed9SDK/agyCLI gates already passed, do not repeat unchanged."
 }

@@ -59,6 +59,12 @@ releases and saved receipts remain present. Custom runtime directories get
 the same migration guard on first access; use `DEVSQUAD_RUNTIME_DIR` for the
 installer's explicitly scoped ledger check.
 
+A long-running MCP server keeps the package it started with. After a schema
+upgrade, reconnect only the DevSquad MCP connection in each already-open host
+to load the selected release. An old server may return `SCHEMA_UNSUPPORTED`;
+that is the old-client fence, not lost work. Do not remove the ledger or change
+unrelated servers. New CLI/MCP processes already use the stable launcher.
+
 Antigravity's non-interactive print mode also enforces project permissions.
 For unattended read-only status checks, add this exact grant to the DevSquad
 project's Permissions list in Antigravity:
