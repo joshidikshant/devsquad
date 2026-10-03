@@ -9,7 +9,9 @@ reset or restart from main. Detailed receipts and failed gates remain in evidenc
 The user authorized a public **GitHub release in joshidikshant/devsquad**.
 Release v0.11.0 ships plugin0.11.0 and standalone core0.1.0; no registry or
 hosted service. PR1: https://github.com/joshidikshant/devsquad/pull/1.
-Publication is pending final public CI, merge and exact-commit release assets.
+v0.11.0 is published and assets verified, but actual local Claude update found
+a plugin hook-envelope defect. A narrow0.11.1 correction is now locally tested
+and independently reviewed; publication/update of that correction is next.
 The whole engineering-team plan remains incomplete.
 
 Latest public CI37084805784 on5a576d3: Bash259/11 files (50 focused) and
@@ -52,6 +54,28 @@ root19 delivery tests48.911s pass; unchanged service33/29.820s already passed.
 Final root Bash passed259 assertions/11files (50 focused), reference/JSON/
 staged+unstaged diff checks passed. Checkpoint/push and exact-head public CI
 remain. No merge.
+
+Corrected candidate8488ed44ee30c7fa5b2c20370827093715130d36 is pushed.
+Final PR CI37088621735 passed all four jobs: Bash259/11, optionalMCP23/4.656s
+(one optional skip), Python3.11.9 full604/804.964s and Python3.14.7 full604/
+1110.004s (two SDK skips each/no failures/errors/unraisable). PR1 merged as
+e7ec4ce9f889dc5fa083fe4289b5bfc3d424edfa; treebc76f192 equals tested8488.
+v0.11.0 published2026-10-03T02:29:54Z, release402283042; tag exactmerge,
+not draft/prerelease, source/plugin header hashes match. All three downloaded
+assets and SHA256SUMS match. Source/plugin/wheel hashes are in public evidence.
+Duplicate push/main CI was cancelled after tree equality, not accepted.
+
+Actual scoped Claude updater installed0.11.0/enabled/exit0, but plugin list
+and actual installed validator failed: hooks expected record/undefined.
+Old hooks/hooks.json lacked outer hooks object. v0.11.0 notes now disclose it;
+retain original tag/assets. Corrective0.11.1 only wraps existing event map,
+bumps three metadata versions and adds offline shape/negative/version tests.
+Core tree62ee unchanged, commands/matchers/timeouts exactly unchanged.
+Six-file diff0542f696c655c801a541d6b7066e37bddf2ea59066a83c4f0ab1bf992ad509da
+independently reviewed clean. Actual Claude2.1.220 corrected validator passes;
+independent exact-old shape exits1, corrected exits0/.362s, packaging9 passes.
+Root Bash261/11 passes. Checkpoint/push/PR2/fullCI/merge0.11.1 and actual
+installed no-error validation remain. Original core/full/live gates stay valid.
 
 Rejected private diagnostic RELEASE+cancel cleanup overlapped import and
 raised stale-phase ConflictError. Independent read-only triage: fail-closed
@@ -108,26 +132,20 @@ This chat's existing Codex MCP server returned SCHEMA_UNSUPPORTED because it
 still uses an old package. New CLI and agy succeed on the same saved run.
 A scoped DevSquad-only reconnect request is pending; do not change global
 settings or repeatedly probe the unchanged old connection. This does not block
-the public CLI release. Local Claude plugin is still0.10.0: after main is
-released run its normal scoped plugin updater and verify0.11.0.
+the public CLI release. Local Claude plugin is0.11.0 but has the confirmed
+hook load error above; complete0.11.1 and verify actual installed validation
+and plugin list without errors. Do not claim local plugin usability yet.
 
 ## Exact next action
 
-1. Root integrated watchdog Bash259/affected45/reference/diff/JSON gates pass.
-   Both receipt/dead-wait test repairs are integrated/reviewed; root33 passes.
-   Final Bash/JSON/reference/diff checks passed; checkpoint the corrected candidate.
-   Core source/full/native/installed gates need no unchanged repeat.
-2. Push codex/engineering-team, require final exact-head public CI green:
-   legacy Bash3.2, core Python3.11 and3.14, optional MCP. Earlier CI
-   37082086201/37082130929 was cancelled after true legacy failure; optional
-   MCP passed, cancelled core is NOT accepted. Core now fetches full history
-   for immutable migration fixtures and uses the tracked failfast runner.
-3. Merge PR1 with exact-head fence without deleting engineering branch. Build
-   source/plugin archives from exact merged commit; old b83 archives are stale.
-   The unchanged-core wheel may be reused only after tree/hash verification.
-4. Publish v0.11.0 on that exact merge SHA with verified assets/SHA256SUMS.
-   Verify tag, published-not-draft state and downloaded asset hashes. Update
-   release evidence/backlog/this checkpoint and local Claude plugin. End clean.
+1. Checkpoint/push independently reviewed0.11.1 hook correction. Create PR2
+   to main and freeze its exact head for final all-four public CI gates.
+2. Merge exact tested head, prove merged tree equality; regenerate source/
+   plugin0.11.1 archives from exact merge, reuse unchanged core wheel only
+   after tree/hash equality. Publish/verify tag, release and downloads.
+3. Normal scoped Claude plugin update, actual installed validator and plugin
+   list must have no load errors. Update evidence/backlog/checkpoint, end clean.
+   Core source/full/native/installed/provider gates need no unchanged repeat.
 
 ## Residual scope and boundaries
 

@@ -4,6 +4,16 @@ All notable changes to DevSquad are documented here.
 
 > **Note:** Project was renumbered from 2.x to 0.x semver in Feb 2026 to reflect pre-stable status. Entries below have been renumbered accordingly.
 
+## [0.11.1] — 2026-10-02
+
+### Fixed
+- Wrap the Claude plugin hook events in the required top-level `hooks` object.
+  Claude's actual plugin validator rejected the old event-only file during
+  the post-release local update. Hook commands, matchers and timeouts are
+  unchanged; the standalone core remains 0.1.0 with the same payload.
+- Offline packaging checks now reject the old hook shape and verify the
+  four hook registrations and consistent marketplace/plugin versions.
+
 ## [0.11.0] — 2026-10-02
 
 ### Added

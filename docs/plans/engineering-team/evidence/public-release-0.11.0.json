@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-10-02",
-  "status": "delivery_phase_corrected_root_gate_passed_next_public_ci_pending",
+  "status": "published_verified_core_plugin_hook_issue_found_corrective0111_pending",
   "authorization": "User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
   "pull_request": "https://github.com/joshidikshant/devsquad/pull/1",
   "frozen_core_candidate": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
@@ -161,7 +161,7 @@
     "antigravity": "agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope",
     "whole_plan": "not complete"
   },
-  "remaining": "Final Bash/JSON/reference/diff checks passed. Checkpoint and push delivery-test-corrected candidate. Require all final exact-head public CI jobs green; merge PR1, publish exact-merge verified v0.11.0 assets, scoped local Claude plugin update. Preserve unconfirmed diagnostic concurrency follow-up plus original Council/desktop/MCP reconnect residuals separately.",
+  "remaining": "v0.11.0 published and downloaded asset hashes verified; standalone core works. Scoped local plugin updater installed0.11.0, but actual loader/validator exposed missing hooks envelope. Preserve original tag/assets, publicly note issue, complete reviewed/tested0.11.1 corrective release and verify actual installed plugin without load errors. Original Council/desktop/MCP reconnect residuals remain separate.",
   "integrated_legacy_gate": {
     "source_checkpoint": "3fdc6bd065c577a9ed59566573fdce399e9b585a",
     "adapter_blob": "1847357c19677f276b06886386e2ac93e586b203",
@@ -354,7 +354,104 @@
       }
     },
     "reference_json_staged_unstaged_diff": "passed",
-    "next_public_ci": "pending"
+    "next_public_ci": "37088621735_completed_success_on8488ed44ee30c7fa5b2c20370827093715130d36"
+  },
+  "publication_candidate_ci": {
+    "head": "8488ed44ee30c7fa5b2c20370827093715130d36",
+    "run_id": 37088621735,
+    "url": "https://github.com/joshidikshant/devsquad/actions/runs/37088621735",
+    "status": "completed_success_all_four_jobs_accepted",
+    "duplicate_push_run": 37088621359,
+    "duplicate_push_status": "completed_cancelled",
+    "legacy": {
+      "status": "completed_success",
+      "job_id": 111103957387,
+      "assertions": 259,
+      "files": 11,
+      "focused_legacy_assertions": 50,
+      "timings_seconds": {"fast": 0.348, "ignored_TERM": 0.301, "pre_open_cancel": 0.257, "TERM_resistant": 3.389, "slow_ps": 1.429}
+    },
+    "optional_mcp": {
+      "status": "completed_success",
+      "job_id": 111103957249,
+      "tests": 23,
+      "seconds": 4.656,
+      "skips": 1,
+      "failures": 0,
+      "errors": 0
+    },
+    "python311": {
+      "version": "3.11.9",
+      "status": "completed_success",
+      "job_id": 111103957440,
+      "tests": 604,
+      "seconds": 804.964,
+      "monotonic_seconds": 805.4974165420003,
+      "utc_seconds": 805.497415,
+      "skips": 2,
+      "failures": 0,
+      "errors": 0,
+      "unraisable": []
+    },
+    "python314": {
+      "version": "3.14.7",
+      "status": "completed_success",
+      "job_id": 111103957414,
+      "tests": 604,
+      "seconds": 1110.004,
+      "monotonic_seconds": 1110.538552125,
+      "utc_seconds": 1110.538559,
+      "skips": 2,
+      "failures": 0,
+      "errors": 0,
+      "unraisable": []
+    },
+    "required": ["Legacy Bash 3.2", "Core Python 3.11", "Core Python 3.14", "Optional MCP 2.2.0"],
+    "core_tree": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+    "plugin_tree": "940e792825cca45d82135bc1caf738924b1d176c",
+    "later_local_docs_checkpoints": "Recovery metadata only; merge/tag target is the exact accepted8488ed4 and identical-tree merge"
+  },
+  "publication_merge": {
+    "commit": "e7ec4ce9f889dc5fa083fe4289b5bfc3d424edfa",
+    "merged_at": "2026-10-03T02:27:18Z",
+    "tree": "bc76f192e3bcc7ce4528a040d7e58740278fbb32",
+    "equals_tested_candidate_tree": true,
+    "core_and_plugin_trees_unchanged": true,
+    "duplicate_main_push_run": 37089867565,
+    "duplicate_main_push_disposition": "completed_cancelled_after_exact_merge_tree_equality; not a passing gate"
+  },
+  "published_release": {
+    "id": 402283042,
+    "url": "https://github.com/joshidikshant/devsquad/releases/tag/v0.11.0",
+    "tag": "v0.11.0",
+    "tag_commit": "e7ec4ce9f889dc5fa083fe4289b5bfc3d424edfa",
+    "published_at": "2026-10-03T02:29:54Z",
+    "is_draft": false,
+    "is_prerelease": false,
+    "all_downloaded_checksums_verified": true,
+    "archive_commit_headers_match_tag": true,
+    "assets": [
+      {"name": "devsquad-0.11.0-source.tar.gz", "bytes": 2728324, "sha256": "1f09c0d9e4d1e112b3895749344e41a40e25a97a527e1143c78d2eea92ffdf96"},
+      {"name": "devsquad-plugin-0.11.0.tar.gz", "bytes": 307117, "sha256": "47d758d6896c97c5d21c54cc123e2c971d061d3029ac95d688d97e92c0dd724a"},
+      {"name": "devsquad_core-0.1.0-py3-none-any.whl", "bytes": 272189, "sha256": "611086b51604f29b7964e05affbcd70ffa481299b04f645cd9ac2315b2c8bf77"},
+      {"name": "SHA256SUMS", "bytes": 295, "sha256": "182a184f75fdca8486246a5e62558fa017d36ccb7bb6e04b4a458298ca8f45fc"}
+    ],
+    "private_asset_proof_sha256": "5c8e501f6a0b973bc170dbbf796d03710d1eb0fcfc0e91ceb35fa5e671a4d319",
+    "bounded_privacy": "No credential/raw-log/cache/database files or recognizable credentials; historical path references retained as filenames only",
+    "wheel": "Reused only after exact core tree/file equality; all11schemas/17migrations match, digest303a0e0a6c87"
+  },
+  "local_plugin_update": {
+    "scope": "user; only devsquad@devsquad-marketplace",
+    "updater_exit": 0,
+    "installed_version": "0.11.0",
+    "enabled": true,
+    "load_error": "Hook load failed: hooks expected record received undefined",
+    "actual_installed_validator_exit": 1,
+    "root_cause": "hooks/hooks.json event map missing required outer hooks object",
+    "standalone_core_affected": false,
+    "corrective_version": "0.11.1",
+    "corrected_source_validator": "passed",
+    "no_successful_plugin_load_claim": true
   },
   "diagnostic_cleanup_overlap_triage": {
     "source": "independent read-only code/output triage; no new probes",
