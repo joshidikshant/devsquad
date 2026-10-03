@@ -1100,16 +1100,46 @@ class ServiceTest(unittest.TestCase):
         self.wait_state(started["run_id"],{"running"})
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
         try:
+            attempt=store.attempt(started["run_id"])
+            # Running is committed before the runner gate is released. Prove
+            # the child actually started before exercising coordinator death.
+            child_record=Path(attempt["child_record"])
+            deadline=time.monotonic()+5
+            while not child_record.is_file() and time.monotonic()<deadline:
+                time.sleep(.02)
+            self.assertTrue(child_record.is_file())
             owner=store.connection.execute("SELECT owner_id FROM supervisor_claims WHERE run_id=?",(started["run_id"],)).fetchone()[0]
             os.kill(int(owner.split(":",1)[1]),signal.SIGKILL)
         finally: store.close()
-        time.sleep(.6)
+        # A fixed delay cannot imply receipt publication or process exit.
+        # The live-refusal case above preserves that ownership fence; import
+        # only after the exact captured runner has published and died.
+        receipt=Path(attempt["exit_record"])
+        deadline=time.monotonic()+5
+        while (not receipt.is_file() or inspect_process(
+                attempt["pid"],attempt["pgid"],attempt["process_start_id"],
+                )!="dead") and time.monotonic()<deadline:
+            time.sleep(.02)
+        self.assertTrue(receipt.is_file())
+        self.assertEqual(
+            inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"]),
+            "dead",
+        )
         first=self.service.resume(started["run_id"])
         self.assertIn(first["disposition"],{"succeeded","already_finalized"})
         self.assertTrue(self.service.result(started["run_id"])["ready"])
         with self.assertRaises(ConflictError): self.service.resume(started["run_id"])
         store=Store(self.runtime/"state.sqlite3",self.runtime/"artifacts")
-        try: self.assertEqual(store.connection.execute("SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],)).fetchone()[0],1)
+        try:
+            self.assertEqual(store.connection.execute("SELECT COUNT(*) FROM attempts WHERE run_id=?",(started["run_id"],)).fetchone()[0],1)
+            imported=store.attempt(started["run_id"])
+            self.assertEqual(imported["status"],"finished")
+            for field in ("id","attempt_token","pid","pgid","process_start_id"):
+                self.assertEqual(imported[field],attempt[field])
+            self.assertEqual(len(store.artifacts_for_run(started["run_id"])),3)
+            events=store.events_page(started["run_id"],limit=1000)["events"]
+            self.assertEqual(sum(event["type"]=="attempt.output" for event in events),1)
+            self.assertEqual(sum(event["type"]=="run.succeeded" for event in events),1)
         finally: store.close()
 
     def test_importer_crash_after_artifact_finalize_has_no_false_completion(self):

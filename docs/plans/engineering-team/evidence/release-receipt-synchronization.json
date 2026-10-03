@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "scope": "Test-only coordinator-crash receipt synchronization; no recovery/product changes or whole-suite rerun.",
+  "baseline_revision": "5a576d39469c198a3cc93474960886b875363419",
+  "branch": "codex/release-receipt-sync",
+  "preserved_branch": "codex/release-watchdog",
+  "test_blob": "e19495c811c5e52e3d66e5588d18f325e306a8ad",
+  "test_diff_sha256": "ef3c84d775695a832fafc6681e494262ebdfdd339be36170c4b6d44ee451facb",
+  "public_CI_failure": {
+    "run_id": "37084805784",
+    "head_sha": "5a576d39469c198a3cc93474960886b875363419",
+    "reported_by": "root",
+    "python": "3.14.7",
+    "tests_before_failfast_stop": 486,
+    "seconds": 679.063,
+    "test": "test_service.ServiceTest.test_coordinator_crash_imports_runner_receipt_once",
+    "assertion": "first disposition was live, expected succeeded/already_finalized at original test_service.py:1108",
+    "other_jobs": "Bash and optional MCP passed; Python3.11 completed604 tests/1013.419s with2 optional SDK skips, zero failures/errors/unraisable. This agent did not cancel any job."
+  },
+  "cause": "The test assumed a .6s sleep after killing the coordinator implied durable runner completion. Actual gated Python startups, child work, drain/fsync and receipt publication need not fit that delay. Product import_durable correctly returns live before receipt parsing. Also, running is committed before the runner gate is released; child_record is the positive started-child phase boundary.",
+  "controlled_red": {
+    "method": "Run the original exact test with only its existing internal fake child's .3s work delay replaced by1.2s through a diagnostic Service.start wrapper. Capture the real resume response, original runner identity, receipt presence and attempt count. Before fixture teardown, positively wait for owned runner death and receipt publication.",
+    "python312": {"version": "3.12.14", "tests": 1, "failures": 1, "seconds": 1.85},
+    "python314": {"version": "3.14.6", "tests": 1, "failures": 1, "seconds": 2.023},
+    "same_observation_both_versions": {"disposition": "live", "runner_identity": "live", "receipt_present": false, "attempt_count": 1},
+    "cleanup_both_versions": {"runner_identity": "dead", "receipt_present": true},
+    "uncontrolled_baseline": "The original test also passed in isolation on3.12.14/.991s and3.14.6/1.052s, consistent with a scheduling-sensitive assumption rather than a deterministic import defect."
+  },
+  "repair": {
+    "changed_code": "Only test/core/test_service.py:32 inserted/2 removed lines in the existing method.",
+    "started_phase": "Wait for the original attempt's durable child_record before killing the coordinator, so this is not before-gate/unstarted recovery.",
+    "import_phase": "Replace .6s sleep with a bounded wait for the same original receipt path and inspect_process(pid,pgid,start_id) == dead; assert both before the first import.",
+    "bounds": "Original .3s fixture work is unchanged. The5s positive wait boundary matches adjacent receipt/import tests. No product timeout or timing assertion was widened.",
+    "live_fence": "Existing test_dead_supervisor_with_live_child_never_relaunches is unchanged and included in both complete service-module gates. No new short-delay live assertion or recovery requeue/takeover was introduced.",
+    "exact_once": "Original successful disposition and repeated terminal resume ConflictError retained. Require one attempt, unchanged id/token/pid/pgid/start, finished status, exactly3 artifacts and exactly one attempt.output/run.succeeded event."
+  },
+  "controlled_green": {
+    "method": "Repeat the identical1.2s delayed-child diagnostic against the repaired test.",
+    "python312": {"version": "3.12.14", "tests": 1, "failures": 0, "seconds": 1.72},
+    "python314": {"version": "3.14.6", "tests": 1, "failures": 0, "seconds": 1.867},
+    "same_observation_both_versions": {"disposition": "succeeded", "runner_identity": "dead", "receipt_present": true, "attempt_count": 1}
+  },
+  "affected_service_gates": {
+    "environment": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core",
+    "command": "INTERPRETER -m unittest test_service -q",
+    "python312": {"interpreter": "/Users/Dikshant/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3", "version": "3.12.14", "tests": 33, "seconds": 36.966, "failures": 0, "errors": 0, "skips": 0},
+    "python314": {"interpreter": "/opt/homebrew/bin/python3.14", "version": "3.14.6", "tests": 33, "seconds": 39.543, "failures": 0, "errors": 0, "skips": 0},
+    "coverage": "Complete service module, including live refusal, before-gate crash, orphan cancellation, importer-finalization crash, coordinator receipt recovery and concurrent exact-once receipt import."
+  },
+  "independent_review": {
+    "reviewer": "r6_readiness",
+    "scope": "Frozen changed test and read-only recovery semantics; no edits/full/provider/install actions.",
+    "result": "clean; scheduling defect, live-process and exact-once fences preserved",
+    "focused_tests": ["test_coordinator_crash_imports_runner_receipt_once", "test_importer_crash_after_artifact_finalize_has_no_false_completion", "test_two_processes_import_one_runner_receipt_atomically"],
+    "python312": {"version": "3.12.14", "tests": 3, "seconds": 3.415, "failures": 0},
+    "python314": {"version": "3.14.6", "tests": 3, "seconds": 3.161, "failures": 0},
+    "before_after_hashes_unchanged": true
+  },
+  "core_tree_unchanged": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+  "other_gates": "Generated reference and diff checks pass; required Bash259 gate is run before the checkpoint.",
+  "limitations": "Local3.14 is3.14.6, not CI3.14.7. No local full604 suite, provider/native request, install, publication, global settings or root source/docs change. Final exact-head public CI remains required and root-owned.",
+  "next_action": "Root integrates the narrow checkpoint, records final gate/checkpoint identifiers in authoritative release evidence, verifies its bounded integration gate and pushes the next exact public CI candidate."
+}

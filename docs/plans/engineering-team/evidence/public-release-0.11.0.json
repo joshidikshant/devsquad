@@ -161,7 +161,7 @@
     "antigravity": "agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope",
     "whole_plan": "not complete"
   },
-  "remaining": "Finish independently reviewed recovery-test synchronization repair; preserve failure record; root affected/Bash checks and exact-head public CI green, merge PR1 and publish exact-commit assets. Existing CodexApp connection needs scoped reconnect; accepted core/native/install/agy proofs remain source-equivalent, not substitute for failed public CI.",
+  "remaining": "Finish independently reviewed before-gate exit waiter test correction and root affected/Bash gates. Retain both public3.14 and root-service failed attempts; then exact-head CI green, PR1 merge and exact-commit release assets. Core/runtime native/install/agy proof unchanged; old existing CodexApp connection still requires scoped reconnect.",
   "integrated_legacy_gate": {
     "source_checkpoint": "3fdc6bd065c577a9ed59566573fdce399e9b585a",
     "adapter_blob": "1847357c19677f276b06886386e2ac93e586b203",
@@ -215,9 +215,35 @@
       "location": "test/core/test_service.py:1108",
       "status": "failed_not_accepted"
     },
-    "python311": "still_running_not_accepted",
+    "python311": {
+      "tests": 604,
+      "seconds": 1013.419,
+      "failures": 0,
+      "errors": 0,
+      "skips": 2,
+      "unraisable": [],
+      "status": "passed_on5a_prior_to_test_synchronization_repair"
+    },
     "duplicate_push_run": 37084802403,
     "duplicate_push_status": "cancelled_to_avoid_duplicate_CI",
-    "diagnosis": "Fixed.6s sleep does not establish child-start/runner-exit boundary; running state precedes runner gate. Live refusal is correct ownership fence. Isolated bounded positive synchronization repair and independent review underway; no core runtime edit authorized from this test observation."
+    "diagnosis": "Scheduling-only defect proven on exact5a controlled original1.2s fake child: original method failed same live assertion on3.12.14/3.14.6; synchronized test passes same controlled case. Product live ownership fence remains unchanged. Independent frozen patch review clean; affected module/Bash checkpoint pending.",
+    "status": "completed_failure;3.14 recovery-test timing assumption failed, other three jobs passed"
+  },
+  "root_service_integration_attempt": {
+    "source_checkpoint": "edfcf65b92eeee97323b20db6d252b18e2fbc99a",
+    "test_blob": "e19495c811c5e52e3d66e5588d18f325e306a8ad",
+    "bash": "passed259/11files",
+    "service": {
+      "tests": 33,
+      "seconds": 32.435,
+      "failures": 1,
+      "case": "test_crash_after_runner_identity_before_gate_requeues_without_execution",
+      "location": "test/core/test_service.py:598",
+      "assertion": "ambiguous != dead",
+      "status": "failed_not_accepted"
+    },
+    "concurrency": "Bash and service module ran concurrently on same host; no causal attribution asserted from concurrency alone",
+    "diagnosis": "Existing neighboring waiter stops at not-live yet assertsdead. Transient process identity ambiguity during exit is conservatively valid; bounded exactdead synchronization repair in isolated test only, independent review pending.",
+    "runtime_core_unchanged": true
   }
 }

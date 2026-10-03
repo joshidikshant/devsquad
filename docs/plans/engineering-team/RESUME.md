@@ -14,10 +14,18 @@ The whole engineering-team plan remains incomplete.
 
 Latest public CI37084805784 on5a576d3: Bash259/11 files (50 focused) and
 optional MCP passed; Python3.14.7 FAILED486 tests/679.063s at coordinator
-crash receipt recovery (fixed.6s sleep, live worker). Python3.11 still active,
-not accepted. Runtime's live-process refusal is correct. Isolated terminal/
+crash receipt recovery (fixed.6s sleep, live worker). Python3.11 PASSED604/
+1013.419s, two SDK skips/no errors/failures/unraisable on that earlier head.
+Runtime's live-process refusal is correct. Isolated terminal/
 readiness repair is limited to positively synchronizing the test's child-start,
-receipt publication and actual owned runner exit; no core change. No merge/tag.
+receipt publication and actual owned runner exit; no core change. Controlled
+original red and synchronized green proven on3.12.14/local3.14.6 (not CI.7).
+edfcf65 test review clean/agent33 module each3.12/3.14/Bash259 pass.
+Root integration Bash259 passed;33 service tests FAILED1/32.435s at the
+neighboring before-gate crash waiter598 (ambiguous !=dead). Concurrent Bash
+alone is not causal proof. Isolated test-only exactdead wait repair retains
+the5s boundary and all before-gate/exact-once assertions; no core edit.
+Independent review/root rerun pending. No merge/tag.
 
 ## Accepted gates — do not repeat unchanged
 
