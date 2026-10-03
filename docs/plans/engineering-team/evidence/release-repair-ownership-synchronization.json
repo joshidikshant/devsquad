@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-02",
+  "scope": "Test-only positive delivery runner-death and blocked-ownership phase synchronization; no core edits or whole-suite rerun.",
+  "baseline_revision": "f40c618caefd100637c4686660673e159899ecb7",
+  "branch": "codex/release-repair-ownership-sync",
+  "preserved_branch": "codex/release-runner-exit-sync",
+  "test_blob": "7723f6ce3b23f715a4a20a38fe5bb59c1ce23bee",
+  "test_diff_sha256": "a3c19e9398adab6ac27526cf6d4e27a0d63fbf371cd576619c230259bf28eef5",
+  "public_CI_failure": {
+    "reported_by": "root",
+    "run_id": "37086958301",
+    "head_sha": "f40c618caefd100637c4686660673e159899ecb7",
+    "python": "3.11.9",
+    "tests_before_failfast_stop": 137,
+    "seconds": 191.313,
+    "failures": 1,
+    "errors": 0,
+    "skips": 0,
+    "unraisable": 0,
+    "test": "test_delivery_workflow.DeliveryWorkspaceTest.test_killed_repair_supervisor_never_launches_a_duplicate_writer",
+    "assertion": "ownership_ambiguous != retain_ownership at original line1001",
+    "other_jobs_at_assignment": "Bash and optional MCP passed; Python3.14 remained active. This agent did not cancel or mutate any CI job.",
+    "later_python314_outcome_reported_by_root": {"version": "3.14.7", "job_id": "111099154216", "tests": 604, "seconds": 697.362, "failures": 0, "errors": 0, "skips": 2, "unraisable": 0},
+    "workflow_outcome": "failed because Python3.11.9 failed; Python3.14.7 success is not exact-next-head workflow acceptance"
+  },
+  "cause": "Despite the historical test name, attempt.pid is the durable attempt_runner, NOT the detached coordinator or writer. After runner SIGKILL the surviving coordinator asynchronously reaps and imports, publishing blocked/recovery_required plus the original attempt's ownership_ambiguous status while the child may remain live. The test assumed .1s implied that phase was persisted. Service.resume called while still running first performs import_durable and returns ownership_ambiguous/launchedfalse; only the already-blocked branch validates and returns the typed retain_ownership disposition. The safety response is correct; the test's ordering assumption is not.",
+  "controlled_diagnostic": {
+    "helper_sha256": "498cebc1019a62551ff52f84318a88ca4fbcfbee14154c0e326cfe5d78431262",
+    "scope": "Private Popen scheduling wrapper only for frozen devsquad.detached coordinator argv. Exact frozen PYTHONPATH/package digest and worker commands remain unchanged. The spawned coordinator's in-memory import method pauses only on the original third implementer after wait_durable has reaped the killed runner, then calls its unchanged original importer.",
+    "synchronization": "Atomically publish exact ready JSON via temporary+replace. Parent establishes ready identity and actual original runner dead. Old test proceeds to one typed request while run is definitely running. Repaired pure status waiter first observes actual running, releases the private gate, then observes genuine coordinator blocked publication before its one typed request. Cleanup releases the gate, waits import DONE, and cancels the fixture before temporary removal. No numeric coordinator signals or classifier/state forcing.",
+    "original_source": "--original loads only the exact original method AST from git show f40c618caefd100637c4686660673e159899ecb7:test/core/test_delivery_workflow.py without modifying checkout files.",
+    "original_red": {
+      "python312": {"version": "3.12.14", "tests": 1, "seconds": 3.868, "failures": 1, "errors": 0},
+      "python314": {"version": "3.14.6", "tests": 1, "seconds": 4.334, "failures": 1, "errors": 0},
+      "observation_both": {"before_state": "running", "before_phase": null, "before_attempt_status": "running", "runner": "dead", "typed_calls": 1, "disposition": "ownership_ambiguous", "launched": false},
+      "assertion": "same ownership_ambiguous != retain_ownership at original1001"
+    },
+    "corrected_green": {
+      "python312": {"version": "3.12.14", "tests": 1, "seconds": 3.665, "failures": 0, "errors": 0},
+      "python314": {"version": "3.14.6", "tests": 1, "seconds": 3.814, "failures": 0, "errors": 0},
+      "observation_both": {"before_state": "blocked", "before_phase": "recovery_required", "before_attempt_status": "ownership_ambiguous", "runner": "dead", "typed_calls": 1, "disposition": "retain_ownership", "launched": false}
+    }
+  },
+  "rejected_diagnostics_retained": [
+    {
+      "method": "Stop coordinator before killing runner, then wait runner dead.",
+      "outcome": "Invalid phase seam: stopped parent cannot reap its runner zombie; inspector never reached confirmed dead. Failed1 fixture each on3.12.14/8.295s and3.14.6/8.401s, with no typed call. Cleanup resumed the owned coordinator and cancelled. Not claimed as matching CI red."
+    },
+    {
+      "method": "First reaped-coordinator gate without waiting import DONE before cleanup cancellation.",
+      "outcome": "Matching assertion reproduced, but3.12 teardown concurrently resumed the coordinator importer and cancelled; cleanup raised ConflictError recovery cancellation is not active (1 expected failure+1 cleanup error/3.461s).3.14 had1 expected failure/no errors/3.569s. This unsuitable harness is not accepted as the clean red gate; diagnostic cleanup now positively waits DONE. The observed overlap is retained for separate root triage, without a core edit or broader product conclusion."
+    },
+    {
+      "method": "Ready JSON initially used direct write_text.",
+      "outcome": "Independent review identified potential file-visible-before-full-JSON race; corrected to atomic temporary+replace before final repeated red/green. No product/test source change from this correction."
+    }
+  ],
+  "repair": {
+    "changed_file": "test/core/test_delivery_workflow.py only",
+    "phase_wait": "Replace fixed.1s sleep with bounded5s pure status/current-attempt/strong-runner-identity polling. Require dead original runner, blocked/recovery_required, same id/token/pid/pgid/start identity and ownership_ambiguous before the sole typed retain request.",
+    "bounds": "Original3s repair fixture and10s child-start wait are unchanged. No retry-until-success, alternative success disposition, provider delay widening or product timeout change.",
+    "preserved_and_strengthened": "No exit receipt; launchedfalse and exact retain_ownership; exactly implementer/reviewer/implementer attempts, original final id/token and3 worker invocations; run remains blocked until cancel; cancellation must be exactly cancelled; source checkout/index/HEAD/remotes remain unchanged. Comment distinguishes runner from coordinator without renaming the historical CI case."
+  },
+  "affected_module_gates": {
+    "environment": "PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=error::ResourceWarning PYTHONPATH=plugin/core/src:test/core",
+    "command": "INTERPRETER -B -m unittest test_delivery_workflow test_service -q",
+    "modules": {"delivery_workflow": 19, "service": 33},
+    "python312": {"version": "3.12.14", "tests": 52, "seconds": 82.966, "failures": 0, "errors": 0, "skips": 0},
+    "python314": {"version": "3.14.6", "tests": 52, "seconds": 86.973, "failures": 0, "errors": 0, "skips": 0}
+  },
+  "independent_review": {
+    "reviewer": "r6_readiness",
+    "source_review": "clean; pure phase poll and all same-attempt/no-new-writer/cancel/source assertions preserved or strengthened",
+    "real_cases": ["test_killed_repair_supervisor_never_launches_a_duplicate_writer", "test_live_implementer_cannot_be_resumed_into_a_second_writer", "test_cancelled_repair_retains_prior_candidate_attempts_and_disposition"],
+    "python312": {"version": "3.12.14", "tests": 3, "seconds": 10.469, "failures": 0, "errors": 0},
+    "python314": {"version": "3.14.6", "tests": 3, "seconds": 11.505, "failures": 0, "errors": 0},
+    "final_helper_review_and_gate": "Current corrected atomic-ready/DONE-ordered helper red/green independently confirmed; frozen product/test diff remains clean. No wider product conclusion inferred from rejected diagnostic cleanup overlap."
+  },
+  "core_tree_unchanged": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+  "other_gates": {
+    "bash": {"command": "PYTHONDONTWRITEBYTECODE=1 /bin/bash test/run.sh", "test_files": 11, "assertions": 259, "failures": 0, "legacy_assertions": 50},
+    "watchdog_seconds": {"fast": 0.292, "ignored_TERM": 0.216, "early_cancel": 0.223, "tree": 2, "resistant": 3.257, "slow_probe": 1.306},
+    "generated_reference": "current",
+    "JSON_and_diff": "pass"
+  },
+  "limitations": "Local proof uses3.12.14 and3.14.6, not public3.11.9/3.14.7. No full604 suite, provider/native request, installation, publication, global settings or root edits. Root owns integration, separate diagnostic-overlap triage and the next exact-head public CI gate."
+}

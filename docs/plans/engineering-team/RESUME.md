@@ -34,17 +34,31 @@ public CI pending. No merge/tag.
 Corrected remote candidate f40c618caefd100637c4686660673e159899ecb7 is now
 pushed; PR CI37086958301: Bash/MCP passed, Python3.11.9 FAILED137/191.313s
 at delivery repair recovery1001 (ownership_ambiguous !=retain_ownership).
-Python3.14 still active, not accepted; duplicate push37086954389 cancelled.
-Freeze this exact remote candidate. Any later local docs-only checkpoint is
-recovery metadata, not a change to the tested/publication target. Root must
-merge/tag the remotely tested f40 candidate, then record published outcomes.
+Python3.14.7 passed604/697.362s/twoSDKskips/no failures/errors/unraisable;
+whole f40 workflow failed311 and is not accepted. Duplicate push cancelled.
+f40 is rejected as a publication candidate by that failed311 job. Retain it
+as source baseline only. Next integrate the narrow delivery fixture repair,
+push a new exact candidate and require final public gates before merge/tag.
+Later docs-only checkpoints are recovery metadata, not publication targets.
 
 New bounded isolated repair: test SIGKILLs attempt_runner, not coordinator,
 then assumes.1s implies blocked. Correct running import returns safe
 ownership_ambiguous before typed blocked recovery. Positively wait for the
 same dead runner and blocked/current attempt ownership_ambiguous before one
 explicit retain request. Preserve exactly3 attempts/no new writer/launchedfalse/
-source/cancel assertions; no core edit. Independent review pending. No merge.
+source/cancel assertions; no core edit.893490a phasefix is now integrated,
+exact7723f6ce reviewed blob. Agent52 delivery/service tests pass each3.12/3.14;
+root19 delivery tests48.911s pass; unchanged service33/29.820s already passed.
+Final root Bash passed259 assertions/11files (50 focused), reference/JSON/
+staged+unstaged diff checks passed. Checkpoint/push and exact-head public CI
+remain. No merge.
+
+Rejected private diagnostic RELEASE+cancel cleanup overlapped import and
+raised stale-phase ConflictError. Independent read-only triage: fail-closed
+completion fence, no duplicate-writer/false-cancel evidence. No error-time
+ledger snapshot proves ordering/final rows/lost-intent liveness; retain as
+diagnostic concurrency-conflict / possible follow-up, not confirmed defect.
+Corrected helper waits import DONE before teardown; no product edit/probes.
 
 ## Accepted gates — do not repeat unchanged
 
@@ -101,7 +115,7 @@ released run its normal scoped plugin updater and verify0.11.0.
 
 1. Root integrated watchdog Bash259/affected45/reference/diff/JSON gates pass.
    Both receipt/dead-wait test repairs are integrated/reviewed; root33 passes.
-   Finish Bash/JSON/reference/diff checks and checkpoint the corrected candidate.
+   Final Bash/JSON/reference/diff checks passed; checkpoint the corrected candidate.
    Core source/full/native/installed gates need no unchanged repeat.
 2. Push codex/engineering-team, require final exact-head public CI green:
    legacy Bash3.2, core Python3.11 and3.14, optional MCP. Earlier CI

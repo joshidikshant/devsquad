@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-10-02",
-  "status": "public_ci_delivery_blocked_phase_test_repair_in_progress",
+  "status": "delivery_phase_corrected_root_gate_passed_next_public_ci_pending",
   "authorization": "User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
   "pull_request": "https://github.com/joshidikshant/devsquad/pull/1",
   "frozen_core_candidate": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
@@ -161,7 +161,7 @@
     "antigravity": "agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope",
     "whole_plan": "not complete"
   },
-  "remaining": "Finish independently reviewed delivery blocked-phase fixture correction and relevant/root Bash gates, retain this failure. Require final public platform verification, merge PR1 and publish verified exact-merge assets; current runtime/native/install/agy proof source-equivalent and unchanged. No more Council/provider attempts.",
+  "remaining": "Final Bash/JSON/reference/diff checks passed. Checkpoint and push delivery-test-corrected candidate. Require all final exact-head public CI jobs green; merge PR1, publish exact-merge verified v0.11.0 assets, scoped local Claude plugin update. Preserve unconfirmed diagnostic concurrency follow-up plus original Council/desktop/MCP reconnect residuals separately.",
   "integrated_legacy_gate": {
     "source_checkpoint": "3fdc6bd065c577a9ed59566573fdce399e9b585a",
     "adapter_blob": "1847357c19677f276b06886386e2ac93e586b203",
@@ -284,7 +284,7 @@
     "run_id": 37086958301,
     "url": "https://github.com/joshidikshant/devsquad/actions/runs/37086958301",
     "head": "f40c618caefd100637c4686660673e159899ecb7",
-    "status": "failed_python311;python314_still_running_not_accepted",
+    "status": "completed_failed_python311;python314_passed604",
     "duplicate_push_run": 37086954389,
     "duplicate_push_status": "cancelled",
     "core_runtime_and_plugin_payloads_unchanged": true,
@@ -304,6 +304,64 @@
       "assertion": "ownership_ambiguous != retain_ownership",
       "status": "failed_not_accepted"
     },
-    "diagnosis": "Test kills attempt_runner, not live detached coordinator. Fixed.1s sleep does not establish coordinator's blocked/ownership_ambiguous projection. Running resume correctly imports/blocks and returns ownership_ambiguous; typed retain applies only once blocked. Positive phase/dead-original-runner/same-attempt synchronization repair in isolated test only; independent review underway. No runtime/source edit from this observation."
+    "diagnosis": "Test kills attempt_runner, not live detached coordinator. Fixed.1s sleep does not establish coordinator's blocked/ownership_ambiguous projection. Running resume correctly imports/blocks and returns ownership_ambiguous; typed retain applies only once blocked. Positive phase/dead-original-runner/same-attempt synchronization repair in isolated test only; independent review underway. No runtime/source edit from this observation.",
+    "python314": {
+      "version": "3.14.7",
+      "job_id": 111099154216,
+      "tests": 604,
+      "seconds": 697.362,
+      "failures": 0,
+      "errors": 0,
+      "skips": 2,
+      "unraisable": [],
+      "status": "passed_on_prior_f40_not_next_candidate_acceptance"
+    }
+  },
+  "delivery_phase_correction": {
+    "source_checkpoint": "893490a2dbd8fa4f48624d1ae0fe33ca106f63fe",
+    "test_blob": "7723f6ce3b23f715a4a20a38fe5bb59c1ce23bee",
+    "independent_review": "clean; committed source exactly reviewed, no product edits",
+    "agent_combined_modules": {
+      "tests": 52,
+      "python312_seconds": 82.966,
+      "python314_seconds": 86.973,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "root_delivery": {
+      "tests": 19,
+      "seconds": 48.911,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "unchanged_service_root_gate": "33/29.820s passed on exact same5456e21 test blob",
+    "core_unchanged": true,
+    "evidence": "evidence/release-repair-ownership-synchronization.json",
+    "root_final_bash": {
+      "assertions": 259,
+      "files": 11,
+      "focused_legacy_assertions": 50,
+      "failures": 0,
+      "exec_session": 89228,
+      "timings_seconds": {
+        "fast": 0.299,
+        "ignored_TERM": 0.228,
+        "pre_open_cancel": 0.225,
+        "TERM_resistant": 3.296,
+        "slow_ps": 1.323
+      }
+    },
+    "reference_json_staged_unstaged_diff": "passed",
+    "next_public_ci": "pending"
+  },
+  "diagnostic_cleanup_overlap_triage": {
+    "source": "independent read-only code/output triage; no new probes",
+    "observation": "Rejected diagnostic RELEASE plus immediate cancellation produced ConflictError recovery cancellation is not active",
+    "classification": "fail-closed stale-phase completion fence; not evidence of duplicate writers or false cancellation success",
+    "possible_interleaving": "Concurrent importer can reset cancelling attempt to blocked while cancel_orphan completion requires cancelling/recovery_cleanup; no exact ordering claimed",
+    "missing_evidence": "No error-time DB/events snapshot; final rows or a lost-intent liveness defect cannot be established",
+    "disposition": "retain diagnostic concurrency-conflict / possible liveness follow-up, not confirmed unsafe product finding or passing gate; corrected helper awaits import DONE before fixture cleanup"
   }
 }

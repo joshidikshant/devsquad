@@ -22,6 +22,7 @@ from devsquad.claude_delivery_worker import (
 )
 from devsquad.service import Service
 from devsquad.store import ConflictError, Store, request_hash
+from devsquad.supervisor import inspect_process
 from devsquad.workspaces import (
     freeze_delivery_candidate,
     prepare_delivery_workspace,
@@ -991,8 +992,27 @@ class DeliveryWorkspaceTest(unittest.TestCase):
             time.sleep(0.02)
         if attempt is None:
             self.fail("repair writer did not publish its child identity")
+        # The attempt pid is the runner, not the still-live detached coordinator.
         os.kill(attempt["pid"], signal.SIGKILL)
-        time.sleep(0.1)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            status = service.status(started["run_id"])
+            store = Store(service.database, service.artifacts)
+            try:
+                current = store.attempt(started["run_id"])
+                for field in ("id", "attempt_token", "pid", "pgid", "process_start_id"):
+                    self.assertEqual(current[field], attempt[field])
+            finally:
+                store.close()
+            if (inspect_process(attempt["pid"], attempt["pgid"], attempt["process_start_id"]) == "dead"
+                    and status["state"] == "blocked"
+                    and status["phase"] == "recovery_required"
+                    and current["status"] == "ownership_ambiguous"):
+                break
+            time.sleep(0.02)
+        else:
+            self.fail("killed repair runner did not reach blocked ownership recovery")
+        self.assertFalse(Path(attempt["exit_record"]).exists())
         recovered = Service(self.runtime).resume(
             started["run_id"],
             {"attempt_id": attempt["id"], "disposition": "retain_ownership"},
@@ -1006,6 +1026,10 @@ class DeliveryWorkspaceTest(unittest.TestCase):
                 [item["role"] for item in attempts],
                 ["implementer", "reviewer", "implementer"],
             )
+            self.assertEqual(attempts[-1]["id"], attempt["id"])
+            self.assertEqual(attempts[-1]["attempt_token"], attempt["attempt_token"])
+            self.assertEqual(store.worker_invocations(started["run_id"]), 3)
+            self.assertEqual(store.run(started["run_id"])["state"], "blocked")
         finally:
             store.close()
         cancelled = service.cancel(started["run_id"])
