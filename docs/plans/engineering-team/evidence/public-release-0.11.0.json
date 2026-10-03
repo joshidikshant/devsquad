@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-10-02",
-  "status": "delivery_phase_corrected_root_gate_passed_next_public_ci_pending",
+  "status": "delivery_phase_corrected_final_exact_head_public_ci_active",
   "authorization": "User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
   "pull_request": "https://github.com/joshidikshant/devsquad/pull/1",
   "frozen_core_candidate": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
@@ -161,7 +161,7 @@
     "antigravity": "agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope",
     "whole_plan": "not complete"
   },
-  "remaining": "Final Bash/JSON/reference/diff checks passed. Checkpoint and push delivery-test-corrected candidate. Require all final exact-head public CI jobs green; merge PR1, publish exact-merge verified v0.11.0 assets, scoped local Claude plugin update. Preserve unconfirmed diagnostic concurrency follow-up plus original Council/desktop/MCP reconnect residuals separately.",
+  "remaining": "Corrected8488ed4 pushed; final PR CI37088621735 active. Require all four exact-head public CI jobs green; merge PR1, publish exact-merge verified v0.11.0 assets, scoped local Claude plugin update. Preserve unconfirmed diagnostic concurrency follow-up plus original Council/desktop/MCP reconnect residuals separately.",
   "integrated_legacy_gate": {
     "source_checkpoint": "3fdc6bd065c577a9ed59566573fdce399e9b585a",
     "adapter_blob": "1847357c19677f276b06886386e2ac93e586b203",
@@ -354,7 +354,21 @@
       }
     },
     "reference_json_staged_unstaged_diff": "passed",
-    "next_public_ci": "pending"
+    "next_public_ci": "37088621735_active_on8488ed44ee30c7fa5b2c20370827093715130d36"
+  },
+  "publication_candidate_ci": {
+    "head": "8488ed44ee30c7fa5b2c20370827093715130d36",
+    "run_id": 37088621735,
+    "url": "https://github.com/joshidikshant/devsquad/actions/runs/37088621735",
+    "status": "active_not_yet_accepted",
+    "duplicate_push_run": 37088621359,
+    "duplicate_push_status": "completed_cancelled",
+    "legacy": "completed_success",
+    "optional_mcp": "completed_success",
+    "required": ["Legacy Bash 3.2", "Core Python 3.11", "Core Python 3.14", "Optional MCP 2.2.0"],
+    "core_tree": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+    "plugin_tree": "940e792825cca45d82135bc1caf738924b1d176c",
+    "later_local_docs_checkpoints": "Recovery metadata only; do not merge/tag an untested changed remote head"
   },
   "diagnostic_cleanup_overlap_triage": {
     "source": "independent read-only code/output triage; no new probes",

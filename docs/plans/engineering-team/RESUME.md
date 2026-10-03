@@ -53,6 +53,13 @@ Final root Bash passed259 assertions/11files (50 focused), reference/JSON/
 staged+unstaged diff checks passed. Checkpoint/push and exact-head public CI
 remain. No merge.
 
+Corrected candidate8488ed44ee30c7fa5b2c20370827093715130d36 is pushed.
+Final PR CI37088621735 is active; duplicate push37088621359 cancelled.
+Freeze this exact remote head until all four jobs succeed. Subsequent local
+documentation checkpoints are recovery notes, not a new publication target.
+Merge only the exact tested remote head, verify identical merged tree, then
+create v0.11.0 assets/tag from the exact merge commit. No tag/release yet.
+
 Rejected private diagnostic RELEASE+cancel cleanup overlapped import and
 raised stale-phase ConflictError. Independent read-only triage: fail-closed
 completion fence, no duplicate-writer/false-cancel evidence. No error-time
@@ -113,11 +120,10 @@ released run its normal scoped plugin updater and verify0.11.0.
 
 ## Exact next action
 
-1. Root integrated watchdog Bash259/affected45/reference/diff/JSON gates pass.
-   Both receipt/dead-wait test repairs are integrated/reviewed; root33 passes.
-   Final Bash/JSON/reference/diff checks passed; checkpoint the corrected candidate.
+1. Final corrected remote head8488ed4 is frozen; final PR CI37088621735
+   is active. All root affected/Bash/reference/JSON/diff gates passed.
    Core source/full/native/installed gates need no unchanged repeat.
-2. Push codex/engineering-team, require final exact-head public CI green:
+2. Require final exact-head public CI green:
    legacy Bash3.2, core Python3.11 and3.14, optional MCP. Earlier CI
    37082086201/37082130929 was cancelled after true legacy failure; optional
    MCP passed, cancelled core is NOT accepted. Core now fetches full history
