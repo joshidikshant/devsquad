@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from .contracts import ContractError
 
-TASK_FIELDS = {"schema_version", "project", "workflow", "goal", "task_class", "acceptance", "checks", "scope", "lead", "routing", "budget", "origin", "review"}
+TASK_FIELDS = {"schema_version", "project", "workflow", "goal", "task_class", "acceptance", "checks", "scope", "lead", "routing", "budget", "origin", "review", "council"}
 MAX_ACCEPTANCE_CRITERIA = 100
 MAX_CHECKS = 16
 MAX_SCOPE_PATHS = 256
@@ -28,9 +28,14 @@ def _relative(path: str, label: str) -> None:
 
 
 def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False) -> None:
-    _exact(value, TASK_FIELDS, TASK_FIELDS - {"review"}, "task")
-    if type(value["schema_version"]) is not int or value["schema_version"] != 1 or not isinstance(value["workflow"], str) or value["workflow"] not in {"branch-review", "issue-delivery"}:
+    _exact(value, TASK_FIELDS, TASK_FIELDS - {"review", "council"}, "task")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1 or not isinstance(value["workflow"], str) or value["workflow"] not in {"branch-review", "issue-delivery", "council-decision"}:
         raise ContractError("unsupported task schema or workflow")
+    if value["workflow"] == "council-decision":
+        from .council import validate_spec
+        validate_spec(value.get("council"))
+    elif "council" in value:
+        raise ContractError("CouncilSpec requires the council-decision workflow")
     project = value["project"]
     _exact(project, {"repo_path", "base_ref", "target_ref"}, {"repo_path", "base_ref", "target_ref"}, "project")
     if not all(isinstance(project[k], str) and project[k] for k in ("repo_path", "base_ref", "target_ref")) or not Path(project["repo_path"]).is_absolute() or (require_existing_repo and not (Path(project["repo_path"]) / ".git").exists()):
@@ -76,7 +81,7 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
     if len(scope["read_paths"]) + len(scope["write_paths"]) > MAX_SCOPE_PATHS: raise ContractError("scope paths exceed their bound")
     if len(set(scope["read_paths"])) != len(scope["read_paths"]) or len(set(scope["write_paths"])) != len(scope["write_paths"]): raise ContractError("scope paths must be unique")
     for p in scope["read_paths"] + scope["write_paths"]: _relative(p, "scope path")
-    if value["workflow"] == "branch-review" and scope["write_paths"]: raise ContractError("branch review cannot write")
+    if value["workflow"] in {"branch-review", "council-decision"} and scope["write_paths"]: raise ContractError("read-only workflow cannot write")
     lead = value["lead"]; _exact(lead, {"mode"}, {"mode"}, "lead")
     if not isinstance(lead["mode"], str) or lead["mode"] not in {"host", "headless"}: raise ContractError("invalid lead mode")
     routing = value["routing"]
@@ -102,7 +107,7 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
     overrides = routing.get("overrides", {})
     if not isinstance(overrides, dict): raise ContractError("routing overrides must be an object")
     for role, override in overrides.items():
-        if role not in {"implementer", "reviewer", "lead", "researcher"}: raise ContractError("invalid override role")
+        if role not in {"implementer", "reviewer", "lead", "researcher", "proposer_a", "proposer_b", "critic"}: raise ContractError("invalid override role")
         _exact(override, {"profile_id", "fallback"}, {"profile_id"}, "routing override")
         if not isinstance(override["profile_id"], str) or not override["profile_id"]: raise ContractError("override profile_id must be non-empty")
         if not isinstance(override.get("fallback", "none"), str) or override.get("fallback", "none") not in {"none", "policy"}: raise ContractError("override fallback must be none or policy")
@@ -118,6 +123,14 @@ def validate_task(value: dict[str, Any], *, require_existing_repo: bool = False)
     for key, number in budget.items():
         if not isinstance(number, int) or isinstance(number, bool) or number < 0: raise ContractError(f"budget {key} must be a finite non-negative integer")
     if budget["wall_seconds"] == 0 or budget["max_worker_invocations"] == 0: raise ContractError("wall_seconds and max_worker_invocations must be positive")
+    if value["workflow"] == "council-decision":
+        minimum = 4 if lead["mode"] == "headless" else 3
+        if budget["max_worker_invocations"] < minimum or budget["max_worker_invocations"] > value["council"]["max_invocations"]:
+            raise ContractError("Council worker budget must fit the explicit Council invocation cap")
+        if budget["max_revisions"] != 0:
+            raise ContractError("bounded Council supports one round; additional rounds need a new capped run")
+        if "review" in value:
+            raise ContractError("Council uses its frozen rubric, not branch-review options")
 
 
 def validate_profile(value: dict[str, Any]) -> None:
@@ -171,7 +184,7 @@ def validate_policy(value: dict[str, Any]) -> None:
     if type(value["schema_version"]) is not int or value["schema_version"] != 1 or type(value["version"]) is not int or value["version"] < 1: raise ContractError("invalid policy version")
     if not isinstance(value["id"], str) or not value["id"]: raise ContractError("policy id must be non-empty")
     if type(value["require_different_model_for_review"]) is not bool or ("prefer_different_harness_for_review" in value and type(value["prefer_different_harness_for_review"]) is not bool): raise ContractError("policy review flags must be boolean")
-    if not isinstance(value["roles"], dict) or set(value["roles"]) - {"implementer", "reviewer", "lead", "researcher"}: raise ContractError("invalid policy roles")
+    if not isinstance(value["roles"], dict) or set(value["roles"]) - {"implementer", "reviewer", "lead", "researcher", "proposer_a", "proposer_b", "critic"}: raise ContractError("invalid policy roles")
     for candidates in value["roles"].values():
         if not isinstance(candidates, list) or not candidates: raise ContractError("role candidates must be non-empty arrays")
         for ref in candidates:

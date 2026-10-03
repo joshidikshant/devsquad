@@ -79,7 +79,8 @@ def discover_codex_identity(
     requested_effort: str | None = None,
     timeout_seconds: int = 15,
     runtime: Path | None = None,
-) -> dict[str, str]:
+    all_models: bool = False,
+) -> dict[str, str] | list[dict[str, str]]:
     """Discover one currently available exact Codex model without generating."""
 
     manifest = AdapterManifest.load(CORE_ROOT / "adapters/codex/adapter.json")
@@ -164,6 +165,18 @@ def discover_codex_identity(
     if not candidates:
         qualifier = requested_model or "any model with effort metadata"
         raise ContractError(f"Codex model is unavailable: {qualifier}")
+    if all_models:
+        identities = []
+        for candidate in sorted(candidates, key=lambda item: not item["is_default"]):
+            efforts = candidate["supported_efforts"]
+            if requested_effort is not None and requested_effort not in efforts:
+                continue
+            family = candidate.get("family")
+            identities.append({"harness": "codex", "harness_version": version,
+                "model_id": candidate["id"], "model_family": family if isinstance(family, str) and family else "gpt",
+                "effort": requested_effort or next((value for value in ("low", "medium") if value in efforts), efforts[0]),
+                **({"account_pool_id": pool_id, "native_scope": scope, "catalog_fingerprint": candidate["fingerprint"]} if scope is not None else {})})
+        return identities
     selected = next(
         (model for model in candidates if model["is_default"]),
         candidates[0],

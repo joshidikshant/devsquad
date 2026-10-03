@@ -105,6 +105,13 @@ class MCPBridge:
         bound["origin"] = origin
         return bound
 
+    def _saved_read_response(self, operation: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+        def guarded():
+            if self.environment.get("DEVSQUAD_COUNCIL_ROLE", ""):
+                raise PolicyDenied("Council worker sessions cannot read saved team artifacts, events or handoff provenance")
+            return operation()
+        return self._response(guarded)
+
     def start(
         self,
         task: dict[str, Any],
@@ -129,14 +136,14 @@ class MCPBridge:
     def status(self, run_id: str) -> dict[str, Any]:
         """Inspect the current projection for a saved run."""
 
-        return self._response(lambda: self.service.status(run_id))
+        return self._saved_read_response(lambda: self.service.status(run_id))
 
     def events(
         self, run_id: str, after: int = 0, limit: int = 100,
     ) -> dict[str, Any]:
         """Read one bounded event page using its durable integer cursor."""
 
-        return self._response(lambda: self.service.events(run_id, after, limit))
+        return self._saved_read_response(lambda: self.service.events(run_id, after, limit))
 
     def result(
         self, run_id: str, preview_bytes: int = 4096,
@@ -180,7 +187,7 @@ class MCPBridge:
                 artifacts.append(artifact)
             return {**result, "artifacts": artifacts, "preview_bytes": preview_bytes}
 
-        return self._response(operation)
+        return self._saved_read_response(operation)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         """Persist cancellation intent without observing worker completion."""

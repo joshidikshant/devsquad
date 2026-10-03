@@ -202,6 +202,66 @@ Every surface uses these operations directly or through the thin local MCP
 bridge described in [MCP-LOCAL-ACCESS.md](plans/engineering-team/MCP-LOCAL-ACCESS.md).
 Closing an app does not cancel the detached run.
 
+## Manual Council (partial source implementation)
+
+Council reuses the saved runner with two independent read-only proposers, a
+distinct critic and the existing sole lead. Automatic triggering is always off;
+there is one round and no internal retry. Prepare a scoped question without task
+JSON:
+
+```bash
+squad council "Which retry policy avoids duplicate side effects?" \
+  --read-path src/retry.py --lead host --max-invocations 3 --dry-run
+```
+
+Inspect the exact commits, read scope, rubric, checks and three catalog model
+identities. Repeat `--model MODEL_ID` exactly three times to pin `proposer_a`,
+`proposer_b` and critic; catalog availability is not tested quality qualification.
+`--criterion ID=DESCRIPTION`, `--evidence ARTIFACT_ID:SHA256` and `--check COMMAND`
+freeze explicit rubric, saved evidence and bounded checks. Preparation performs
+no generation. Remove `--dry-run` only after doctor and per-run capability gates
+are satisfied.
+
+Native Council currently fails closed before any role generation:
+`native_ready:false` means a genuine nongenerating backend response under the
+exact default-deny macOS sandbox has not been attested. Bootstrap or cached
+catalog success is not that proof. Unsupported operating systems have no unsafe
+fallback. Normal review/fix remain separate. Do not broaden filesystem/MCP
+access, bypass provider permissions or use a paid API to work around this gate.
+
+Once the gated workflow is available, a host-led run pauses with shuffled A/B
+proposals, criterion assessments, mandatory checks and retained dissent. Status
+does not choose a proposal or infer a disposition. Finish explicitly:
+
+```bash
+squad status RUN_ID
+squad finish RUN_ID --accept --choose synthesis \
+  --reason "Retain the idempotency and expiry safeguards." \
+  --supported-claim "Never retry a non-idempotent request blindly." \
+  --discarded-alternative "Blind retry without a stable key." \
+  --validation "Exercise duplicate requests and key-retention expiry."
+squad result RUN_ID
+```
+
+Choose `A`, `B` or `synthesis`; repeat supported/discarded flags as needed. Every
+critic objection remains in the decision. Reject with explicit assessment when
+appropriate; votes cannot override failed checks. Extra deliberation requires a
+new capped run, not `--revise`. `council-finish` is an explicit-choice alias;
+omitted IDs follow the same unique-current-project rule as normal finish.
+An interrupted guided finish exposes an exact retry command, including every
+choice input. Only the latest matching canonical guided claim can recover an
+expired fence; an app-owned claim, even named `terminal-operator`, cannot be
+adopted. A submitted decision continues with `squad resume RUN_ID`.
+
+The default headless lead uses four capped worker invocations, chooses only from
+validated saved evidence and continues its own handoff with `--wait` or resume;
+a host cannot claim it. Missing participants, invalid identities, quota,
+cancellation and check failures remain failures, never fabricated consensus.
+The retained predeclared matched/held-out public fixture comparison is
+inconclusive and proves mechanics only: native quality, escaped defects, rework
+and native allowance remain unknown. It authorizes no automatic use or model
+promotion.
+
 ## Recover or cancel
 
 Never delete the runtime database, an active release or a run-owned worktree
@@ -234,8 +294,13 @@ install a new source digest and retain the old directory for run evidence.
 
 ## Supported and deferred boundaries
 
-The current packaged contract is Python 3.11+, public JSON contract version 1,
-SQLite schema 16 and optional MCP SDK 2.2.0 exactly. Native Codex fixtures and
+The source candidate contract is Python 3.11+, public JSON contract version 1,
+SQLite schema 17 and optional MCP SDK 2.2.0 exactly. The accepted installed R5
+boundary remains schema 16 until an explicitly accepted Council update; R6
+source also uses epoch 16, with its own acceptance tracked separately. This
+guide does not claim that source Council is installed or live accepted. Epoch 17
+fences old clients that cannot understand Council handoff authority, and its
+installer defers on active or recoverable schema-16 work. Native Codex fixtures and
 recorded live proofs cover bundled `codex-cli 0.153.4` and
 `codex-cli 0.155.0-alpha.9.2`; the latter passed a fresh native initialize and
 complete model-catalog probe. The resolver prefers that verified bundled
@@ -280,5 +345,6 @@ transfer.
 
 The one authorized Jev pilot is recorded separately and runtime classification
 remains off; normal routing uses the deterministic zero-call path. Laya is not
-installed unless its declared trigger fires. C1 Council implementation and
-acceptance remain pending in the full engineering-team delivery.
+installed unless its declared trigger fires. C1 Council is implemented partially
+in source with offline process/isolation/epoch proofs; native backend attestation,
+live quality and final installed acceptance remain open.

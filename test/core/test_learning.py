@@ -20,7 +20,7 @@ from devsquad.learning import (
     validate_experiment,
     validate_outcome,
 )
-from devsquad.store import ConflictError, Store, canonical_json
+from devsquad.store import ConflictError, Store, canonical_json, SUPPORTED_SCHEMA_VERSION
 
 
 NOW = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc)
@@ -393,7 +393,7 @@ class LearningContractTest(unittest.TestCase):
                 store.connection.execute(
                     "SELECT MAX(version) FROM schema_migrations",
                 ).fetchone()[0],
-                16,
+                SUPPORTED_SCHEMA_VERSION,
             )
             columns = {
                 row[1] for row in store.connection.execute("PRAGMA table_info(outcomes)")

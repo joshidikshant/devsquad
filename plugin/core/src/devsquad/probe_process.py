@@ -166,6 +166,41 @@ def _close_direct_child(process: subprocess.Popen[Any], *, deadline: float) -> N
                 time.sleep(min(0.02, max(0, deadline - time.monotonic())))
 
 
+def wait_probe_exit(
+    process: subprocess.Popen[Any], *, start_identity: str | None, deadline: float,
+) -> None:
+    """Observe natural completion without reaping the group ownership anchor.
+
+    EOF does not imply child exit. Share the caller's probe deadline and use
+    WNOWAIT, or the exact retained zombie-child observation on older macOS,
+    before cleanup is allowed to terminate/reap the process group.
+    """
+    if start_identity is None or not isinstance(process, _POPEN_TYPE):
+        raise ContractError("diagnostic process ownership is unavailable")
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("diagnostic probe timed out")
+        with _reap_guard(process, deadline=deadline):
+            if process.returncode is not None:
+                raise ContractError("diagnostic process ownership anchor was already reaped")
+            observed = process_start_identity(process.pid)
+            if observed is not None and observed != start_identity:
+                raise ContractError("diagnostic process identity changed before natural exit")
+            waitid = getattr(os, "waitid", None)
+            if callable(waitid):
+                try:
+                    result = waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                except (OSError, AttributeError) as exc:
+                    raise ContractError("diagnostic process ownership is unavailable") from exc
+                exited = result is not None and result.si_pid == process.pid
+            else:
+                exited = _retained_child_anchor(process, deadline=deadline, locked=True)
+        if exited:
+            return
+        time.sleep(min(0.02, max(0, deadline - time.monotonic())))
+
+
 def close_probe(process: subprocess.Popen[Any], *, start_identity: str | None) -> None:
     """Stop the owned group, confirm no live members, reap and close streams.
 

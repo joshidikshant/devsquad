@@ -3,13 +3,14 @@
   "type": "object", "additionalProperties": false,
   "required": ["schema_version", "project", "workflow", "goal", "task_class", "acceptance", "checks", "scope", "lead", "routing", "budget", "origin"],
   "properties": {
-    "schema_version": {"const": 1}, "workflow": {"enum": ["branch-review", "issue-delivery"]},
+    "schema_version": {"const": 1}, "workflow": {"enum": ["branch-review", "issue-delivery", "council-decision"]},
     "goal": {"type": "string", "minLength": 1}, "task_class": {"type": "string", "minLength": 1},
     "project": {"$ref": "#/$defs/project"}, "acceptance": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"$ref": "#/$defs/acceptance"}},
     "checks": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/check"}}, "scope": {"$ref": "#/$defs/scope"},
     "lead": {"$ref": "#/$defs/lead"}, "routing": {"$ref": "#/$defs/routing"}, "budget": {"$ref": "#/$defs/budget"},
-    "origin": {"$ref": "#/$defs/origin"}, "review": {"$ref": "#/$defs/review"}
+    "origin": {"$ref": "#/$defs/origin"}, "review": {"$ref": "#/$defs/review"}, "council": {"$ref": "council.schema.json"}
   },
+  "allOf": [{"if": {"properties": {"workflow": {"const": "council-decision"}}}, "then": {"required": ["council"], "properties": {"budget": {"properties": {"max_revisions": {"const": 0}}}, "scope": {"properties": {"write_paths": {"maxItems": 0}}}}, "not": {"required": ["review"]}}, "else": {"not": {"required": ["council"]}}}],
   "$defs": {
     "project": {"type":"object","additionalProperties":false,"required":["repo_path","base_ref","target_ref"],"properties":{"repo_path":{"type":"string","pattern":"^/"},"base_ref":{"type":"string","minLength":1},"target_ref":{"type":"string","minLength":1}}},
     "acceptance": {"type":"object","additionalProperties":false,"required":["id","description","evidence_kind"],"properties":{"id":{"type":"string","minLength":1},"description":{"type":"string","minLength":1},"evidence_kind":{"enum":["review","check","artifact","host"]}}},
@@ -17,7 +18,7 @@
     "scope": {"type":"object","additionalProperties":false,"required":["read_paths","write_paths"],"properties":{"read_paths":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","minLength":1}},"write_paths":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","minLength":1}}}},
     "lead": {"type":"object","additionalProperties":false,"required":["mode"],"properties":{"mode":{"enum":["host","headless"]}}},
     "override": {"type":"object","additionalProperties":false,"required":["profile_id"],"properties":{"profile_id":{"type":"string","minLength":1},"fallback":{"enum":["none","policy"]}}},
-    "routing": {"type":"object","additionalProperties":false,"properties":{"profiles_file":{"type":"string","minLength":1},"policy_file":{"type":"string","minLength":1},"profiles":{"type":"object"},"policy":{"type":"object"},"overrides":{"type":"object","propertyNames":{"enum":["implementer","reviewer","lead","researcher"]},"additionalProperties":{"$ref":"#/$defs/override"}}},"oneOf":[{"required":["profiles_file","policy_file"],"not":{"anyOf":[{"required":["profiles"]},{"required":["policy"]}]}},{"required":["profiles","policy"],"not":{"anyOf":[{"required":["profiles_file"]},{"required":["policy_file"]}]}}]},
+    "routing": {"type":"object","additionalProperties":false,"properties":{"profiles_file":{"type":"string","minLength":1},"policy_file":{"type":"string","minLength":1},"profiles":{"type":"object"},"policy":{"type":"object"},"overrides":{"type":"object","propertyNames":{"enum":["implementer","reviewer","lead","researcher","proposer_a","proposer_b","critic"]},"additionalProperties":{"$ref":"#/$defs/override"}}},"oneOf":[{"required":["profiles_file","policy_file"],"not":{"anyOf":[{"required":["profiles"]},{"required":["policy"]}]}},{"required":["profiles","policy"],"not":{"anyOf":[{"required":["profiles_file"]},{"required":["policy_file"]}]}}]},
     "budget": {"type":"object","additionalProperties":false,"required":["wall_seconds","max_worker_invocations","max_revisions","max_fallbacks_per_step"],"properties":{"wall_seconds":{"type":"integer","minimum":1},"max_worker_invocations":{"type":"integer","minimum":1},"max_revisions":{"type":"integer","minimum":0},"max_fallbacks_per_step":{"type":"integer","minimum":0}}},
     "origin": {"type":"object","additionalProperties":false,"required":["surface"],"properties":{"surface":{"type":"string","minLength":1},"session_ref":{"type":"string","minLength":1}}},
     "review": {"type":"object","additionalProperties":false,"required":["mode"],"properties":{"mode":{"enum":["standard","adversarial"]},"focus":{"type":"string","minLength":1}}}

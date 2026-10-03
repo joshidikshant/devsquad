@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_package": "R6",
   "recorded_on": "2026-10-02",
-  "status": "ownership_repair_integrated_followup_final_full_install_pending",
+  "status": "ownership_and_eof_repair_integrated_final_acceptance_pending",
   "base_revision": "8f2c1c6a7d9edfe7cc3d78ecbc59ce105be636b2",
   "integrated_checkpoints": [
     "dd709804e70e0791614319a9ae5c2597768d7318",
@@ -14,8 +14,34 @@
     "22a4ed8ac85b95861f4ba9725ca729388b7a9f49",
     "31a8a68b59db3d0af136c5c18cb67fe5088c02b0",
     "e7e9042cbf4d1416209cf39e0269f7fa85479f4c",
-    "093ed0f397289bffe9ea249c10796cb436027f00"
+    "093ed0f397289bffe9ea249c10796cb436027f00",
+    "4f01456189b38252a678938e7197ac2f12a6838e"
   ],
+  "eof_followup": {
+    "run_id": "d2355cd0-603d-4e6a-b1a2-b05b0e99d53a",
+    "target_revision": "8242eff68b24538aacc1b40b67b2e88e96b04d52",
+    "candidate_sha256": "349e55d96ae9ba541973b9f8eef7cfd2f1c7ccfb3f0f3e8ec2525a42edb203c9",
+    "state": "failed", "version": 22, "host_disposition": "reject",
+    "finding": "R6-EOF-exit-status", "severity": "medium",
+    "identity": "verified codex-cli0.159.2/gpt-6.1-sol/low/read_only",
+    "diff_and_bash": "passed_verified",
+    "affected_check": {"tests":56,"seconds":27.584,"runner_result":"OK","acceptance":"invalidated_by_undeclared_bytecode"},
+    "bytecode_cause": "Controlled Python provider fixture children intentionally use a minimal environment and drop Python flags before importing core; parent _run_check already disabled bytecode. Repair uses -B only in controlled fixtures, with no native environment or integrity relaxation.",
+    "artifact_hashes_verified": [
+      "23f319dbae10d44740863fed2ff6b806d22fedb5984edcc870c546ecf87d560e",
+      "53f2cb30cd9c51dfe737506dccde3f6cb77fabafd38ac95f237233a96a2148c8",
+      "ab3081b7057c2f398136ec0e4b489ccb6e0cca2caf1e5375b4459c17b4d48abd",
+      "5da3c924eac152a7a381ab259f7422688af34feb391834a4df4fb2be641e7b50"
+    ],
+    "repair_revision": "4f01456189b38252a678938e7197ac2f12a6838e",
+    "repair": "Nonreaping natural completion under original deadline before owned cleanup; preserve true version/auth exit status and retained ownership anchor; hung EOF stays bounded and unknown",
+    "red": {"tests":3,"failures":4,"seconds":0.745},
+    "agent_gates": [{"python":"3.12","tests":40,"seconds":12.894},{"python":"3.14","tests":40,"seconds":13.398}],
+    "root_diagnostics": {"tests":34,"seconds":11.159,"failures":0,"errors":0,"resource_warnings":0},
+    "root_council_sdk_reconciliation": {"tests":8,"seconds":21.651,"failures":0,"errors":0},
+    "packaging_regression": {"red":{"tests":1,"seconds":2.657,"failures":1,"reason":"Council schema omitted from wheel"},"green":{"tests":1,"seconds":2.831,"failures":0,"errors":0},"scope":"actual plain installed wheel packages every source schema"},
+    "final_native_full_install": "pending"
+  },
   "contract": "SOL-REVIEW-FOLLOWUP R6/G3/G4; unchanged low-level MCP envelopes, fenced host disposition, Bash 3.2 and optional jq",
   "implemented": [
     "Readable normal terminal commands; --json retains the versioned automation envelope",

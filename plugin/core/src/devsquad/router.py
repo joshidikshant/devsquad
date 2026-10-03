@@ -23,10 +23,12 @@ ROLE_PERMISSIONS = {
     "reviewer": "read_only",
     "lead": "read_only",
     "researcher": "read_only",
+    "proposer_a": "read_only", "proposer_b": "read_only", "critic": "read_only",
 }
 WORKFLOW_ROLES = {
     "branch-review": ("reviewer",),
     "issue-delivery": ("implementer", "reviewer"),
+    "council-decision": ("proposer_a", "proposer_b", "critic"),
 }
 CAPACITY_STATES = {"available", "exhausted", "unknown"}
 CAPACITY_EVIDENCE_FIELDS = {
@@ -361,6 +363,7 @@ def resolve_routing(
 
     selected_roles: dict[str, Any] = {}
     implementer = None
+    council_models = set()
     max_fallbacks = task["budget"]["max_fallbacks_per_step"]
     for role in roles:
         eligible, excluded, has_static_candidate = _policy_candidates(
@@ -372,6 +375,15 @@ def resolve_routing(
             capacity,
             implementer,
         )
+        if role in {"proposer_a", "proposer_b", "critic"}:
+            reused = [item for item in eligible if item["profile"]["model_id"].casefold() in council_models]
+            excluded.extend({"profile_id": item["profile_id"], "reason": "Council model identity already allocated"} for item in reused)
+            eligible = [item for item in eligible if item not in reused]
+            # Distinct model IDs are mandatory; qualified cross-family choices
+            # are a preference, not a requirement for a third provider.
+            families = {entry["selected"]["profile"]["model_family"].casefold() for key, entry in selected_roles.items()
+                        if key in {"proposer_a", "proposer_b", "critic"}}
+            eligible.sort(key=lambda item: item["profile"]["model_family"].casefold() in families)
         override = overrides.get(role)
         selected = None
         source = "automatic"
@@ -384,6 +396,8 @@ def resolve_routing(
                 raise ProfileUnsupported(
                     f"pinned {role} profile does not exist: {override['profile_id']}"
                 )
+            if role in {"proposer_a", "proposer_b", "critic"} and pinned["model_id"].casefold() in council_models:
+                raise ProfileUnsupported("Council override repeats a proposer/critic model identity")
             static_reason = _static_reason(
                 pinned,
                 role,
@@ -434,6 +448,9 @@ def resolve_routing(
         }
         if role == "implementer":
             implementer = selected["profile"]
+        if role in {"proposer_a", "proposer_b", "critic"}:
+            council_models.update(item["profile"]["model_id"].casefold() for item in
+                                  [selected_roles[role]["selected"], *selected_roles[role]["fallbacks"]])
 
     return {
         "schema_version": 1,

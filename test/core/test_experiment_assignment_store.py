@@ -14,7 +14,7 @@ from test_learning import experiment
 from test_lifecycle import profile
 from devsquad.contracts import ContractError
 from devsquad.experiment_provenance import assignment_for, paired_input_identity
-from devsquad.store import ConflictError, Store, canonical_json, git_common_dir
+from devsquad.store import ConflictError, Store, canonical_json, git_common_dir, SUPPORTED_SCHEMA_VERSION
 
 
 class ExperimentAssignmentStoreTest(unittest.TestCase):
@@ -189,7 +189,7 @@ class ExperimentAssignmentStoreTest(unittest.TestCase):
         saved = upgraded.connection.execute('SELECT * FROM experiments').fetchone()
         self.assertEqual(saved['spec_json'], spec)
         self.assertEqual(saved['evaluation_json'], evaluation)
-        self.assertEqual(upgraded.connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0], 16)
+        self.assertEqual(upgraded.connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0], SUPPORTED_SCHEMA_VERSION)
         self.assertEqual(upgraded.connection.execute('SELECT COUNT(*) FROM experiment_assignments').fetchone()[0], 0)
 
 

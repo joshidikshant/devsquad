@@ -368,3 +368,47 @@ pairs and both exact tested fingerprints. A proven bootstrap predecessor without
 existing explicit baseline contract. Installation of this schema remains
 gated on old active/recoverable-run upgrade safety; adding the migration does
 not establish that installation gate. Implementation status is in RESUME.md.
+
+## Bounded manual Council extension (R7 source gate)
+
+`council-decision` is an explicitly enabled, automatic-OFF, read-only workflow.
+Its strict `CouncilSpec` freezes a bounded question, evidence IDs/hashes,
+rubric, seeded labels, two valid proposers, one distinct verified critic and a
+worker-invocation cap. Three exact distinct entitled model IDs under the same
+verified Codex subscription harness suffice; cross-family preference cannot
+substitute for verified entitlement/identity. One round is supported, with no
+internal revision or silent retry beyond the frozen fallback budget.
+
+Each proposer sees only its frozen common evidence. The trusted coordinator
+commits each immutable proposal before the critic starts; the critic receives
+sanitized seeded A/B proposals without raw identity provenance. The reversible
+mapping, actual identities, native IDs, nullable usage, checks and artifacts
+are retained separately for audit. Partial anonymity is not a quality claim.
+The sole existing lead chooses A, B or synthesis, identifies supported claims,
+discarded alternatives, all unresolved objections and validation. Missing,
+empty, invalid, cancelled, quota-exhausted or failed roles cannot become quorum;
+agreement cannot override failed mandatory checks or integrity constraints.
+
+Native participant processes require the frozen macOS default-deny Seatbelt
+profile and actual per-run own-read/peer-runtime-denial probes. Native Codex
+permissions also remain read-only. Saved-artifact MCP defense applies only to
+the explicit Council worker context, preserving ordinary worker read behavior;
+the OS boundary remains authoritative even without that context marker.
+Unsupported OS/capabilities fail unavailable, never launch without isolation.
+Bootstrap success alone is not subscription/network or generating readiness.
+
+Stages reuse existing versioned run/attempt/account ownership and artifact
+tables. Submitted inputs have a separate immutable origin digest; stage
+projections and imported artifacts are checked under existing transaction
+fences. Claim/submission recovery retains exact saved evidence and decision;
+guided host intent belongs to the actual acquired/taken-over claim event, not
+an owner label or independent intent artifact. Terminal Council reports project
+exactly one R5 final outcome with all contributions and truthful missingness.
+
+Council workflow comparison is separate from R3 profile-binding eligibility:
+predeclare matched and held-out workflow cases, preserve input/profile/prompt/
+evidence versions and actual receipt references, and report benefit, harm or
+inconclusive without invented scores. Fixture mechanics cannot establish native
+quality; automatic triggering remains OFF until a separately accepted gate.
+Installed cross-version contract epoch and native/comparison acceptance remain
+open at this source checkpoint; see RESUME.md.

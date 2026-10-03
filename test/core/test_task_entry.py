@@ -833,7 +833,7 @@ class ManagedTaskEntryTest(unittest.TestCase):
         )
         provider_code = (
             "import json,os,subprocess,sys,time\n"
-            f"subprocess.Popen([sys.executable, '-c', {child_code!r}, {str(ready)!r}], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+            f"subprocess.Popen([sys.executable, '-B', '-c', {child_code!r}, {str(ready)!r}], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
             f"while not os.path.exists({str(ready)!r}): time.sleep(.01)\n"
             "for line in sys.stdin:\n"
             "    item=json.loads(line)\n"
@@ -850,7 +850,7 @@ class ManagedTaskEntryTest(unittest.TestCase):
         def native_popen(argv, *positional, **keywords):
             if argv[:2] != ["/fixture/codex", "app-server"]:
                 return real_popen(argv, *positional, **keywords)
-            process = real_popen([sys.executable, "-c", provider_code], *positional, **keywords)
+            process = real_popen([sys.executable, "-B", "-c", provider_code], *positional, **keywords)
             spawned["process"] = process
             return process
         from devsquad.task_entry import discover_models as real_discover_models

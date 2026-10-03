@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import sys
 import tempfile
 import time
@@ -41,7 +42,8 @@ class DoctorReadinessTest(unittest.TestCase):
         self.core_patch.start()
         self.addCleanup(self.core_patch.stop)
 
-    def install(self, name, *, version=None, response=None, returncode=0, raw=None, delay=0):
+    def install(self, name, *, version=None, response=None, returncode=0, raw=None, delay=0,
+                version_exit_delay=0, auth_exit_delay=0):
         versions = {
             "codex": "codex-cli 0.159.2", "claude": "2.1.220 (Claude Code)",
             "grok": "1.0.46", "antigravity": "1.2.14",
@@ -51,6 +53,7 @@ class DoctorReadinessTest(unittest.TestCase):
         configuration = {
             "name": name, "version": version, "response": response,
             "returncode": returncode, "raw": raw, "log": str(self.log), "delay": delay,
+            "version_exit_delay": version_exit_delay, "auth_exit_delay": auth_exit_delay,
         }
         binary.write_text("#!" + sys.executable + "\n" + """
 import json, os, sys, time
@@ -60,11 +63,19 @@ def record(value):
         output.write(json.dumps(value) + '\\n')
 record({'argv': sys.argv[1:], 'environment': dict(os.environ)})
 if sys.argv[1:] == ['--version']:
-    print(configuration['version'])
+    print(configuration['version'], flush=True)
+    if configuration['version_exit_delay']:
+        os.close(1)
+        time.sleep(configuration['version_exit_delay'])
+        os._exit(0)
 elif sys.argv[1:] == ['auth', 'status', '--json']:
     time.sleep(configuration['delay'])
-    print(configuration['raw'] if configuration['raw'] is not None else json.dumps(configuration['response']))
+    print(configuration['raw'] if configuration['raw'] is not None else json.dumps(configuration['response']), flush=True)
     print('private-stderr-token', file=sys.stderr)
+    if configuration['auth_exit_delay']:
+        os.close(1)
+        time.sleep(configuration['auth_exit_delay'])
+        os._exit(configuration['returncode'])
     sys.exit(configuration['returncode'])
 elif sys.argv[1:] == ['app-server', '--listen', 'stdio://']:
     for line in sys.stdin:
@@ -163,6 +174,9 @@ else:
         self.assertTrue(report["ready"])
         self.assertTrue(report["supported_workflows"]["issue-delivery"]["ready"])
         self.assertFalse(report["supported_workflows"]["council"]["ready"])
+        self.assertTrue(report["supported_workflows"]["council"]["implemented_partial"])
+        self.assertFalse(report["supported_workflows"]["council"]["native_ready"])
+        self.assertEqual(report["supported_workflows"]["council"]["reason"], "native_network_attestation_unavailable")
         for row in report["adapters"]:
             self.assertIs(row["authenticated"], True)
             self.assertIsNone(row["operation_verified"])
@@ -334,7 +348,7 @@ os._exit(0)
                 self.assertRaises(TimeoutError),
             ):
                 diagnostics._probe_output(
-                    [sys.executable, "-c", code], project=self.project,
+                    [sys.executable, "-B", "-c", code], project=self.project,
                     environment=diagnostics._environment(self.home),
                 )
             self.assertLess(time.monotonic() - started, 3)
@@ -402,6 +416,113 @@ os._exit(0)
                 process.wait.assert_not_called()
                 process.stdout.close.assert_called_once()
 
+    def test_version_eof_preserves_delayed_natural_success_and_retained_anchor(self):
+        binary = self.install("codex", version_exit_delay=0.15)
+        processes = []
+        real_spawn, real_close = diagnostics.subprocess.Popen, diagnostics._close_probe
+        def spawn(*args, **kwargs):
+            process = real_spawn(*args, **kwargs)
+            if process.args == [str(binary), "--version"]:
+                processes.append(process)
+            return process
+        def close(process, **kwargs):
+            if process in processes:
+                self.assertIsNone(process.returncode, "natural-exit observation reaped the ownership anchor")
+            real_close(process, **kwargs)
+        started = time.monotonic()
+        with (
+            mock.patch.object(diagnostics.subprocess, "Popen", side_effect=spawn),
+            mock.patch.object(diagnostics, "_close_probe", side_effect=close),
+        ):
+            code, output = diagnostics._probe_output([str(binary), "--version"],
+                project=self.project, environment=diagnostics._environment(self.home))
+        self.assertEqual((code, output.strip()), (0, "codex-cli 0.159.2"))
+        self.assertGreaterEqual(time.monotonic() - started, 0.15)
+        self.assertEqual(processes[0].returncode, 0)
+        self.assertFalse(_live_group_exists(processes[0].pid))
+        self.assertTrue(processes[0].stdout.closed)
+
+    def test_claude_auth_eof_preserves_delayed_natural_logged_in_and_logged_out_codes(self):
+        for logged_in, returncode in ((True, 0), (False, 1)):
+            with self.subTest(logged_in=logged_in):
+                method = "claude.ai" if logged_in else "none"
+                binary = self.install("claude", response={"loggedIn": logged_in, "authMethod": method},
+                    returncode=returncode, auth_exit_delay=0.15)
+                processes = []
+                real_spawn, real_close = diagnostics.subprocess.Popen, diagnostics._close_probe
+                def spawn(*args, **kwargs):
+                    process = real_spawn(*args, **kwargs)
+                    if process.args == [str(binary), "auth", "status", "--json"]:
+                        processes.append(process)
+                    return process
+                def close(process, **kwargs):
+                    if process in processes:
+                        self.assertIsNone(process.returncode, "natural-exit observation reaped the ownership anchor")
+                    real_close(process, **kwargs)
+                with (
+                    mock.patch.object(diagnostics.subprocess, "Popen", side_effect=spawn),
+                    mock.patch.object(diagnostics, "_close_probe", side_effect=close),
+                ):
+                    report = self.report()
+                row = self.row(report, "claude")
+                self.assertTrue(row["supported"])
+                self.assertIs(row["authenticated"], logged_in)
+                self.assertEqual(row["ready"], logged_in)
+                self.assertEqual(processes[0].returncode, returncode)
+                self.assertFalse(_live_group_exists(processes[0].pid))
+                self.assertTrue(processes[0].stdout.closed)
+
+    def test_hung_after_auth_eof_times_out_without_false_success_and_cleans_child(self):
+        binary = self.install("claude", response={"loggedIn": True, "authMethod": "claude.ai"},
+                              auth_exit_delay=60)
+        processes = []
+        real_spawn = diagnostics.subprocess.Popen
+        def spawn(*args, **kwargs):
+            process = real_spawn(*args, **kwargs)
+            if process.args == [str(binary), "auth", "status", "--json"]:
+                processes.append(process)
+            return process
+        started = time.monotonic()
+        with (
+            mock.patch.object(diagnostics, "PROBE_TIMEOUT_SECONDS", 0.2),
+            mock.patch.object(diagnostics.subprocess, "Popen", side_effect=spawn),
+        ):
+            authentication = diagnostics._claude_auth(str(binary), project=self.project,
+                                                      environment=diagnostics._environment(self.home))
+        self.assertIsNone(authentication["authenticated"])
+        self.assertFalse(authentication["subscription_supported"])
+        self.assertGreaterEqual(time.monotonic() - started, 0.2)
+        self.assertLess(time.monotonic() - started, 2.5)
+        self.assertIsNotNone(processes[0].returncode)
+        self.assertFalse(_live_group_exists(processes[0].pid))
+        self.assertTrue(processes[0].stdout.closed)
+
+    def test_controlled_python_import_does_not_write_payload_bytecode_with_minimal_env(self):
+        source = self.root / "private-source"
+        shutil.copytree(ROOT / "plugin/core/src/devsquad", source / "devsquad",
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        before = {str(path.relative_to(source)): path.read_bytes()
+                  for path in source.rglob("*") if path.is_file()}
+        code = (
+            "import os,sys\n"
+            "assert sys.dont_write_bytecode\n"
+            "assert 'PYTHONDONTWRITEBYTECODE' not in os.environ\n"
+            f"sys.path.insert(0,{str(source)!r})\n"
+            "from devsquad.supervisor import process_start_identity\n"
+            "assert process_start_identity(os.getpid()) is not None\n"
+            "print('codex-cli 0.159.2',flush=True)\n"
+        )
+        environment = diagnostics._environment(self.home)
+        self.assertEqual(set(environment), {"HOME", "USER", "PATH"})
+        result = diagnostics._probe_output([sys.executable, "-B", "-c", code],
+            project=self.project, environment=environment)
+        self.assertEqual(result, (0, "codex-cli 0.159.2\n"))
+        after = {str(path.relative_to(source)): path.read_bytes()
+                 for path in source.rglob("*") if path.is_file()}
+        self.assertEqual(before, after)
+        self.assertFalse(list(source.rglob("__pycache__")))
+        self.assertFalse(list(source.rglob("*.pyc")))
+
     def test_probe_does_not_read_output_without_captured_identity(self):
         process = mock.Mock(pid=987654, returncode=None, stderr=None)
         process.wait.return_value = 0
@@ -448,7 +569,7 @@ os._exit(0)
             "time.sleep(60)\n"
         )
         process = diagnostics.subprocess.Popen(
-            [sys.executable, "-c", code], stdin=diagnostics.subprocess.DEVNULL,
+            [sys.executable, "-B", "-c", code], stdin=diagnostics.subprocess.DEVNULL,
             stdout=diagnostics.subprocess.PIPE, stderr=diagnostics.subprocess.DEVNULL,
             start_new_session=True,
         )
@@ -474,7 +595,7 @@ os._exit(0)
 
     def test_missing_kernel_child_authority_denies_all_signals(self):
         process = diagnostics.subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(60)"],
+            [sys.executable, "-B", "-c", "import time; time.sleep(60)"],
             stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
             stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
         )
@@ -498,7 +619,7 @@ os._exit(0)
 
     def test_known_capture_without_waitid_falls_back_to_verified_child_only(self):
         process = diagnostics.subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(60)"],
+            [sys.executable, "-B", "-c", "import time; time.sleep(60)"],
             stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
             stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
         )
@@ -523,7 +644,7 @@ os._exit(0)
 
     def test_ps_zombie_anchor_rejects_reparented_wrong_group_and_malformed_rows(self):
         process = diagnostics.subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(60)"],
+            [sys.executable, "-B", "-c", "import time; time.sleep(60)"],
             stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
             stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
         )
@@ -565,7 +686,7 @@ os._exit(0)
 
     def test_cleanup_reap_lock_contention_cannot_exceed_deadline_or_signal(self):
         process = diagnostics.subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(60)"],
+            [sys.executable, "-B", "-c", "import time; time.sleep(60)"],
             stdin=diagnostics.subprocess.DEVNULL, stdout=diagnostics.subprocess.PIPE,
             stderr=diagnostics.subprocess.DEVNULL, start_new_session=True,
         )
@@ -619,7 +740,7 @@ os._exit(0)
                 mock.patch.object(diagnostics.subprocess, "Popen", side_effect=spawn),
                 mock.patch.object(diagnostics, "_close_probe", side_effect=close),
             ):
-                code, output = diagnostics._probe_output([sys.executable, "-c", code],
+                code, output = diagnostics._probe_output([sys.executable, "-B", "-c", code],
                     project=self.project, environment=diagnostics._environment(self.home))
             self.assertEqual((code, output.strip()), (0, "codex-cli 0.159.2"))
             self.assertFalse(_live_group_exists(captured_processes[0].pid))
@@ -652,7 +773,7 @@ os._exit(0)
             "os.close(write_ready)\nos.read(read_ready,1)\nos.close(read_ready)\ntime.sleep(60)\n"
         )
         process = diagnostics.subprocess.Popen(
-            [sys.executable, "-c", code], stdin=diagnostics.subprocess.DEVNULL,
+            [sys.executable, "-B", "-c", code], stdin=diagnostics.subprocess.DEVNULL,
             stdout=diagnostics.subprocess.PIPE, stderr=diagnostics.subprocess.DEVNULL,
             start_new_session=True,
         )

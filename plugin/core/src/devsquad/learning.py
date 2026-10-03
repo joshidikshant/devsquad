@@ -22,7 +22,7 @@ LATE_VERDICTS = {"escaped_defect", "corrected"}
 SELECTION_MODES = {"automatic", "pinned", "experimental"}
 CRITERION_STATES = {"passed", "failed", "unknown"}
 CONTRIBUTION_RESULTS = {"failed", "successful", "repair", "finding", "neutral"}
-ROLES = {"worker", "implementer", "reviewer", "lead", "researcher"}
+ROLES = {"worker", "implementer", "reviewer", "lead", "researcher", "proposer_a", "proposer_b", "critic"}
 MAX_CLOCK_SKEW = timedelta(minutes=5)
 EXPERIMENT_FIELDS = {
     "schema_version", "experiment_id", "project_path", "question", "hypothesis",

@@ -139,7 +139,7 @@ def build_handoff_reports(
         raise ContractError("handoff report packet hash is invalid")
     json_name, markdown_name = handoff_report_names(sequence)
     workflow = packet.get("workflow", "branch-review")
-    if workflow not in {"branch-review", "issue-delivery"}:
+    if workflow not in {"branch-review", "issue-delivery", "council-decision"}:
         raise ContractError("handoff report workflow is invalid")
     report = {
         "schema_version": 1,
@@ -158,6 +158,9 @@ def build_handoff_reports(
         "packet": packet,
         "next_action": "claim_handoff",
     }
+    if workflow == "council-decision":
+        return {json_name: (canonical_json(report) + "\n").encode(),
+                markdown_name: (f"# DevSquad Council handoff\n\nRun: {run_id}\n\n" + canonical_json(packet) + "\n").encode()}
     review = packet.get("review") if isinstance(packet.get("review"), dict) else {}
     lines = [
         f"# DevSquad {workflow} handoff",

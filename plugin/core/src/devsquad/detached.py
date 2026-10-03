@@ -109,18 +109,22 @@ def main(argv=None):
             else "implementer" if delivery_implementer
             else "reviewer"
         )
+        if workflow == "council-decision":
+            from .council_runtime import verify_origin
+            verify_origin(store, args.run_id, snapshot)
+            role = "lead" if headless_lead else snapshot["council_state"]["next_role"]
         workflow_role = (
             "internal_fake_delay" not in snapshot
-            and workflow in {"branch-review", "issue-delivery"}
+            and workflow in {"branch-review", "issue-delivery", "council-decision"}
         )
         profile_index = None
         profile_id = None
         if workflow_role:
             routed_role = snapshot["routing"]["roles"][role]
             candidates = [routed_role["selected"], *routed_role["fallbacks"]]
-            profile_index = _profile_index(
-                store, args.run_id, role, handoff,
-            )
+            profile_index = (sum(a.get("role") == role and _is_saved_fallback_failure(a)
+                                 for a in store.attempts_for_run(args.run_id))
+                             if workflow == "council-decision" else _profile_index(store, args.run_id, role, handoff))
             if profile_index >= len(candidates):
                 raise ConflictError("frozen role fallback set is exhausted")
             attempt_selection = candidates[profile_index]
@@ -130,13 +134,18 @@ def main(argv=None):
                 "implementer": "implementation_adapter",
                 "reviewer": "review_adapter",
                 "lead": "lead_adapter",
+                "proposer_a": "council_adapter", "proposer_b": "council_adapter", "critic": "council_adapter",
             }[role]
             adapters_key = {
                 "implementer": "implementation_adapters",
                 "reviewer": "review_adapters",
                 "lead": "lead_adapters",
+                "proposer_a": "council_adapters", "proposer_b": "council_adapters", "critic": "council_adapters",
             }[role]
             adapters = snapshot.get(adapters_key)
+            if workflow == "council-decision":
+                adapter_key = "council_adapter"
+                adapters = snapshot["council_adapters"].get(role, {})
             adapter = (
                 adapters.get(profile_id)
                 if isinstance(adapters, dict)
@@ -154,7 +163,9 @@ def main(argv=None):
                 selected["account_pool_id"],
                 "verified" if adapter else "unknown",
             )
-            if role == "implementer":
+            if workflow == "council-decision":
+                module = "devsquad.council_worker"
+            elif role == "implementer":
                 module = (
                     "devsquad.claude_delivery_worker"
                     if adapter else "devsquad.delivery_worker"
@@ -171,7 +182,11 @@ def main(argv=None):
                 )
             command = [sys.executable, "-P", "-m", module]
             worker_snapshot = json.loads(canonical_json(snapshot))
-            worker_snapshot["routing"]["roles"][role]["selected"] = attempt_selection
+            if workflow == "council-decision":
+                worker_snapshot["council_role"] = role
+                worker_snapshot["council_profile_index"] = profile_index
+            else:
+                worker_snapshot["routing"]["roles"][role]["selected"] = attempt_selection
             if adapter is None:
                 worker_snapshot.pop(adapter_key, None)
             else:
@@ -185,6 +200,7 @@ def main(argv=None):
             input_path, _, _ = store.finalize_artifact(
                 args.run_id,
                 (
+                    f"council-input-{role}-{profile_index}.json" if workflow == "council-decision" else
                     f"lead-workflow-input-{handoff.sequence}-{profile_index}.json"
                     if headless_lead else
                     f"implementation-input-{profile_index}.json"
@@ -205,6 +221,8 @@ def main(argv=None):
                 args.run_id, args.expected_version,
             )
             return 1
+        if workflow == "council-decision":
+            environment["DEVSQUAD_COUNCIL_ROLE"] = role
         spec = LaunchSpec(
             1,
             identity.harness,

@@ -1,0 +1,204 @@
+{
+  "automatic_enabled": false,
+  "cases": [
+    {
+      "arms": {
+        "control": {
+          "accepted_quality": null,
+          "actual_prompt_sha256": [
+            "6841c7ab565bb86c35c4c40c47ca7831c2119b8122e788a78826c41eeed12982"
+          ],
+          "brief_sha256": null,
+          "candidate": {
+            "base_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc",
+            "sha256": "ef2f034431385621374f5e97428107e742c8f583b6bbcb0ba4174452e9ea0aaa",
+            "target_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc"
+          },
+          "escaped_defects": null,
+          "execution_elapsed_ms": 3640,
+          "host_usage": null,
+          "identity_scope": "all_fixture",
+          "input_contract_sha256": "3e4ee466f5141b2cd2bcea35e14adf1354cf91448cd3743855b1c2349d756d72",
+          "lead_disposition": "accept",
+          "native_model_requests": null,
+          "native_quota": null,
+          "native_usage": [
+            {
+              "input_tokens": null,
+              "output_tokens": null,
+              "source": "unavailable",
+              "total_tokens": null
+            }
+          ],
+          "quality_missingness": "fixture mechanics and host acceptance are not independent native quality measurements",
+          "receipt": {
+            "artifact_id": "a6a606ef-f798-4684-936b-a6dded2cbadf",
+            "sha256": "09275379766dc1ab52e26c69a33028d9d4f4a3e0311154e82fd85a2c56469595"
+          },
+          "rework": null,
+          "run_id": "76b924c1-583a-4fe0-bb3f-f27088e1ea3e",
+          "runtime_package_sha256": "b456841b6c89fbbfbc0ea488c1a736d3df9056c3551857dca08432b97710cbd6",
+          "state": "succeeded",
+          "versions": {
+            "policy_sha256": "076ee3ae42e47cdfa86eee7a27a4ade567215ba9f6d1a978a2f3585332f5a337",
+            "profiles_sha256": "24e7c79cacb1b896f84fe838a5f22f52ce2bdbbfd33cde4dd2760c6a8c4e333b",
+            "prompt_module": "workflows.py",
+            "prompt_module_sha256": "6e0be346a78a50927913762fe78e989a3b73f56f84808fdbda3886de7edf00ef",
+            "task_sha256": "c84e2441b70f0fed5a3c86ade31a2a5f811fb2a0ec2f5ec79c6fbad48220f6dd"
+          },
+          "worker_invocations": 1
+        },
+        "council": {
+          "accepted_quality": null,
+          "actual_prompt_sha256": [
+            "8b2359053fd3dba49b621c09810cb7dc56889dbcfca0faf0a7f03529e70eb6fc",
+            "5afd1556f9e7e539759c8cf080042e4221d5556ea0930e3d0b36c9d92bc297df",
+            "aae30337bfb1e911e000cb354a9968a68483f439181e16a1a264cdbcfae7a9c3"
+          ],
+          "brief_sha256": "01a67fd5ba56856a1e58ac28494af09d74c41251c3872f6065d51922ffe7dc1d",
+          "candidate": {
+            "base_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc",
+            "sha256": "ef2f034431385621374f5e97428107e742c8f583b6bbcb0ba4174452e9ea0aaa",
+            "target_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc"
+          },
+          "escaped_defects": null,
+          "execution_elapsed_ms": 6087,
+          "host_usage": null,
+          "identity_scope": "all_fixture",
+          "input_contract_sha256": "3e4ee466f5141b2cd2bcea35e14adf1354cf91448cd3743855b1c2349d756d72",
+          "lead_disposition": "accept",
+          "native_model_requests": null,
+          "native_quota": null,
+          "native_usage": [
+            null,
+            null,
+            null
+          ],
+          "quality_missingness": "fixture mechanics and host acceptance are not independent native quality measurements",
+          "receipt": {
+            "artifact_id": "9192542d-a6bf-4886-9360-bf05ad76d2f4",
+            "sha256": "ba7fbd67466fce66795a148cf9724fa40db06702ad858bdb84c44162390be47f"
+          },
+          "rework": null,
+          "run_id": "7f01a92a-5458-44f6-875d-124aab6bda54",
+          "runtime_package_sha256": "b456841b6c89fbbfbc0ea488c1a736d3df9056c3551857dca08432b97710cbd6",
+          "state": "succeeded",
+          "versions": {
+            "policy_sha256": "4fac321b5ec269b8c59f0113771c510fd4080dcc8a102e693ba128351388a46a",
+            "profiles_sha256": "24e7c79cacb1b896f84fe838a5f22f52ce2bdbbfd33cde4dd2760c6a8c4e333b",
+            "prompt_module": "council.py",
+            "prompt_module_sha256": "9646b5a6455762c766a2d54b72618ad15ce0cd662309ce61c1ae045e9be8c81f",
+            "task_sha256": "2d82a04e0904a7c5601f2171a90e2e9976ead07c0810a0d8880e43e9cfc0d1ce"
+          },
+          "worker_invocations": 3
+        }
+      },
+      "id": "retry-key",
+      "split": "matched"
+    },
+    {
+      "arms": {
+        "control": {
+          "accepted_quality": null,
+          "actual_prompt_sha256": [
+            "b5d07a1bff9c3b3c0e28c364b959d454b1fac07463754a1d12439e593807f61f"
+          ],
+          "brief_sha256": null,
+          "candidate": {
+            "base_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc",
+            "sha256": "ef2f034431385621374f5e97428107e742c8f583b6bbcb0ba4174452e9ea0aaa",
+            "target_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc"
+          },
+          "escaped_defects": null,
+          "execution_elapsed_ms": 3531,
+          "host_usage": null,
+          "identity_scope": "all_fixture",
+          "input_contract_sha256": "c6bc137c2c1288edda333f7a8ba262e7774723efc60c4b0989ec3ef33a10e3ae",
+          "lead_disposition": "accept",
+          "native_model_requests": null,
+          "native_quota": null,
+          "native_usage": [
+            {
+              "input_tokens": null,
+              "output_tokens": null,
+              "source": "unavailable",
+              "total_tokens": null
+            }
+          ],
+          "quality_missingness": "fixture mechanics and host acceptance are not independent native quality measurements",
+          "receipt": {
+            "artifact_id": "d3cb199a-f927-4e11-a9a2-915ba5c4eda4",
+            "sha256": "57901f4791141741a75d9bf3b6079f49f44ed782cd828eb8f15466767d08038a"
+          },
+          "rework": null,
+          "run_id": "e5342195-90e6-47d7-b055-529e4013ef41",
+          "runtime_package_sha256": "b456841b6c89fbbfbc0ea488c1a736d3df9056c3551857dca08432b97710cbd6",
+          "state": "succeeded",
+          "versions": {
+            "policy_sha256": "076ee3ae42e47cdfa86eee7a27a4ade567215ba9f6d1a978a2f3585332f5a337",
+            "profiles_sha256": "24e7c79cacb1b896f84fe838a5f22f52ce2bdbbfd33cde4dd2760c6a8c4e333b",
+            "prompt_module": "workflows.py",
+            "prompt_module_sha256": "6e0be346a78a50927913762fe78e989a3b73f56f84808fdbda3886de7edf00ef",
+            "task_sha256": "fd5adc9eb398a381be9cb14900b3606a95c5f2962176aa541d3b873db38175a2"
+          },
+          "worker_invocations": 1
+        },
+        "council": {
+          "accepted_quality": null,
+          "actual_prompt_sha256": [
+            "1b5b9192d21b912bd78ad05e0ee0c368df2edb2c4926f561c485c2a8cd9e5259",
+            "add9d2c081540e13c95a0db62c41e4f016060c509ea6b06607cada2b1aea8e01",
+            "ebb71d34afc939968cdfd51948e4bfb0b3bbe482834e787fd6066ce0a895b354"
+          ],
+          "brief_sha256": "632758d5386d411ebe7021ce1d4cdf78efa1fde57a69f12737b63b781630aacd",
+          "candidate": {
+            "base_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc",
+            "sha256": "ef2f034431385621374f5e97428107e742c8f583b6bbcb0ba4174452e9ea0aaa",
+            "target_oid": "e9e75b6801a87b6d844595e1a3356847a15346dc"
+          },
+          "escaped_defects": null,
+          "execution_elapsed_ms": 4528,
+          "host_usage": null,
+          "identity_scope": "all_fixture",
+          "input_contract_sha256": "c6bc137c2c1288edda333f7a8ba262e7774723efc60c4b0989ec3ef33a10e3ae",
+          "lead_disposition": "accept",
+          "native_model_requests": null,
+          "native_quota": null,
+          "native_usage": [
+            null,
+            null,
+            null
+          ],
+          "quality_missingness": "fixture mechanics and host acceptance are not independent native quality measurements",
+          "receipt": {
+            "artifact_id": "b0978f78-a739-4605-aa52-d24e5ca52eee",
+            "sha256": "27b43840c0fcdb10777f0bd970b7d9015cecb07fa8fd07331e36178816a6d463"
+          },
+          "rework": null,
+          "run_id": "fd52dd7d-5e4d-45c5-9b0c-e0977c9113de",
+          "runtime_package_sha256": "b456841b6c89fbbfbc0ea488c1a736d3df9056c3551857dca08432b97710cbd6",
+          "state": "succeeded",
+          "versions": {
+            "policy_sha256": "4fac321b5ec269b8c59f0113771c510fd4080dcc8a102e693ba128351388a46a",
+            "profiles_sha256": "24e7c79cacb1b896f84fe838a5f22f52ce2bdbbfd33cde4dd2760c6a8c4e333b",
+            "prompt_module": "council.py",
+            "prompt_module_sha256": "9646b5a6455762c766a2d54b72618ad15ce0cd662309ce61c1ae045e9be8c81f",
+            "task_sha256": "6a1527d0de63509dced266a249dfb3472fccf851de82bd51e71cc44fd89bbefd"
+          },
+          "worker_invocations": 3
+        }
+      },
+      "id": "retry-expiry",
+      "split": "heldout"
+    }
+  ],
+  "conclusion": "inconclusive",
+  "limitations": [
+    "Controlled process mechanics only",
+    "No independent native accepted-quality/escaped-defect/rework observations",
+    "Workflow prompts and invocation count differ; this is not R3 single-binding eligibility"
+  ],
+  "predeclaration_sha256": "5f96d3946d2bd32a0aed16298533998d308da19e68e600daf300806ee2b7a43f",
+  "quality_benefit_supported": false,
+  "schema_version": 1
+}

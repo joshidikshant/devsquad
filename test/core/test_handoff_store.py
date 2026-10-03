@@ -862,7 +862,7 @@ from importlib.resources import files
 from pathlib import Path
 import sqlite3
 import sys
-from devsquad.store import Store
+from devsquad.store import Store, SUPPORTED_SCHEMA_VERSION
 
 root = Path(sys.argv[1])
 root.mkdir(parents=True)
@@ -883,7 +883,7 @@ connection.commit()
 connection.close()
 store = Store(database, root / "artifacts")
 try:
-    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 16
+    assert store.connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == SUPPORTED_SCHEMA_VERSION
     assert store.connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='handoff_submissions'"
     ).fetchone()

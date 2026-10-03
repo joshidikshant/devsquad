@@ -6,6 +6,43 @@ remain recoverable in Git; detailed receipts and failed gates stay in evidence.
 
 ## Current checkpoint — October 2, 2026
 
+**Public release authorized:** the user selected a public GitHub release in
+the existing `joshidikshant/devsquad` repository (no registry or hosted service).
+Release version0.11.0 includes core0.1.0; Council stays native-unavailable and
+automatic OFF. Whole-plan completion is not claimed. Root owns publication,
+final frozen/full/native gates and local install. No tag/release/push yet.
+
+EOF/fixture repair `4f01456189b38252a678938e7197ac2f12a6838e` is now integrated
+at source level: wait for natural exit without reaping under the original
+deadline, then owned cleanup; true version/auth status survives delayed exit.
+Hung EOF remains bounded/unknown. Controlled Python fixtures use `-B`; native
+provider environment and integrity gates are unchanged. Agent strict40 tests
+pass on Python3.12/12.894s and3.14/13.398s; root34 diagnostics/11.159s and
+eight reconciliation/SDK checks/21.651s pass. Wheel completeness regression
+failed as expected (one/2.657s: Council schema missing); packaging fix passes
+the same actual installed-wheel test (one/2.831s), no SDK required.
+
+Final nongenerating Council diagnostic is exhausted: eight denial controls
+pass; sandbox backend RPC fails network_request_failed/noHTTP, unsandboxed
+control fails strict response validation. Zero generating calls, auth copy
+removed and original unchanged. No more network attempts or permission widening.
+[Portable evidence](evidence/r7-final-nongenerating-network-diagnostic.json).
+Next: checkpoint the coherent integration after Bash/reference gates, prove
+the exact trusted check in a pristine candidate worktree, then one narrow EOF
+native review and one final frozen combined full suite. Safely update the
+local installation and recheck agy CLI; publish only the tested candidate.
+
+Council reconciliation `0e7dd319b56802329187007738970e26b5609b1d` is integrated,
+not accepted/installed. It includes preserved42979ba/72ae413/eee6db7, schema17,
+R6 canonical terminal authority, explicit choice/copyable recovery, headless
+crash/expiry recovery and shared bootstrap cleanup. Its168 affected tests/
+148.693s (two SDK skips), two actual SDK/2.964s, Bash/reference/diff pass.
+Original failed169 loader command and test-only inactive-claim errors are saved
+in [reconciliation evidence](evidence/r7-council-reconciliation-partial.json).
+Native network remains unavailable before generation; automatic off/comparison
+inconclusive. Ownership093 and EOF4f are integrated as described above.
+Root owns final frozen full/native/install gates; production remains R5/schema16.
+
 Accepted work must not be restarted or re-tested unchanged:
 
 - R3 `39b95f1`: exact native review clean, focused/public/historical evidence
@@ -84,8 +121,7 @@ closed. EOF preserves the child PID through cleanup. No ABI additions; helper
 requires exclusive Popen reaping, never an external waitpid/SIGCHLD reaper.
 Six red baseline regressions/1.216s; accepted Python3.12 strict36/11.250s and
 Python3.14 strict36/11.364s pass; root seven/1.259s with exact matching blobs,
-Bash/reference/diff green. No Council network
-probe ran. Diff/Bash
+Bash/reference/diff green. Diff/Bash
 checks passed, but the required66-test command (89.977s/OK) was **invalidated**
 by undeclared bytecode; reference was not run. The private invocation now sets
 PYTHONDONTWRITEBYTECODE=1; candidate integrity was not relaxed. Exact packet
@@ -95,9 +131,22 @@ The one frozen baseline full gate completed successfully, exec86382:
 **554 tests/645.034s**, two optional SDK skips, zero failures/errors/unraisable;
 UTC/monotonic645.167s agree. RootHEAD32b94d6 source/tests/scripts are equivalent
 to7130ee7. This is a baseline pass, not proof of the later ownership repair.
-No full suite/native run remains active. Next save this ownership integration
-after root affected tests/Bash, then run one narrow exact follow-up audit and
-the prepared bounded nongenerating resolver-socket diagnostic. Install only after
+Follow-up `d2355cd0-603d-4e6a-b1a2-b05b0e99d53a` reviewed exact root8242eff,
+**rejected**, failed/version22: medium `R6-EOF-exit-status`. Closing stdout is
+not natural exit; immediate cleanup TERM can turn valid version/authentication
+into unknown. Readiness repairs bounded nonreaping completion before cleanup.
+Its56 tests/27.584s ran OK, but integrity again invalidated source bytecode:
+controlled provider fixture children intentionally drop Python env flags and
+import the core. Fix those fixture children, not native environment or integrity.
+Before another native audit, run the exact trusted check in a pristine offline
+candidate worktree and verify the full input fingerprint is unchanged.
+Resolver-socket-only nongenerating diagnostic failed actual rate-limits RPC
+(-32603/network_request_failed, no HTTP response); all eight access/child probes
+and owned cleanup passed, temporary auth copy removed. No generating request.
+Council agent owns one paired bounded narrow-DNS diagnostic, never broad access.
+No full/native run remains active. Next save integrated Council after root
+affected/Bash gate, integrate the EOF/fixture repair, then pristine check proof,
+narrow exact native follow-up and one final frozen combined full gate. Install only after
 final frozen/native acceptance. Production remains accepted R5/schema16.
 R7 Council remains in isolated `r7-council`; its controlled stage flow is
 partial. Its source is checkpointed at `42979ba4` with 21 Council tests and
@@ -123,10 +172,9 @@ without selector/launcher/schema changes; safe cancel/reconcile permits17,
 then immutable long-lived/fresh old16 clients deny Council mutations. Two
 focused tests/7.976s, Bash/reference/diff pass; no production update occurred.
 Readiness independently verified old16 denial on17 and the actual fourth lead
-succeeding. Its one bounded Unix mDNS resolver-socket diagnostic is paused for
-the P1 ownership repair. Council agent now owns shared-hunk/formatter and R6
-authority reconciliation on isolated `codex/council-integration` in the former
-r6-terminal worktree; root remains on codex/engineering-team. No native Council
+succeeding. Shared-hunk/formatter/R6 authority reconciliation0e7dd3 is integrated
+as described above; original isolated branches are retained. Root remains on
+codex/engineering-team. No native Council
 generation occurred. Preserve all original checkpoints/attached worktrees.
 
 Desktop control worked for scoped inspection. Claude's local Code tab selected only this
@@ -251,8 +299,11 @@ was spent; 8/8 family and skill labels, 6/8 tier labels including a confident
 wrong tier. Runtime classification remains OFF; no adoption benefit or Laya
 setup is proven. Do not repeat the pilot or silently use hosted/API fallback.
 
-No credit purchases/resets, paid API fallback, global AI settings, push/merge,
-deploy or external messages are authorized. Raw provider output and credentials
+No credit purchases/resets, paid API fallback, global AI settings or unrelated
+external messages are authorized. The user's latest GitHub-release choice
+authorizes scoped push/PR/merge/tag/release in joshidikshant/devsquad, superseding
+the earlier publication prohibition for that destination only.
+Raw provider output and credentials
 stay outside Git. Native reported cost/usage is not an inspected subscription
 invoice or a reliable number of Plus five-hour windows.
 
@@ -265,3 +316,141 @@ Private bounded helpers are under
 observe-run.py, inspect-handoff.py, complete-handoff.py, start-combined-review.py,
 g4-candidate-cases.py and probe.py. Claims/raw logs remain private; never reuse
 the completed b950 handoff's prior claim for a different run.
+
+## Isolated R7 source checkpoint — October 2, 2026
+
+The Council slice is prepared in the delegated `r7-council` worktree based on
+`bf3de086`, not installed or accepted as native production functionality. It
+reuses existing detached ownership, attempt/account reservations, immutable
+artifacts, handoff fences and terminal reporting: proposer A, proposer B,
+critic, then the existing sole host/headless lead. No daemon, writer or general
+scheduler was added. The submitted snapshot remains frozen separately from
+fenced stage projections. Automatic triggering is always OFF; one round is
+supported (`max_revisions=0`). Another round needs a new explicitly capped run.
+
+The normal surface is `squad council QUESTION --read-path PATH --max-invocations
+4 --dry-run`; three distinct entitled Codex model IDs may share the subscription
+harness. Host completion has `council-finish` with an explicit chosen label or
+synthesis, claims, discarded alternatives and validation; no manual JSON is
+required. Root must reconcile these narrow CLI/service/store hunks with R6's
+normal formatter and atomic guided-finish claim marker before integration.
+
+Actual same-user macOS Seatbelt probes demonstrate default-deny own-evidence
+reads while peer evidence, ledger, private logs, artifacts, symlink escapes and
+child processes remain denied. Unsupported OS has no unsafe fallback. Native
+Codex isolated initialization/catalog listing was non-generating only. Narrow
+CFPreferences service/shared-memory support works; HTTPS model refresh still
+fails under diagnostic DNS additions. Native subscription/network readiness
+and generating receipts are **not proven**; no generating calls were made.
+Fixture receipts explicitly retain `all_fixture`, nullable identity/usage and
+mechanics-only limitations. The predeclared matched/held-out comparison report,
+reserved-launch cancellation probe, cross-version contract-epoch decision,
+accepted install/native smoke and integrated full gate are still open. R7/C1
+must remain incomplete in backlog until these gates are independently closed.
+
+Focused offline tests cover public four-process success, strict quorum/labels,
+missing/empty roles, failed mandatory checks, distinct/native identity shape,
+objective outcome uniqueness, cancellation, quota exhaustion, restart, guided
+claim/submission crashes, expired exact-intent recovery and competing claims.
+The final checkpoint message records the exact focused/Bash gate results; do
+not infer a full-suite or native-quality pass from this partial source savepoint.
+
+Checkpoint gates: Council 21 tests passed in 33.055s with ResourceWarnings as
+errors; router/validation/task-entry/handoff-service/MCP 67 tests passed in
+20.103s (two optional SDK skips). Bash passed all 11 test files; generated
+reference and `git diff --check` passed. No whole core suite was run in this
+isolated slice. Preserve root's newer R5/R6 evidence when reconciling this note.
+
+### R7 residual source gates — October 2, 2026
+
+The immutable installed R5/schema16 Service reproduced a headless Council claim
+that the new Service denies: old owner acquired v28→29; the real fourth/lead
+worker completed, but v38 remained awaiting that old owner. New resume correctly
+refused to steal the claim. Controlled cancellation reached v44 and all owned
+PIDs were absent. This proves a schema16 code guard alone is insufficient.
+`017_council_contract_epoch.sql` now advances the contract epoch to17 without
+new tables, activating existing exclusive-upgrade deferral and old-connection
+write triggers. Historical13/16 assertions remain historical; current-version
+assertions use `SUPPORTED_SCHEMA_VERSION`. Source tests prove16 active and
+recoverable deferral, terminal reconciliation,17 migration, and old16 fresh/
+preopened writer rejection. Immutable installed16 versus17 confirmation and
+installer/package reconciliation remain root-owned acceptance gates.
+
+Owned gated-launch cancellation is now tested: the actual same-user launcher
+is live, cancellation remains nonterminal with no receipt, gate cleanup is
+confirmed, then the cancelled Council receipt/final outcome is published. The
+unstarted-runner recovery path retains Council reporting without changing the
+ordinary M2 ownership boundary or declaring cancellation before cleanup.
+
+The separate predeclaration/comparison module now executes actual public
+branch-review control (one worker) and host Council (three workers) on distinct
+matched and held-out questions. It freezes task/profile/policy/prompt versions,
+checks original inputs and exact terminal receipt hashes, rejects reused runs
+or relabelled identical contracts as held-out, and preserves terminal ledger
+immutability. Report conclusion is **inconclusive**, automatic OFF. Accepted
+quality, escaped defects, rework, native quota and host usage are unmeasured;
+fixture host acceptance is not native quality. Portable declaration/report:
+`evidence/r7-public-fixture-workflow-{predeclaration,comparison}.json`.
+Canonical private report SHA256:
+`ac1deb4ea74ea70b0c337d43d0b0905bb8ed2432445e22cd3c71fb24b5fe8565`.
+Exact private receipts/ledger remain at
+`/Users/Dikshant/.devsquad/private-probes/devsquad-council-kpfg2i2w`.
+
+Native Council now fails capability-unavailable **before role launch** while
+exact sandbox HTTPS attestation is unverified. Doctor shows implemented partial
+mechanics, native-ready false. The last nongenerating probe and demonstrated
+versus hypothetical denied facilities are recorded in
+`evidence/R7-NATIVE-BOUNDARY-BLOCKER.md`; initialization and fallback/cached
+catalog entries cannot lift this gate. Root owns subsequent bounded backend
+attestation and MCP inventory/native/install proof; no generating retry or
+broad filesystem/network relaxation is authorized by these source results.
+
+Residual checkpoint gates:25 Council tests passed in90.724s with ResourceWarnings
+as errors;35 migration/capacity/decision/lifecycle/learning/assignment tests passed
+in54.469s;12 handoff-store tests passed in4.528s;10 supervisor/reservation-crash
+tests passed in1.819s. A separate retained public comparison run passed all
+assertions and saved the portable report above. Bash all11 files, generated
+reference and diff checks passed. Earlier comparison attempts exposed a frozen
+package-path mismatch and an attempted write to a terminal run; repaired by
+checking the actual packaged module and saving a separate immutable comparison
+artifact, not weakening terminal fences. No whole suite/native-quality acceptance
+was claimed. Root must reconcile R6 atomic finish markers/human formatter and
+complete the install/native/full gates before closing R7/C1.
+
+### R7 actual temporary installation gate
+
+The focused installer regression uses `git archive bf3de086:plugin/core`, whose
+full source digest exactly matches accepted immutable R5
+`90f1e87fb9acf7756dad46780672de9b84fe75e3631322857a310f089280345e`;
+the actual temporary installed old package re-observed code-package digest
+`e03bf3a2e362b3aff6d0a5dd00bd837f15afb216d4c58ac1d9c776c4d8f09c67`
+and supported/current schema16. No lower-version rewriting was used in this
+gate. Temporary MCP installation was intentionally omitted: core/Service/
+database fencing is exercised without network/dependency installation.
+
+Actual old active and recoverable runs independently deferred the17 candidate
+while current selector, launcher, install-state and schema16 stayed unchanged.
+Old active work was cancelled with cleanup; recoverable work resumed and
+succeeded under the old release. Candidate72ae413 then activated without
+premature schema migration; its first saved-result read migrated safely to17.
+An old16 Store opened before migration failed its actual Council handoff claim
+at the database trigger; a fresh old16 Service failed `SchemaVersionError`.
+Council version/claim remained unchanged. All owned groups were absent, all
+runs terminal, and the temporary install was removed. Portable observed facts:
+`evidence/r7-temporary-install-epoch-proof.json`.
+
+The strict installer regression passed in6.698s, then a separate full assertion
+probe verified the strengthened explicit runtime scope and owned-group cleanup.
+The controlled in-memory lower-version Store test remains labelled mechanics
+only; the exact old payload gate above supplies actual installer provenance.
+An independent readiness agent also froze72ae413 and demonstrated immutable
+accepted old16 Service rejection at a real headless Council critic barrier,
+identical full-table digest before/after the rejection, successful real fourth
+fixture lead after restoring continuation, and all four PIDs absent. Root owns
+recording that independent review alongside final integrated R6/native gates.
+No production/root source/ledger, global AI settings, network or native generation
+was changed. Earlier installer test failure was a test-only wrong status JSON
+field (`claim` instead of `claimed_by`); corrected with exact SQL claim checks.
+Final focused installed-epoch plus controlled-epoch rerun:2 tests passed
+in7.976s with ResourceWarnings as errors. Bash all11 test files, generated
+reference and diff checks passed before checkpointing this portable regression.

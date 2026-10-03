@@ -18,7 +18,7 @@ from typing import Any
 
 from .contracts import BudgetExhausted, ContractError
 
-SUPPORTED_SCHEMA_VERSION = 16
+SUPPORTED_SCHEMA_VERSION = 17
 TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
 HOST_LEASE_SECONDS = 10 * 60
 BRANCH_REVIEW_TERMINAL_ARTIFACTS = frozenset({
@@ -3017,7 +3017,7 @@ class Store:
     ) -> AttemptReservation:
         if not owner_id or not package_digest:
             raise ContractError("supervisor owner and package digest are required")
-        if role not in {"worker", "implementer", "reviewer", "lead", "researcher"}:
+        if role not in {"worker", "implementer", "reviewer", "lead", "researcher", "proposer_a", "proposer_b", "critic"}:
             raise ContractError("attempt role is invalid")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
@@ -3630,6 +3630,7 @@ class Store:
         artifacts: list[dict[str, Any]],
         metadata: Any,
         packet: dict[str, Any],
+        *, mutable_snapshot: dict[str, Any] | None = None,
     ) -> str:
         """Atomically import one completed attempt and publish its host packet."""
         prepared, stdout_name, stderr_name = self._prepare_durable_artifacts(
@@ -3669,6 +3670,24 @@ class Store:
             if (attempt["status"] != "running" or run["state"] != "running"
                     or run["phase"] is not None):
                 raise ConflictError("durable handoff import is fenced")
+            if mutable_snapshot is not None:
+                from .council_runtime import verify_origin
+                current_snapshot = json.loads(self.run(run_id)["mutable_snapshot"])
+                if (current_snapshot.get("task", {}).get("workflow") != "council-decision"
+                        or attempt["id"] is None
+                        or self.connection.execute("SELECT role FROM attempts WHERE id=?", (attempt["id"],)).fetchone()[0] != "critic"):
+                    raise ConflictError("Council handoff projection is fenced")
+                verify_origin(self, run_id, current_snapshot)
+                verify_origin(self, run_id, mutable_snapshot)
+                old = current_snapshot["council_state"]
+                new = mutable_snapshot["council_state"]
+                if (old["next_role"] != "critic" or set(old["documents"]) != {"proposer_a", "proposer_b"}
+                        or set(new["documents"]) != {"proposer_a", "proposer_b", "critic"}
+                        or new["next_role"] != "lead"
+                        or {key: value for key, value in new["documents"].items() if key != "critic"} != old["documents"]
+                        or {key: value for key, value in new["artifacts"].items() if key != "critic"} != old["artifacts"]):
+                    raise ConflictError("Council critic import changed finalized proposals or skipped the barrier")
+                self.connection.execute("UPDATE runs SET mutable_snapshot=? WHERE id=?", (canonical_json(mutable_snapshot), run_id))
 
             version, artifact_ids = self._reference_prepared_artifacts(
                 run_id, run["version"], prepared,
@@ -3752,6 +3771,46 @@ class Store:
             )
             self.connection.execute("COMMIT")
             return "awaiting_host"
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def commit_council_stage(self, run_id: str, attempt_token: str, artifacts: list,
+                             metadata: dict, snapshot: dict, role: str) -> str:
+        """Import one sealed proposal under the existing attempt fence."""
+        from .council_runtime import verify_origin
+        prepared, stdout_name, stderr_name = self._prepare_durable_artifacts(run_id, artifacts, require_result_receipt=False)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.run(run_id)
+            attempt = self.connection.execute("SELECT * FROM attempts WHERE run_id=? AND attempt_token=?", (run_id, attempt_token)).fetchone()
+            if (not attempt or run["state"] != "running" or run["phase"] is not None
+                    or attempt["status"] != "running" or attempt["role"] != role
+                    or role not in {"proposer_a", "proposer_b"}):
+                raise ConflictError("Council proposal import is fenced")
+            prior = json.loads(run["mutable_snapshot"])
+            verify_origin(self, run_id, prior)
+            verify_origin(self, run_id, snapshot)
+            if prior["council_state"]["next_role"] != role or role in prior["council_state"]["documents"]:
+                raise ConflictError("Council proposal stage is stale")
+            old_docs = prior["council_state"]["documents"]
+            new_docs = snapshot["council_state"]["documents"]
+            if (set(new_docs) != set(old_docs) | {role}
+                    or {k: v for k, v in new_docs.items() if k != role} != old_docs
+                    or snapshot["council_state"]["next_role"] != ("proposer_b" if role == "proposer_a" else "critic")
+                    or {key: value for key, value in snapshot["council_state"]["artifacts"].items() if key != role} != prior["council_state"].get("artifacts", {})):
+                raise ConflictError("Council proposal import changed another finalized proposal")
+            version, ids = self._reference_prepared_artifacts(run_id, run["version"], prepared)
+            version = self._record_prepared_output(run_id, version, attempt, ids, stdout_name, stderr_name, canonical_json(metadata))
+            now, version = _utc_now(), version + 1
+            self.connection.execute("UPDATE attempts SET status='finished',finished_at=? WHERE id=?", (now, attempt["id"]))
+            self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,))
+            self.connection.execute("UPDATE runs SET mutable_snapshot=?,state='queued',phase=NULL,version=?,updated_at=? WHERE id=?",
+                                    (canonical_json(snapshot), version, now, run_id))
+            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'council.proposal_finalized',?,?)",
+                                    (run_id, version, canonical_json({"role": role, "attempt_id": attempt["id"]}), now))
+            self.connection.execute("COMMIT")
+            return "queued"
         except Exception:
             self.connection.execute("ROLLBACK")
             raise
@@ -3931,7 +3990,7 @@ class Store:
 
     @_project_terminal
     def recover_unstarted_attempt(
-        self, run_id: str, attempt_token: str, reason: str,
+        self, run_id: str, attempt_token: str, reason: str, *, terminal_artifacts: list | None = None,
     ) -> tuple[int, str]:
         """Recover a dead gated runner that never published a child identity.
 
@@ -3939,6 +3998,8 @@ class Store:
         atomic child record is absent. The inner gate cannot open before that
         record is durable, so no worker command can have executed in this case.
         """
+        prepared = (self._prepare_exact_artifacts(run_id, terminal_artifacts, BRANCH_REVIEW_TERMINAL_ARTIFACTS)
+                    if terminal_artifacts is not None else None)
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             run = self.connection.execute(
@@ -3959,17 +4020,16 @@ class Store:
                 raise ConflictError("unstarted attempt now has a child identity record")
             now = _utc_now()
             if run["state"] == "cancelling":
-                path, digest, size, receipt_time = self._terminal_receipt(
-                    run_id,
-                    "cancelled",
-                    "cancelling",
-                    None,
-                    attempt_id=attempt["id"],
-                    now=now,
-                )
-                version = self._reference_terminal_receipt(
-                    run_id, run["version"], path, digest, size, receipt_time,
-                ) + 1
+                if prepared is not None:
+                    version, _ = self._reference_prepared_artifacts(run_id, run["version"], prepared)
+                    version += 1
+                else:
+                    path, digest, size, receipt_time = self._terminal_receipt(
+                        run_id, "cancelled", "cancelling", None, attempt_id=attempt["id"], now=now,
+                    )
+                    version = self._reference_terminal_receipt(
+                        run_id, run["version"], path, digest, size, receipt_time,
+                    ) + 1
                 self.connection.execute(
                     "UPDATE attempts SET status='finished',finished_at=? WHERE id=?",
                     (now, attempt["id"]),
@@ -4633,6 +4693,9 @@ class Store:
             "schema_version", "submission_id", "submission_hash",
             "disposition", "reason", "evidence_refs",
         }
+        snapshot = json.loads(self.run(run_id)["mutable_snapshot"] or "{}")
+        if snapshot.get("task", {}).get("workflow") == "council-decision":
+            expected_fields.add("council_choice")
         if not isinstance(decision, dict) or set(decision) != expected_fields:
             raise ContractError("handoff decision fields are invalid")
         if decision["schema_version"] != 1 or type(decision["schema_version"]) is not int:
@@ -5387,6 +5450,32 @@ class Store:
                 "VALUES(?,?,'run.failed',?,?)",
                 (run_id, version, canonical_json(payload), now),
             )
+            self.connection.execute("COMMIT")
+            return version
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    @_project_terminal
+    def cancel_council_queued(self, run_id: str, expected_version: int, artifacts: list) -> int:
+        prepared = self._prepare_exact_artifacts(run_id, artifacts, BRANCH_REVIEW_TERMINAL_ARTIFACTS)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            run = self.run(run_id)
+            snapshot = json.loads(run["mutable_snapshot"])
+            if (run["version"] != expected_version or run["state"] != "queued" or run["phase"] is not None
+                    or snapshot["task"]["workflow"] != "council-decision"):
+                raise ConflictError("Council queued cancellation is fenced")
+            if self.connection.execute("SELECT 1 FROM supervisor_claims WHERE run_id=? AND active=1", (run_id,)).fetchone():
+                raise ConflictError("Council queued cancellation raced with an owned launcher")
+            version, _ = self._reference_prepared_artifacts(run_id, run["version"], prepared)
+            now, version = _utc_now(), version + 1
+            self.connection.execute("UPDATE attempts SET status='recovery_required',finished_at=? WHERE run_id=? AND status='reserved'", (now, run_id))
+            self.connection.execute("UPDATE supervisor_claims SET active=0 WHERE run_id=?", (run_id,))
+            self.connection.execute("UPDATE claims SET active=0,fencing_token=fencing_token+1 WHERE run_id=?", (run_id,))
+            self.connection.execute("UPDATE runs SET state='cancelled',phase=NULL,version=?,updated_at=? WHERE id=?", (version, now, run_id))
+            self.connection.execute("INSERT INTO events(run_id,run_version,type,payload,created_at) VALUES(?,?,'run.cancelled',?,?)",
+                (run_id, version, canonical_json({"receipt": "result-receipt.json", "workflow": "council-decision"}), now))
             self.connection.execute("COMMIT")
             return version
         except Exception:

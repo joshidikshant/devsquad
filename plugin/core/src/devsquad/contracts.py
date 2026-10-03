@@ -94,9 +94,11 @@ class LaunchSpec:
             raise ContractError("stdin_path must be a non-empty string or null")
         if not isinstance(self.requested, ExecutionIdentity):
             raise ContractError("requested must be an execution identity")
-        allowed_env = {"DEVSQUAD_WORKER", "DEVSQUAD_RUN_ID", "DEVSQUAD_ATTEMPT_ID", "DEVSQUAD_DELEGATION_DEPTH"}
+        allowed_env = {"DEVSQUAD_WORKER", "DEVSQUAD_RUN_ID", "DEVSQUAD_ATTEMPT_ID", "DEVSQUAD_DELEGATION_DEPTH", "DEVSQUAD_COUNCIL_ROLE"}
         if not isinstance(self.environment, dict) or set(self.environment) - allowed_env or not all(isinstance(k, str) and isinstance(v, str) for k, v in self.environment.items()):
             raise ContractError("environment contains non-allowlisted or non-string values")
+        if self.environment.get("DEVSQUAD_COUNCIL_ROLE", "") not in {"", "proposer_a", "proposer_b", "critic", "lead"}:
+            raise ContractError("Council worker role marker is invalid")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

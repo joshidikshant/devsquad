@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "plugin/core/src"))
 
 from devsquad.capacity import derive_pool_capacity, validate_observation
 from devsquad.contracts import ContractError
-from devsquad.store import ConflictError, SchemaVersionError, Store
+from devsquad.store import ConflictError, SchemaVersionError, Store, SUPPORTED_SCHEMA_VERSION
 
 
 NOW = datetime(2026, 9, 27, 15, 0, tzinfo=timezone.utc)
@@ -185,7 +185,7 @@ class CapacityContractTest(unittest.TestCase):
             version = store.connection.execute(
                 "SELECT MAX(version) FROM schema_migrations",
             ).fetchone()[0]
-            self.assertEqual(version, 16)
+            self.assertEqual(version, SUPPORTED_SCHEMA_VERSION)
             tables = {
                 row[0] for row in store.connection.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'",

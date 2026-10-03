@@ -875,6 +875,19 @@ class InstalledWheelMCPBoundaryTest(unittest.TestCase):
                 integrations.stdout.strip(),
                 "antigravity,claude-code,codex,grok",
             )
+            schemas = subprocess.run(
+                [
+                    str(python), "-P", "-c",
+                    "from pathlib import Path; import sys; "
+                    "print(','.join(sorted(path.name for path in "
+                    "(Path(sys.prefix) / 'share/devsquad/schemas').glob('*.schema.json'))))",
+                ],
+                check=True, text=True, capture_output=True, cwd=root, env=environment,
+            )
+            self.assertEqual(
+                schemas.stdout.strip(),
+                ",".join(sorted(path.name for path in (CORE / "schemas").glob("*.schema.json"))),
+            )
             missing = subprocess.run(
                 [str(squad), "mcp", "serve"], text=True, capture_output=True, env=environment,
             )

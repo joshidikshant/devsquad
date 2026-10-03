@@ -326,7 +326,7 @@ class Supervisor:
             if not identity_committed:
                 self.store.fail_launch(reservation,"durable gated launch failed")
             elif not gate_released:
-                self.store.recover_unstarted_attempt(
+                self._recover_unstarted_attempt(
                     run_id, reservation.attempt_token,
                     "runner gate could not be released",
                 )
@@ -351,6 +351,15 @@ class Supervisor:
         returncode=handle.process.wait(timeout=2)
         self.import_durable(handle.reservation.run_id)
         return returncode
+
+    def _recover_unstarted_attempt(self, run_id: str, attempt_token: str, reason: str) -> tuple[int, str]:
+        artifacts = None
+        run = self.store.run(run_id)
+        snapshot = json.loads(run["mutable_snapshot"])
+        if run["state"] == "cancelling" and snapshot.get("task", {}).get("workflow") == "council-decision":
+            from .council_runtime import prepared_reports
+            artifacts = prepared_reports(self.store, run_id, snapshot, "cancelled")
+        return self.store.recover_unstarted_attempt(run_id, attempt_token, reason, terminal_artifacts=artifacts)
 
     def _commit_review_handoff(
         self,
@@ -579,7 +588,7 @@ class Supervisor:
                 self.store.block_recovery(run_id,attempt["attempt_token"],"runner and child died without an exit receipt",release_writer=True)
                 return "recovery_required"
             try:
-                _, disposition = self.store.recover_unstarted_attempt(
+                _, disposition = self._recover_unstarted_attempt(
                     run_id,
                     attempt["attempt_token"],
                     "runner died before publishing the gated child identity",
@@ -618,6 +627,7 @@ class Supervisor:
             managed_workflow = "internal_fake_delay" not in snapshot
             workflow_review = managed_workflow and workflow == "branch-review"
             workflow_delivery = managed_workflow and workflow == "issue-delivery"
+            workflow_council = managed_workflow and workflow == "council-decision"
             role = attempt.get("role", "worker")
             semantic_error=None
             native_failure = None
@@ -634,6 +644,14 @@ class Supervisor:
                         )
                 except (ContractError, KeyError, TypeError, IndexError):
                     pass
+            if (workflow_council and not receipt["cancelled"] and not receipt["timed_out"] and receipt["returncode"] == 0):
+                try:
+                    from .council_runtime import import_stage
+                    return import_stage(self.store, run_id, attempt, artifacts, metadata, snapshot, captures["stdout"])
+                except ContractError as exc:
+                    semantic_error = str(exc)
+                    receipt["error"] = "COUNCIL_OUTPUT_INVALID"
+                    receipt["message"] = semantic_error
             if (role == "implementer" and workflow_delivery
                     and not receipt["cancelled"]
                     and not receipt["timed_out"] and receipt["returncode"] == 0):
@@ -701,9 +719,9 @@ class Supervisor:
                     if role == "lead" else "WORKFLOW_OUTPUT_INVALID"
                 )
                 payload["message"]=semantic_error
-            if workflow_review or workflow_delivery:
+            if workflow_review or workflow_delivery or workflow_council:
                 from .service import Service
-                prior_attempts, prior_dispositions = Service._saved_review_progress(
+                prior_attempts, prior_dispositions = ([], []) if workflow_council else Service._saved_review_progress(
                     self.store,
                     run_id,
                     snapshot,
@@ -788,6 +806,10 @@ class Supervisor:
                         metadata,
                         fallback_error,
                     )
+                if workflow_council:
+                    from .council_runtime import prepared_reports
+                    artifacts.extend(prepared_reports(self.store, run_id, snapshot, terminal, error=report_error))
+                    return self.store.commit_durable_import(run_id, attempt["attempt_token"], artifacts, metadata, terminal, payload)
                 reports = build_early_terminal_reports(
                     run_id=run_id,
                     state=terminal,

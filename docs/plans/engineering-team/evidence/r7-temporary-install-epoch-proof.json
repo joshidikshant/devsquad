@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "scope": "actual_temporary_core_only_installer_and_public_fixture_processes",
+  "candidate_commit": "72ae4130190169096415436952f7c83498bd4d59",
+  "candidate_source_sha256": "4c6f0d92e6576abcf2f64044a0321cf9cd8c8e0c808d7923e0f9b7e97b8b4cab",
+  "old_commit": "bf3de0867484552d354e6e8b6ba835f31a93aeb3",
+  "old_source_sha256": "90f1e87fb9acf7756dad46780672de9b84fe75e3631322857a310f089280345e",
+  "old_package_sha256": "e03bf3a2e362b3aff6d0a5dd00bd837f15afb216d4c58ac1d9c776c4d8f09c67",
+  "old_schema": 16,
+  "new_schema": 17,
+  "active_deferral": true,
+  "recoverable_deferral": true,
+  "selector_and_launcher_preserved": true,
+  "old_active_cancelled": true,
+  "old_recoverable_reconciled": true,
+  "long_lived_old_claim_rejected": true,
+  "fresh_old_service_claim_rejected": true,
+  "council_claim_unchanged": true,
+  "owned_process_groups_gone": true,
+  "temporary_install_removed": true,
+  "mcp_installed_in_temporary_release": false,
+  "native_generation": false,
+  "regression_test": "test/core/test_council_install_epoch.py",
+  "limitations": [
+    "This is a temporary core-only installation, not a production upgrade or MCP SDK lifecycle gate",
+    "The exact archived core matches accepted immutable R5 source and code-package digests; no version-rewritten Store was used",
+    "Public fixture mechanics do not prove native quality or network readiness",
+    "Root must reconcile R6 shared code and repeat integrated acceptance before production activation"
+  ]
+}

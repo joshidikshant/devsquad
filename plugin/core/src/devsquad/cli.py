@@ -36,7 +36,7 @@ WAIT_EXIT_CODES = {
     "cancelled": 4,
 }
 WAIT_ACTIVE_STATES = {"queued", "running", "cancelling"}
-HUMAN_COMMANDS = {"review", "fix", "status", "result", "doctor", "setup", "finish", "resume", "cancel"}
+HUMAN_COMMANDS = {"review", "fix", "council", "council-finish", "status", "result", "doctor", "setup", "finish", "resume", "cancel"}
 
 
 def manifests() -> list[tuple[Path, AdapterManifest]]:
@@ -327,6 +327,61 @@ def command_fix(args: argparse.Namespace) -> tuple[dict, int]:
     return _command_normal_entry(args, workflow="issue-delivery")
 
 
+def command_council(args: argparse.Namespace) -> tuple[dict, int]:
+    from .council_task_entry import build_council_task
+    if args.dry_run and args.wait:
+        raise ContractError("--wait cannot be combined with --dry-run")
+    repo = resolve_repository(args.project_dir)
+    identities = discover_codex_identity(repo, requested_effort=args.effort, runtime=Path(args.runtime_dir), all_models=True)
+    if args.model:
+        if len(args.model) != 3 or len(set(args.model)) != 3:
+            raise ContractError("Council --model must name exactly three distinct model IDs in proposer_a/proposer_b/critic order")
+        catalog = {value["model_id"]: value for value in identities}
+        if any(model not in catalog for model in args.model):
+            raise ContractError("Council pinned model is not available with verified effort metadata")
+        identities = [catalog[model] for model in args.model]
+    else:
+        # Prefer available catalog cross-family IDs; catalog entitlement is not
+        # tested quality qualification. The same Codex subscription harness
+        # with three entitled distinct IDs remains a valid bounded baseline.
+        chosen = []
+        remaining = list(identities)
+        while remaining and len(chosen) < 3:
+            families = {identity["model_family"] for identity in chosen}
+            remaining.sort(key=lambda identity: identity["model_family"] in families)
+            chosen.append(remaining.pop(0))
+        identities = chosen
+    evidence = []
+    for value in args.evidence or []:
+        artifact_id, separator, sha256 = value.rpartition(":")
+        if not separator:
+            raise ContractError("Council --evidence must be ARTIFACT_ID:SHA256")
+        evidence.append({"artifact_id": artifact_id, "sha256": sha256})
+    rubric = None
+    if args.criterion:
+        rubric = []
+        for value in args.criterion:
+            criterion_id, separator, description = value.partition("=")
+            if not separator:
+                raise ContractError("Council --criterion must be ID=DESCRIPTION")
+            rubric.append({"id": criterion_id, "description": description})
+    task, summary = build_council_task(project_dir=repo, goal=args.question, identities=identities,
+        base_ref=args.base, target_ref=args.target, read_paths=args.read_path or (), checks=parse_checks(args.check),
+        lead_mode=args.lead, max_invocations=args.max_invocations, evidence=evidence, rubric=rubric)
+    key = args.idempotency_key or f"normal-council-{summary['task_sha256']}"
+    if args.dry_run:
+        return envelope(data=_normal_entry_result(summary, key, None)), 0
+    service = _service(args)
+    started = service.start(task, key)
+    run, code = _wait_for_run(service, started) if args.wait else (envelope(data=started), 0)
+    service_data = run["data"] if args.json else _display_status(service, run["data"])
+    return envelope(data=_normal_entry_result(summary, key, service_data)), code
+
+
+def command_council_finish(args: argparse.Namespace) -> tuple[dict, int]:
+    return command_finish(args)
+
+
 def command_capacity_observe(args: argparse.Namespace) -> tuple[dict, int]:
     observation = _read_json(args.file, "capacity observation file")
     return envelope(data=_service(args).capacity_observe(observation)), 0
@@ -423,6 +478,8 @@ def command_finish(args: argparse.Namespace) -> tuple[dict, int]:
     service = _service(args)
     return envelope(data=service.finish(
         _selected_run(args, service), args.disposition, args.reason,
+        chosen=args.choose, supported_claims=args.supported_claim,
+        discarded_alternatives=args.discarded_alternative, validation=args.validation,
     )), 0
 
 
@@ -500,6 +557,39 @@ def parser() -> argparse.ArgumentParser:
             cmd.add_argument("--stderr-file", required=True)
         cmd.set_defaults(func=fn)
     runtime_default = os.environ.get("DEVSQUAD_RUNTIME_DIR", str(Path.home() / ".devsquad" / "runtime"))
+    council = sub.add_parser("council", help="manual read-only Council decision, automatic triggering off")
+    council.add_argument("question")
+    council.add_argument("--project-dir", default=str(Path.cwd()))
+    council.add_argument("--base", default="HEAD")
+    council.add_argument("--target", default="HEAD")
+    council.add_argument("--read-path", action="append")
+    council.add_argument("--evidence", action="append", help="saved ARTIFACT_ID:SHA256")
+    council.add_argument("--criterion", action="append", help="ID=DESCRIPTION; freezes the complete rubric")
+    council.add_argument("--check", action="append")
+    council.add_argument("--model", action="append", help="exact model IDs, repeated three times")
+    council.add_argument("--effort")
+    council.add_argument("--lead", choices=("headless", "host"), default="headless")
+    council.add_argument("--max-invocations", type=int, default=4)
+    council.add_argument("--idempotency-key")
+    council.add_argument("--dry-run", action="store_true")
+    council.add_argument("--wait", action="store_true")
+    council.add_argument("--json", action="store_true")
+    council.add_argument("--runtime-dir", default=runtime_default)
+    council.set_defaults(func=command_council)
+    council_finish = sub.add_parser("council-finish", help="explicit host Council choice without decision JSON")
+    council_finish.add_argument("run", nargs="?")
+    council_disposition = council_finish.add_mutually_exclusive_group(required=True)
+    council_disposition.add_argument("--accept", dest="disposition", action="store_const", const="accept")
+    council_disposition.add_argument("--reject", dest="disposition", action="store_const", const="reject")
+    council_finish.add_argument("--reason", required=True)
+    council_finish.add_argument("--choose", choices=("A", "B", "synthesis"), required=True)
+    council_finish.add_argument("--supported-claim", action="append")
+    council_finish.add_argument("--discarded-alternative", action="append")
+    council_finish.add_argument("--validation", required=True)
+    council_finish.add_argument("--json", action="store_true")
+    council_finish.add_argument("--project-dir", default=str(Path.cwd()))
+    council_finish.add_argument("--runtime-dir", default=runtime_default)
+    council_finish.set_defaults(func=command_council_finish)
     review = sub.add_parser(
         "review",
         help="start an exact-commit Codex branch review without task JSON",
@@ -567,6 +657,10 @@ def parser() -> argparse.ArgumentParser:
     for value in ("accept", "reject", "revise"):
         disposition.add_argument(f"--{value}", dest="disposition", action="store_const", const=value)
     finish.add_argument("--reason", required=True)
+    finish.add_argument("--choose", choices=("A", "B", "synthesis"), help="required for Council, never inferred")
+    finish.add_argument("--supported-claim", action="append", help="Council supported claim, repeat as needed")
+    finish.add_argument("--discarded-alternative", action="append", help="Council discarded alternative, repeat as needed")
+    finish.add_argument("--validation", help="required Council objective validation and remaining uncertainty")
     finish.add_argument("--project-dir", default=str(Path.cwd()))
     finish.add_argument("--json", action="store_true")
     finish.add_argument("--runtime-dir", default=runtime_default)
@@ -660,12 +754,22 @@ def _next_command(data: dict[str, Any]) -> str:
     if action == "claim_handoff":
         pending = (data.get("handoff_view") or {}).get("pending_finish")
         if pending:
-            return f"squad finish {run_id} --{pending['disposition']} --reason={shlex.quote(pending['reason'])}"
+            command = f"squad finish {run_id} --{pending['disposition']} --reason={shlex.quote(pending['reason'])}"
+            choice = pending.get("council_choice")
+            if choice is not None:
+                command += f" --choose={shlex.quote(choice['chosen'])} --validation={shlex.quote(choice['validation'])}"
+                for value in choice["supported_claims"]:
+                    command += f" --supported-claim={shlex.quote(value)}"
+                for value in choice["discarded_alternatives"]:
+                    command += f" --discarded-alternative={shlex.quote(value)}"
+            return command
         owner = (data.get("handoff") or {}).get("claimed_by")
         if owner:
             return f"complete or renew the saved claim in {owner}; this handoff already has an owner"
+        if (data.get("handoff_view") or {}).get("workflow") == "council-decision":
+            return f"inspect the Council evidence, then squad finish {run_id} with explicit disposition, --choose, --reason and --validation"
         return f'squad finish {run_id} --accept --reason="your assessment of the saved evidence"'
-    if action in {"continue_headless_lead", "resume_candidate_review", "handoff_submission_saved"}:
+    if action in {"continue_headless_lead", "resume_candidate_review", "resume_council_stage", "handoff_submission_saved"}:
         return f"squad resume {run_id}"
     if action == "recovery_file_required":
         return f"squad status {run_id} --json; inspect the recovery evidence before squad resume {run_id} --recovery-file FILE"
@@ -680,7 +784,9 @@ def _next_lines(data: dict[str, Any]) -> list[str]:
     lines = [f"Next: {_next_command(data)}"]
     if data.get("next_action") == "claim_handoff":
         if (data.get("handoff_view") or {}).get("pending_finish"):
-            lines.append("Guidance: retry the exact saved intent; disposition and reason must match.")
+            lines.append("Guidance: retry the exact saved intent; all disposition, reason and choice inputs must match.")
+        elif (data.get("handoff_view") or {}).get("workflow") == "council-decision":
+            lines.append("Guidance: choose A, B or synthesis yourself; --supported-claim and --discarded-alternative repeat; dissent is retained. Extra rounds require a new capped Council run.")
         elif not (data.get("handoff") or {}).get("claimed_by"):
             lines.append("Guidance: use --reject or --revise instead of --accept if the evidence requires it.")
     return lines
@@ -690,6 +796,21 @@ def _handoff_lines(data: dict[str, Any]) -> list[str]:
     view = data.get("handoff_view")
     if not view:
         return [f"Evidence unavailable: {data['handoff_view_error']}"] if data.get("handoff_view_error") else []
+    if view.get("workflow") == "council-decision":
+        lines = ["Council: independent proposals committed before the distinct critic; automatic use off."]
+        for label, proposal in sorted(view["proposals"].items()):
+            lines.append(f"Proposal {label}: {proposal['summary']}")
+        critique = view["critique"]
+        lines.append(f"Critic: {critique['summary']}")
+        for assessment in critique["assessments"]:
+            lines.append(f"Criterion {assessment['criterion_id']} ({assessment['label']}): {assessment['status']} — {assessment['reason']}")
+        for objection in critique["objections"]:
+            lines.append(f"Dissent {objection['id']} ({objection['label']}): {objection['reason']}")
+        for check in view["checks"]:
+            lines.append(f"Check {check['id']}: {check['status']}")
+        artifact = view.get("report_artifact")
+        lines.append(f"Evidence {artifact['name']}: {artifact['path']}" if artifact else "Evidence: verified saved Council handoff report")
+        return lines
     review = view["review"]
     lines = [f"Review: {review['verdict']} — {review['summary']}"]
     for finding in review.get("findings", []):
@@ -721,6 +842,8 @@ def _human_response(command: str, response: dict[str, Any]) -> str:
                 lines.append(f"  Next: {auth['next_action']}")
         for workflow, row in data.get("supported_workflows", {}).items():
             lines.append(f"{workflow}: {'ready' if row.get('ready') else 'unavailable' if not row.get('supported') else 'needs attention'}")
+            if row.get("implemented_partial"):
+                lines.append(f"  Implemented partial; native ready: false; automatic off. {row['reason']}")
         for row in data.get("local_apps", []):
             lines.append(f"{row.get('id', 'app')} registration: {row.get('status', 'unknown')}")
         lines.append("Next: squad setup --dry-run" if not data.get("ready") else "Next: squad review --base main --dry-run")
@@ -729,7 +852,7 @@ def _human_response(command: str, response: dict[str, Any]) -> str:
         for row in data.get("hosts", []):
             lines.append(f"{row.get('id', 'app')}: {row.get('action', 'unknown')}; registration {'ready' if row.get('ready') else 'needs attention'}")
         lines.append("Next: squad setup" if data.get("dry_run") and data.get("completed") else "Next: squad doctor")
-    elif command in {"review", "fix"}:
+    elif command in {"review", "fix", "council"}:
         lines.append(f"{data.get('workflow', command)}: {data.get('state', 'unknown')}")
         if data.get("run_id"):
             lines.append(f"Run: {data['run_id']}")
@@ -745,6 +868,9 @@ def _human_response(command: str, response: dict[str, Any]) -> str:
             lines.append(f"Check {check['id']}: {shlex.join(check['argv'])} ({'required' if check['required_to_pass'] else 'report only'})")
         if not data.get("check_plan"):
             lines.append(f"Checks: {', '.join(data.get('checks', []))}")
+        if command == "council":
+            lines.append(f"Worker cap: {data['budget']['max_worker_invocations']}; rounds: 1; lead: {data['lead']['mode']}; automatic off")
+            lines.append("Native readiness: unavailable until exact-boundary backend attestation; dry-run is preparation only.")
         next_data = data.get("service") or data
         lines.extend(_handoff_lines(next_data))
         lines.extend(_next_lines(next_data))

@@ -4,7 +4,7 @@
   "required":["schema_version","id","version","roles","task_classes","require_different_model_for_review","account_pools","experiment_budget"],
   "properties":{
     "schema_version":{"const":1},"id":{"type":"string","minLength":1},"version":{"type":"integer","minimum":1},
-    "roles":{"type":"object","propertyNames":{"enum":["implementer","reviewer","lead","researcher"]},"additionalProperties":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/candidate"}}},
+    "roles":{"type":"object","propertyNames":{"enum":["implementer","reviewer","lead","researcher","proposer_a","proposer_b","critic"]},"additionalProperties":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/candidate"}}},
     "task_classes":{"type":"object","propertyNames":{"minLength":1},"additionalProperties":{"enum":["unvalidated","trial","proven","suspended"]}},"require_different_model_for_review":{"type":"boolean"},"prefer_different_harness_for_review":{"type":"boolean"},
     "account_pools":{"type":"object","propertyNames":{"minLength":1},"additionalProperties":{"$ref":"#/$defs/account_pool"}},"experiment_budget":{"type":"object","propertyNames":{"minLength":1},"additionalProperties":{"type":"integer","minimum":0}},"decision_helper":{"oneOf":[{"type":"object","additionalProperties":false,"required":["schema_version","mode"],"properties":{"schema_version":{"const":1},"mode":{"const":"off"}}},{"$ref":"#/$defs/decision_helper_enabled"}]}
   },

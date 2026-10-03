@@ -268,10 +268,17 @@ def _isolated_codex_environment(
     return home, environment
 
 
-def run(snapshot: dict[str, Any]) -> dict[str, Any]:
+def run(snapshot: dict[str, Any], *, council_role: str | None = None,
+        council_prompt: str | None = None) -> dict[str, Any]:
     if not isinstance(snapshot, dict):
         raise ContractError("workflow snapshot must be an object")
-    adapter, profile = _validated_adapter(snapshot)
+    schema = review_output_schema()
+    if council_role is not None:
+        from .council import output_schema
+        schema = output_schema(council_role)
+    adapter, profile = _validated_adapter(snapshot, role=council_role or "reviewer",
+                                          adapter_key="council_adapter" if council_role else "review_adapter",
+                                          output_schema=schema)
     binary = Path(adapter["binary"])
     try:
         resolved = binary.resolve(strict=True)
@@ -330,6 +337,18 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     try:
         codex_home, environment = _isolated_codex_environment(adapter["auth_file"])
+        if council_role is not None:
+            import shutil
+            from .council_isolation import command
+            auth = Path(codex_home.name) / "auth.json"
+            auth.unlink()
+            shutil.copyfile(adapter["auth_file"], auth)
+            auth.chmod(0o600)
+            scratch = Path(codex_home.name).resolve(strict=True)
+            environment["CODEX_HOME"] = str(scratch)
+            environment["HOME"] = str(scratch)
+            environment["TMPDIR"] = str(scratch)
+            argv = command(snapshot["council_boundary"], argv, scratch=scratch)
         process = subprocess.Popen(
             argv,
             cwd=review_root,
@@ -409,7 +428,7 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
                 or Path(reported_cwd).resolve() != review_root):
             raise ContractError("Codex thread did not preserve the frozen execution identity")
 
-        prompt = build_review_prompt(snapshot["task"], workspace)
+        prompt = council_prompt if council_role is not None else build_review_prompt(snapshot["task"], workspace)
         peer.send(turn_start_request(
             101,
             thread_id=thread_id,
@@ -418,7 +437,7 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
             effort=effort,
             cwd=str(review_root),
             permission="read_only",
-            output_schema=review_output_schema(),
+            output_schema=schema,
         ))
         turn_result = _response_result(
             receive_response(
@@ -463,9 +482,11 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
                 + canonical_json(state.output_diagnostics())
             )
         try:
-            review = decode_review_document(
-                review_payload, snapshot["task"], workspace,
-            )
+            if council_role is not None:
+                from .council import decode
+                review = decode(review_payload)
+            else:
+                review = decode_review_document(review_payload, snapshot["task"], workspace)
         except ContractError as exc:
             raise ContractError(
                 f"{exc}; protocol_summary="
@@ -487,6 +508,9 @@ def run(snapshot: dict[str, Any]) -> dict[str, Any]:
         "permission_policy": "read_only",
         "verification": "verified",
     }
+    if council_role is not None:
+        return {"document": review, "observed_identity": observed_identity,
+                "native_ids": {"thread_id": thread_id, "turn_id": turn_id}, "usage": usage}
     return run_review_and_checks(
         snapshot,
         review,

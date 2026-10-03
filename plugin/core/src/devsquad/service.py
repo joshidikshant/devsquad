@@ -119,6 +119,9 @@ class Service:
         snapshot: dict[str, Any] | None,
         error: dict[str, Any],
     ) -> list[dict[str, Any]] | None:
+        if task.get("workflow") == "council-decision":
+            from .council_runtime import prepared_reports
+            return prepared_reports(store, run_id, snapshot, "failed", error=error)
         if task.get("workflow") not in {"branch-review", "issue-delivery"}:
             return None
         reports = build_early_terminal_reports(
@@ -250,6 +253,9 @@ class Service:
         error: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
         """Materialize complete M3 reports before a paused run terminalizes."""
+        if snapshot.get("task", {}).get("workflow") == "council-decision":
+            from .council_runtime import prepared_reports
+            return prepared_reports(store, run_id, snapshot, state, error=error)
         attempts, dispositions = self._saved_review_progress(
             store, run_id, snapshot, handoff,
         )
@@ -290,6 +296,12 @@ class Service:
         try:
             run = store.run(run_id)
             snapshot = self._review_snapshot(run)
+            if snapshot.get("task", {}).get("workflow") == "council-decision":
+                from .council_runtime import prepared_reports
+                error = {"error": "BUDGET_EXHAUSTED", "message": "Council run budget is exhausted"}
+                artifacts = prepared_reports(store, run_id, snapshot, "failed", error=error)
+                version = store.fail_queued_budget(run_id, expected_version, error, artifacts)
+                return {"run_id": run_id, "state": "failed", "version": version}
             if snapshot.get("task", {}).get("workflow") not in {
                 "branch-review", "issue-delivery",
             }:
@@ -595,6 +607,7 @@ class Service:
         internal_lead_fixture: dict[str, Any] | None = None,
         internal_implementation_fixture: dict[str, Any] | None = None,
         internal_decision_fixture: dict[str, Any] | None = None,
+        internal_council_fixture: dict[str, Any] | None = None,
         preparation_fencing_token: int | None = None,
         capacity_store: Store | None = None,
     ) -> dict[str, Any]:
@@ -690,7 +703,7 @@ class Service:
             )
             if decision_observation is not None:
                 snapshot["decision_observation"] = decision_observation
-            if task["workflow"] == "branch-review":
+            if task["workflow"] in {"branch-review", "council-decision"}:
                 snapshot["workspace"] = prepare_review_workspace(
                     repo,
                     self.runtime,
@@ -710,6 +723,10 @@ class Service:
                     scope_paths,
                     required_clean_paths=config_paths.values(),
                 )
+                if task["workflow"] == "council-decision":
+                    from .council_runtime import prepare
+                    prepare(snapshot, store=capacity_store, run_id=run_id, runtime=self.runtime,
+                            fixture=internal_council_fixture)
             else:
                 snapshot["delivery_workspace"] = prepare_delivery_workspace(
                     repo,
@@ -816,11 +833,12 @@ class Service:
             internal_decision_fixture = submitted.get(
                 "_internal_decision_fixture"
             )
+            internal_council_fixture = submitted.get("_internal_council_fixture")
             store.validate_predecessor(run_id, fencing_token, supersedes_run_id)
             validated_supersedes_run_id = supersedes_run_id
             validate_task(task, require_existing_repo=True)
             minimum_headless_invocations = (
-                3 if task["workflow"] == "issue-delivery" else 2
+                4 if task["workflow"] == "council-decision" else 3 if task["workflow"] == "issue-delivery" else 2
             )
             if (task["lead"]["mode"] == "headless"
                     and task["budget"]["max_worker_invocations"]
@@ -842,6 +860,7 @@ class Service:
                 internal_lead_fixture=internal_lead_fixture,
                 internal_implementation_fixture=internal_implementation_fixture,
                 internal_decision_fixture=internal_decision_fixture,
+                internal_council_fixture=internal_council_fixture,
                 preparation_fencing_token=fencing_token,
                 capacity_store=store,
             )
@@ -878,7 +897,7 @@ class Service:
                 snapshot["review_adapter"] = snapshot["review_adapters"][
                     reviewer_route["selected"]["profile_id"]
                 ]
-            if (internal_delay is None and task["lead"]["mode"] == "headless"
+            if (internal_delay is None and task["lead"]["mode"] == "headless" and task["workflow"] != "council-decision"
                     and internal_lead_fixture is None):
                 lead_route = snapshot["routing"]["roles"]["lead"]
                 lead_candidates = [lead_route["selected"], *lead_route["fallbacks"]]
@@ -960,8 +979,14 @@ class Service:
         _internal_lead_fixture: dict[str, Any] | None = None,
         _internal_implementation_fixture: dict[str, Any] | None = None,
         _internal_decision_fixture: dict[str, Any] | None = None,
+        _internal_council_fixture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         validate_task(task, require_existing_repo=True)
+        if task["workflow"] == "council-decision" and any(value is not None for value in
+                (_internal_fake_delay, _internal_review_fixture, _internal_lead_fixture, _internal_implementation_fixture)):
+            raise ContractError("Council requires its explicit all-fixture seam or native roles")
+        if _internal_council_fixture is not None and task["workflow"] != "council-decision":
+            raise ContractError("Council fixture requires council-decision")
         if trial is not None:
             from .learning import validate_experiment
             from .experiment_provenance import assignment_for
@@ -1009,6 +1034,8 @@ class Service:
             )
         if _internal_decision_fixture is not None:
             submitted["_internal_decision_fixture"] = _internal_decision_fixture
+        if _internal_council_fixture is not None:
+            submitted["_internal_council_fixture"] = _internal_council_fixture
         store = self._store()
         try:
             claim = store.claim_start(Path(task["project"]["repo_path"]), idempotency_key, submitted, f"preflight:{os.getpid()}", objective_outcome=True)
@@ -1289,7 +1316,9 @@ class Service:
                 try:
                     snapshot = self._review_snapshot(run)
                     next_action = (
-                        "resume_candidate_review"
+                        "resume_council_stage"
+                        if snapshot.get("task", {}).get("workflow") == "council-decision"
+                        else "resume_candidate_review"
                         if snapshot.get("task", {}).get("workflow") == "issue-delivery"
                         and isinstance(snapshot.get("candidate"), dict)
                         and (handoff is None or handoff.status != "open")
@@ -1344,6 +1373,8 @@ class Service:
             run, _, handoff = store.status_snapshot(run_id)
             if handoff is None or handoff.status != "open":
                 raise ConflictError("run has no current open handoff to inspect")
+            if self._review_snapshot(run).get("task", {}).get("workflow") == "council-decision":
+                return self.council_handoff_view(run_id)
             packet = validate_saved_review_handoff(handoff.packet, self._review_snapshot(run))
             report = store.artifact_named(run_id, handoff_report_names(handoff.sequence)[1])
             if report is None:
@@ -1365,7 +1396,10 @@ class Service:
         finally:
             store.close()
 
-    def finish(self, run_id: str, disposition: str, reason: str) -> dict[str, Any]:
+    def finish(self, run_id: str, disposition: str, reason: str, *, chosen: str | None = None,
+               supported_claims: list[str] | None = None,
+               discarded_alternatives: list[str] | None = None,
+               validation: str | None = None) -> dict[str, Any]:
         """Guided terminal host disposition over the existing fenced handoff gates."""
         if disposition not in {"accept", "reject", "revise"}:
             raise ContractError("finish disposition is invalid")
@@ -1378,6 +1412,14 @@ class Service:
                     or handoff is None or handoff.status != "open"):
                 raise ConflictError("run has no current open handoff to finish; inspect squad status RUN")
             snapshot = self._review_snapshot(run)
+            if snapshot.get("task", {}).get("workflow") == "council-decision":
+                if chosen is None or validation is None:
+                    raise ContractError("Council finish requires explicit --choose and --validation; inspect squad status RUN")
+                return self.finish_council(run_id, disposition, reason, chosen=chosen,
+                    supported_claims=supported_claims or [], discarded_alternatives=discarded_alternatives or [],
+                    validation=validation)
+            if any(value is not None for value in (chosen, supported_claims, discarded_alternatives, validation)):
+                raise ContractError("Council choice flags cannot be used for a review or delivery handoff")
             if snapshot.get("task", {}).get("lead", {}).get("mode") != "host":
                 raise ConflictError("headless lead owns this handoff; run squad resume RUN")
             packet = validate_saved_review_handoff(handoff.packet, snapshot)
@@ -1441,6 +1483,16 @@ class Service:
         store = self._store()
         try:
             run = store.run(run_id)
+            if run["state"] == "queued" and run["phase"] is None:
+                try:
+                    snapshot = self._review_snapshot(run)
+                except ConflictError:
+                    snapshot = {}
+                if snapshot.get("task", {}).get("workflow") == "council-decision":
+                    from .council_runtime import prepared_reports
+                    artifacts = prepared_reports(store, run_id, snapshot, "cancelled")
+                    version = store.cancel_council_queued(run_id, run["version"], artifacts)
+                    return {"run_id": run_id, "state": "cancelled", "version": version}
             if run["state"] == "queued" and run["phase"] == "preparing":
                 store.cancel_run_decision_observations(run_id)
                 version = store.cancel_preparing(run_id)
@@ -1456,7 +1508,7 @@ class Service:
                     snapshot = self._review_snapshot(run)
                     handoff = store.handoff_snapshot(run_id)
                     if (snapshot.get("task", {}).get("workflow")
-                            in {"branch-review", "issue-delivery"}
+                            in {"branch-review", "issue-delivery", "council-decision"}
                             and handoff is not None):
                         terminal_artifacts = self._paused_review_terminal_artifacts(
                             store,
@@ -1501,7 +1553,7 @@ class Service:
             handoff_before_claim = store.handoff_snapshot(run_id)
             if (handoff_before_claim is not None
                     and handoff_before_claim.packet.get("workflow")
-                    in {"branch-review", "issue-delivery"}
+                    in {"branch-review", "issue-delivery", "council-decision"}
                     and self._review_snapshot(run)["task"]["lead"]["mode"]
                     == "headless"):
                 raise ConflictError(
@@ -1930,6 +1982,69 @@ class Service:
             "launch": launch,
         }
 
+    def council_handoff_view(self, run_id: str) -> dict[str, Any]:
+        """Validated portable Council evidence, without claiming or choosing."""
+        from .council_runtime import validate_saved_handoff, verified_artifact
+        from .reports import handoff_report_names
+        store = self._store()
+        try:
+            run = store.run(run_id)
+            snapshot = self._review_snapshot(run)
+            handoff = store.handoff_snapshot(run_id)
+            if (handoff is None or run["state"] != "awaiting_host" or run["phase"] is not None
+                    or handoff.status != "open"
+                    or snapshot["task"].get("workflow") != "council-decision"):
+                raise ConflictError("Council host handoff is not open")
+            validate_saved_handoff(store, run_id, handoff, snapshot)
+            _, markdown = handoff_report_names(handoff.sequence)
+            report = verified_artifact(store, run_id, markdown).decode("utf-8")
+            report_artifact = store.artifact_named(run_id, markdown)
+            return {"run_id": run_id, "workflow": "council-decision", "version": run["version"], "packet_sha256": handoff.packet_sha256,
+                    "candidate_sha256": handoff.packet["candidate_sha256"], "proposals": handoff.packet["proposals"],
+                    "critique": handoff.packet["critique"], "checks": handoff.packet["checks"], "report": report,
+                    "report_artifact": report_artifact,
+                    "pending_finish": store.terminal_finish_decision(run_id, handoff.handoff_id)}
+        finally:
+            store.close()
+
+    def finish_council(self, run_id: str, disposition: str, reason: str, *, chosen: str,
+                       supported_claims: list[str], discarded_alternatives: list[str], validation: str) -> dict[str, Any]:
+        """Explicit guided Council choice over the existing exact host claim."""
+        from .council import validate_choice
+        from .council_runtime import validate_saved_handoff, decision_gate
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise ContractError("finish requires a non-empty reason of at most 2000 characters")
+        reason = reason.strip()
+        store = self._store()
+        try:
+            run = store.run(run_id)
+            snapshot = self._review_snapshot(run)
+            handoff = store.handoff_snapshot(run_id)
+            if (handoff is None or run["state"] != "awaiting_host" or run["phase"] is not None
+                    or handoff.status != "open"
+                    or snapshot["task"].get("workflow") != "council-decision" or snapshot["task"]["lead"]["mode"] != "host"):
+                raise ConflictError("guided Council finish requires a current open host handoff")
+            validate_saved_handoff(store, run_id, handoff, snapshot)
+            choice = {"disposition": disposition, "reason": reason, "chosen": chosen,
+                      "supported_claims": supported_claims, "discarded_alternatives": discarded_alternatives,
+                      "validation": validation, "unresolved_objections": [item["id"] for item in handoff.packet["critique"]["objections"]]}
+            validate_choice(choice, snapshot["task"]["council"], handoff.packet["critique"])
+            if disposition == "revise":
+                raise ContractError("Council additional rounds require a new explicitly capped run")
+            if disposition == "accept" and not handoff.packet["evaluation"]["accept_allowed"]:
+                raise ContractError("Council acceptance is blocked by mandatory checks/integrity")
+            body = {"schema_version": 1, "submission_id": "terminal-" + handoff.handoff_id,
+                    "disposition": disposition, "reason": reason, "council_choice": choice,
+                    "evidence_refs": [{"artifact_id": ref["artifact_id"], "sha256": ref["sha256"]} for ref in handoff.packet["artifacts"]]}
+            decision = {**body, "submission_hash": request_hash(body)}
+            decision_gate(store, run_id, handoff, snapshot, decision)
+            version = run["version"]
+        finally:
+            store.close()
+        claimed = self.handoff_claim(run_id, version, "terminal-operator", _initial_only=True,
+                                     _terminal_decision=decision)
+        return self.handoff_complete(run_id, claimed["claim"], decision)
+
     def handoff_complete(
         self,
         run_id: str,
@@ -1944,6 +2059,12 @@ class Service:
         try:
             run = store.run(run_id)
             handoff = store.handoff_snapshot_by_id(run_id, decoded.handoff_id)
+            if handoff.packet.get("workflow") == "council-decision":
+                from .council_runtime import complete
+                snapshot = self._review_snapshot(run)
+                if snapshot["task"]["lead"]["mode"] == "headless" and not decoded.owner_id.startswith("headless-lead:"):
+                    raise ConflictError("headless Council does not accept a host completion")
+                return complete(self, store, run_id, handoff, snapshot, {**decision, "_claim": claim})
             managed_review = handoff.packet.get("workflow") in {
                 "branch-review", "issue-delivery",
             }
@@ -2001,6 +2122,15 @@ class Service:
         try:
             run = store.run(run_id)
             if run["state"] in TERMINAL_STATES: raise ConflictError("terminal run cannot resume; start a superseding run")
+            if run["state"] == "awaiting_host":
+                handoff = store.handoff_snapshot(run_id)
+                if handoff is not None and handoff.packet.get("workflow") == "council-decision":
+                    from .council_runtime import continue_lead
+                    continuation = continue_lead(self, store, run_id, run, handoff, self._review_snapshot(run))
+                    launch = continuation.pop("launch", None)
+                    if launch is not None:
+                        self._spawn_daemon(run_id, *launch)
+                    return continuation
             if run["state"] == "awaiting_host" and run["phase"] is None:
                 handoff = store.handoff_snapshot(run_id)
                 if (handoff is None or handoff.packet.get("workflow")

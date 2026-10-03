@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import selectors
 import shutil
@@ -28,6 +29,7 @@ from .probe_process import (
     capture_probe_identity,
     close_probe as _close_probe,
     subscription_environment as _environment,
+    wait_probe_exit,
 )
 
 SOURCE_ROOT = Path(__file__).resolve().parents[2]
@@ -75,6 +77,7 @@ def _probe_output(
         if deadline - time.monotonic() <= 0:
             raise TimeoutError("diagnostic probe timed out")
         output = chunks.decode("utf-8")
+        wait_probe_exit(process, start_identity=start_identity, deadline=deadline)
     finally:
         # Retain the direct child's PID until group cleanup is confirmed;
         # waiting here first would discard the exited-parent ownership anchor.
@@ -299,7 +302,9 @@ def build_doctor_report(
             "required_adapters": list(required), "blocked_adapters": blocked,
         }
     supported_workflows["council"] = {
-        "supported": False, "ready": False, "reason": "not_implemented",
+        "supported": True, "implemented_partial": True, "ready": False,
+        "native_ready": False, "automatic_enabled": False,
+        "reason": "native_network_attestation_unavailable",
     }
     workflow_ready = any(row["ready"] for row in supported_workflows.values())
     local_apps_required = bool(installed_apps)
@@ -329,4 +334,13 @@ def build_doctor_report(
         },
         "adapters": adapters,
         "local_apps": local_apps,
+        "workflows": {"council-decision": {
+            "implemented": True, "automatic_enabled": False, "ready": False,
+            "readiness": "native_network_attestation_unavailable",
+            "native_network_ready": False,
+            "read_boundary_available": platform.system() == "Darwin" and Path("/usr/bin/sandbox-exec").is_file(),
+            "requirements": ["three distinct entitled verified read-only model IDs", "frozen default-deny Seatbelt probe",
+                             "subscription/network compatibility", "two valid independent proposals and one distinct critic"],
+            "supported_rounds": 1,
+        }},
     }
