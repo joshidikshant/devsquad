@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-10-02",
-  "status": "integrated_release_candidate_public_ci_pending",
+  "status": "public_ci_recovery_test_synchronization_repair_in_progress",
   "authorization": "User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
   "pull_request": "https://github.com/joshidikshant/devsquad/pull/1",
   "frozen_core_candidate": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
@@ -161,7 +161,7 @@
     "antigravity": "agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope",
     "whole_plan": "not complete"
   },
-  "remaining": "Push final candidate; require exact-head public CI green, merge PR1 and publish v0.11.0 exact-commit verified assets; local Claude plugin normal update. Existing CodexApp connection needs scoped reconnect. Core604/native/installed9SDK/agyCLI gates already passed; do not repeat unchanged. Whole-plan/Council/desktop residuals remain separate.",
+  "remaining": "Finish independently reviewed recovery-test synchronization repair; preserve failure record; root affected/Bash checks and exact-head public CI green, merge PR1 and publish exact-commit assets. Existing CodexApp connection needs scoped reconnect; accepted core/native/install/agy proofs remain source-equivalent, not substitute for failed public CI.",
   "integrated_legacy_gate": {
     "source_checkpoint": "3fdc6bd065c577a9ed59566573fdce399e9b585a",
     "adapter_blob": "1847357c19677f276b06886386e2ac93e586b203",
@@ -188,5 +188,36 @@
     "reference": "passed",
     "core_tree_unchanged": true,
     "failure_history": "evidence/legacy-watchdog-release-repair.json"
+  },
+  "final_ci_attempt": {
+    "run_id": 37084805784,
+    "url": "https://github.com/joshidikshant/devsquad/actions/runs/37084805784",
+    "head": "5a576d39469c198a3cc93474960886b875363419",
+    "legacy": "passed259/11 files;50 focused",
+    "legacy_timings_seconds": {
+      "fast": 0.334,
+      "ignored_TERM": 0.335,
+      "pre_open_cancel": 0.221,
+      "TERM_resistant": 3.609,
+      "slow_ps": 1.518
+    },
+    "optional_mcp": "passed",
+    "python314": {
+      "version": "3.14.7",
+      "tests": 486,
+      "seconds": 679.063,
+      "failures": 1,
+      "errors": 0,
+      "skips": 2,
+      "unraisable": [],
+      "case": "test_coordinator_crash_imports_runner_receipt_once",
+      "assertion": "live not in succeeded/already_finalized",
+      "location": "test/core/test_service.py:1108",
+      "status": "failed_not_accepted"
+    },
+    "python311": "still_running_not_accepted",
+    "duplicate_push_run": 37084802403,
+    "duplicate_push_status": "cancelled_to_avoid_duplicate_CI",
+    "diagnosis": "Fixed.6s sleep does not establish child-start/runner-exit boundary; running state precedes runner gate. Live refusal is correct ownership fence. Isolated bounded positive synchronization repair and independent review underway; no core runtime edit authorized from this test observation."
   }
 }

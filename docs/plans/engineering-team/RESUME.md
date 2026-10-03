@@ -12,6 +12,13 @@ hosted service. PR1: https://github.com/joshidikshant/devsquad/pull/1.
 Publication is pending final public CI, merge and exact-commit release assets.
 The whole engineering-team plan remains incomplete.
 
+Latest public CI37084805784 on5a576d3: Bash259/11 files (50 focused) and
+optional MCP passed; Python3.14.7 FAILED486 tests/679.063s at coordinator
+crash receipt recovery (fixed.6s sleep, live worker). Python3.11 still active,
+not accepted. Runtime's live-process refusal is correct. Isolated terminal/
+readiness repair is limited to positively synchronizing the test's child-start,
+receipt publication and actual owned runner exit; no core change. No merge/tag.
+
 ## Accepted gates — do not repeat unchanged
 
 - Frozen core b83dda7fbf691503d3adf3c9ea6ecebd4071ba16 passed604 tests/
@@ -65,8 +72,10 @@ released run its normal scoped plugin updater and verify0.11.0.
 
 ## Exact next action
 
-1. Root integrated Bash259/affected45/reference/diff/JSON gates pass;
-   checkpoint using git-safety. Core/full/native/installed gates need no repeat.
+1. Root integrated watchdog Bash259/affected45/reference/diff/JSON gates pass.
+   Finish/review the isolated coordinator-recovery test synchronization repair,
+   record both CI platform outcomes, run affected/Bash checks and checkpoint.
+   Core source/full/native/installed gates need no unchanged repeat.
 2. Push codex/engineering-team, require final exact-head public CI green:
    legacy Bash3.2, core Python3.11 and3.14, optional MCP. Earlier CI
    37082086201/37082130929 was cancelled after true legacy failure; optional
