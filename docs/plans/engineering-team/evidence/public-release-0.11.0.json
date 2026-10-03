@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-10-02",
-  "status": "published_verified_core_plugin_hook_issue_found_corrective0111_pending",
+  "status": "published_verified_core_original_plugin_issue_corrected_by0111",
   "authorization": "User chose public GitHub release in existing joshidikshant/devsquad; no package registry or hosted service",
   "pull_request": "https://github.com/joshidikshant/devsquad/pull/1",
   "frozen_core_candidate": "b83dda7fbf691503d3adf3c9ea6ecebd4071ba16",
@@ -161,7 +161,7 @@
     "antigravity": "agyCLI1.2.14 updated-release MCP status verified; automatic worker roles unverified and IDE out of scope",
     "whole_plan": "not complete"
   },
-  "remaining": "v0.11.0 published and downloaded asset hashes verified; standalone core works. Scoped local plugin updater installed0.11.0, but actual loader/validator exposed missing hooks envelope. Preserve original tag/assets, publicly note issue, complete reviewed/tested0.11.1 corrective release and verify actual installed plugin without load errors. Original Council/desktop/MCP reconnect residuals remain separate.",
+  "remaining": "Original tag/assets retained unchanged. Published0.11.1 correction and actual installed plugin validation/no-error proof complete; see evidence/public-release-0.11.1.json. Original Council/desktop/current Codex MCP reconnect residuals and whole-plan closure remain separate.",
   "integrated_legacy_gate": {
     "source_checkpoint": "3fdc6bd065c577a9ed59566573fdce399e9b585a",
     "adapter_blob": "1847357c19677f276b06886386e2ac93e586b203",
@@ -451,7 +451,8 @@
     "standalone_core_affected": false,
     "corrective_version": "0.11.1",
     "corrected_source_validator": "passed",
-    "no_successful_plugin_load_claim": true
+    "no_successful_plugin_load_claim": true,
+    "corrected_later": "Published0.11.1 and actual installed validator/zero-loader-errors accepted; evidence/public-release-0.11.1.json"
   },
   "diagnostic_cleanup_overlap_triage": {
     "source": "independent read-only code/output triage; no new probes",

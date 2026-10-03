@@ -1,9 +1,10 @@
 {
   "schema_version": 1,
   "recorded_on": "2026-10-02",
-  "status": "narrow_hook_envelope_correction_reviewed_local_pass_final_ci_active",
+  "status": "published_verified_and_actual_local_plugin_update_accepted",
   "authorization": "Corrective patch within authorized public GitHub release and safe local plugin update; preserve original0.11.0 tag/assets",
   "baseline_release": "https://github.com/joshidikshant/devsquad/releases/tag/v0.11.0",
+  "core_and_live_evidence": "evidence/public-release-0.11.0.json",
   "failure": {
     "installed_plugin": "0.11.0",
     "claude_version": "2.1.220",
@@ -37,12 +38,70 @@
     "pull_request": "https://github.com/joshidikshant/devsquad/pull/2",
     "run_id": 37090495321,
     "url": "https://github.com/joshidikshant/devsquad/actions/runs/37090495321",
-    "status": "active_not_yet_accepted",
+    "status": "completed_success_all_four_jobs_accepted",
     "duplicate_push_run": 37090462788,
     "duplicate_push_status": "completed_cancelled",
-    "optional_mcp": "completed_success; counts from final job log pending",
+    "legacy": {"status": "completed_success", "job_id": 111109601625, "assertions": 261, "files": 11, "packaging_assertions": 9, "timings_seconds": {"fast": 0.447, "ignored_TERM": 0.404, "pre_open_cancel": 0.499, "TERM_resistant": 3.460, "slow_ps": 1.630}},
+    "optional_mcp": {"status": "completed_success", "job_id": 111109601467, "tests": 23, "seconds": 3.809, "skips": 1, "failures": 0, "errors": 0},
+    "python311": {"status": "completed_success", "version": "3.11.9", "job_id": 111109601636, "tests": 604, "seconds": 900.372, "monotonic_seconds": 900.582278083, "utc_seconds": 900.582292, "skips": 2, "failures": 0, "errors": 0, "unraisable": []},
+    "python314": {"status": "completed_success", "version": "3.14.7", "job_id": 111109601612, "tests": 604, "seconds": 869.101, "monotonic_seconds": 869.4359770000001, "utc_seconds": 869.43598, "skips": 2, "failures": 0, "errors": 0, "unraisable": []},
     "required": ["Legacy Bash3.2", "Core Python3.11", "Core Python3.14", "Optional MCP2.2.0"],
     "later_local_docs": "Recovery metadata only; merge/tag only accepted remote head and identical-tree merge"
   },
-  "remaining": "Require all-four final exact-head public CI37090495321 onbefc7e8, merge PR2, verified0.11.1 assets, actual installed plugin validation and zero loader errors. Do not rerun unchanged paid/live workflows or claim whole-plan completion."
+  "merge": {
+    "commit": "cddfa6889eb62a0269fe11eb544e4b165e3c5c68",
+    "merged_at": "2026-10-03T02:55:39Z",
+    "tree": "52bca9df0a4c891f77642054c05d01829cfc5424",
+    "equals_tested_candidate_tree": true,
+    "core_tree": "62eea7fa31153ef732fd5e9dfd97951d95b367d8",
+    "plugin_tree": "3355bae01cfbefa64b6b695a7b68f9720e68116b",
+    "duplicate_main_push_run": 37091478101,
+    "duplicate_main_push_status": "completed_cancelled_after_exact_tree_equality; not accepted as a passing gate"
+  },
+  "published_release": {
+    "id": 402293874,
+    "url": "https://github.com/joshidikshant/devsquad/releases/tag/v0.11.1",
+    "tag": "v0.11.1",
+    "tag_commit": "cddfa6889eb62a0269fe11eb544e4b165e3c5c68",
+    "published_at": "2026-10-03T02:58:18Z",
+    "latest_release_verified": true,
+    "is_draft": false,
+    "is_prerelease": false,
+    "all_downloaded_checksums_verified": true,
+    "archive_headers_match_tag": true,
+    "assets": [
+      {"name": "devsquad-0.11.1-source.tar.gz", "bytes": 2731841, "sha256": "78f5b54eadef0ee92fbb4646020f73393e6361b8249e6c47d50522c04e78ee27"},
+      {"name": "devsquad-plugin-0.11.1.tar.gz", "bytes": 307168, "sha256": "d7669a8e8c3c75036d35a59097624718d35886f3affb6d8c0177a74046ecbf5b"},
+      {"name": "devsquad_core-0.1.0-py3-none-any.whl", "bytes": 272189, "sha256": "611086b51604f29b7964e05affbcd70ffa481299b04f645cd9ac2315b2c8bf77"},
+      {"name": "SHA256SUMS", "bytes": 295, "sha256": "bb0e60eb9d483df911b13691dc910d0e56a9a6b1f5f686255c12c767a5473538"}
+    ],
+    "private_asset_proof_sha256": "bd2a044a2d19e91cecf2715100729f87e3f9fb50a3f53be9aecc4e6f6a82bafa",
+    "wheel_reuse": "Exact core tree/file/payload equality;11schemas/17migrations verified, unchanged611086 wheel SHA",
+    "bounded_privacy": "No credential/raw-log/cache/database files or recognizable credentials; historical path references are not private artifact content",
+    "original0110_tag_assets": "unchanged; original release notes disclose hook error and direct users to0111"
+  },
+  "actual_local_plugin": {
+    "id": "devsquad@devsquad-marketplace",
+    "scope": "user",
+    "updater_exit": 0,
+    "installed_version": "0.11.1",
+    "enabled": true,
+    "updated_at": "2026-10-03T02:59:06.276Z",
+    "actual_installed_validator_exit": 0,
+    "load_errors": [],
+    "installed_hook_blob": "fdbd2f3299951aa4e98c2bb354ae05667e8939f0",
+    "hook_exactly_equals_reviewed_source": true,
+    "start_new_claude_session_required": true,
+    "unrelated_plugins_auth_global_ai_settings_changed": false,
+    "core_launcher_version": "squad0.1.0",
+    "core_selector": "0.1.0-py31214-303a0e0a6c87-mcp-a26bc88afbef_unchanged"
+  },
+  "final_recovery_checks": {
+    "bash": {"assertions": 261, "files": 11, "failures": 0, "exec_session": 95472},
+    "json_reference_diff": "passed",
+    "only_documentation_diff_from_released_main": true,
+    "finished_worktrees": "r6-readiness/r6-terminal/r7-council archived with recoverable Git snapshots; only disposable ignored bytecode caches omitted",
+    "production_saved_run_and_private_evidence_worktrees": "retained; not cleanup targets"
+  },
+  "remaining": "Public core release and safe local update are complete. Existing Codex chat's old DevSquad MCP connection still needs the user's scoped reconnect, then one bounded saved-run read; Claude desktop Code-tab/TCC, native Council/automaticOFF, unqualified automatic Grok/agy roles and whole-plan closure remain separate. No repeat of unchanged accepted proofs or additional paid/live request authorized."
 }

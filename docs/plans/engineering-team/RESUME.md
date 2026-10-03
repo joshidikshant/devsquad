@@ -6,89 +6,40 @@ reset or restart from main. Detailed receipts and failed gates remain in evidenc
 
 ## Current checkpoint — October 2, 2026
 
-The user authorized a public **GitHub release in joshidikshant/devsquad**.
-Release v0.11.0 ships plugin0.11.0 and standalone core0.1.0; no registry or
-hosted service. PR1: https://github.com/joshidikshant/devsquad/pull/1.
-v0.11.0 is published and assets verified, but actual local Claude update found
-a plugin hook-envelope defect. A narrow0.11.1 correction is now locally tested
-and independently reviewed; publication/update of that correction is next.
-The whole engineering-team plan remains incomplete.
+The user-authorized public GitHub core release is complete:
+https://github.com/joshidikshant/devsquad/releases/tag/v0.11.1.
+This ships Claude plugin0.11.1 and standalone core0.1.0, not a registry or
+hosted service. The broader engineering-team plan remains incomplete.
 
-Latest public CI37084805784 on5a576d3: Bash259/11 files (50 focused) and
-optional MCP passed; Python3.14.7 FAILED486 tests/679.063s at coordinator
-crash receipt recovery (fixed.6s sleep, live worker). Python3.11 PASSED604/
-1013.419s, two SDK skips/no errors/failures/unraisable on that earlier head.
-Runtime's live-process refusal is correct. Isolated terminal/
-readiness repair is limited to positively synchronizing the test's child-start,
-receipt publication and actual owned runner exit; no core change. Controlled
-original red and synchronized green proven on3.12.14/local3.14.6 (not CI.7).
-edfcf65 test review clean/agent33 module each3.12/3.14/Bash259 pass.
-Root integration Bash259 passed;33 service tests FAILED1/32.435s at the
-neighboring before-gate crash waiter598 (ambiguous !=dead). Concurrent Bash
-alone is not causal proof. Isolated test-only exactdead wait repair retains
-the5s boundary and all before-gate/exact-once assertions; no core edit.
-e7b63b0 confirmed-dead waiter is integrated: both independent reviews clean,
-same5s boundary/core unchanged, agent33 service tests3.12/3.14 pass;
-root complete33 module PASSED29.820s/no failures/errors/skips. Root Bash259/
-11files/reference/JSON/diff passed. Corrected checkpoint/push/new exact-head
-public CI pending. No merge/tag.
+PR2 final headbefc7e8a00c9b9251af0a83e3a77f12adae5db11 passed all four
+CI37090495321 jobs: Bash261/11 (nine packaging), Python3.11.9 full604/
+900.372s, Python3.14.7 full604/869.101s, optionalMCP23/3.809s. Full core
+jobs each had two optionalSDK skips/no failures/errors/unraisable; MCP one
+optional skip. Mergecddfa6889eb62a0269fe11eb544e4b165e3c5c68 at
+2026-10-03T02:55:39Z has identical tree52bca9df0a4c891f77642054c05d01829cfc5424.
+Tag exactmerge; release402293874 published2026-10-03T02:58:18Z, latest,
+not draft/prerelease. Archive headers and downloaded asset checksums verified.
+Wheel reused only after exact core tree/file equality;11schemas/17migrations.
 
-Corrected remote candidate f40c618caefd100637c4686660673e159899ecb7 is now
-pushed; PR CI37086958301: Bash/MCP passed, Python3.11.9 FAILED137/191.313s
-at delivery repair recovery1001 (ownership_ambiguous !=retain_ownership).
-Python3.14.7 passed604/697.362s/twoSDKskips/no failures/errors/unraisable;
-whole f40 workflow failed311 and is not accepted. Duplicate push cancelled.
-f40 is rejected as a publication candidate by that failed311 job. Retain it
-as source baseline only. Next integrate the narrow delivery fixture repair,
-push a new exact candidate and require final public gates before merge/tag.
-Later docs-only checkpoints are recovery metadata, not publication targets.
+Original v0.11.0/PR1 also passed all-four CI and exact-merge asset checks,
+but actual normal local plugin update caught missing outer hooks object.
+v0.11.1 corrects only that wrapper/metadata/tests; commands, matchers and
+15s timeouts unchanged. Independent frozen review clean, actual corrected
+Claude2.1.220 validator passes; exact-old shape fails. Normal user-scoped
+updater installed0.11.1/enabled/exit0; actual installed validator passes,
+plugin list has zero load errors, hook blobfdbd2f3299951aa4e98c2bb354ae05667e8939f0
+exactly equals reviewed source. Start a new Claude Code session to load it.
+Original0.11.0 tag/assets stay unchanged; release notes direct users to0.11.1.
 
-New bounded isolated repair: test SIGKILLs attempt_runner, not coordinator,
-then assumes.1s implies blocked. Correct running import returns safe
-ownership_ambiguous before typed blocked recovery. Positively wait for the
-same dead runner and blocked/current attempt ownership_ambiguous before one
-explicit retain request. Preserve exactly3 attempts/no new writer/launchedfalse/
-source/cancel assertions; no core edit.893490a phasefix is now integrated,
-exact7723f6ce reviewed blob. Agent52 delivery/service tests pass each3.12/3.14;
-root19 delivery tests48.911s pass; unchanged service33/29.820s already passed.
-Final root Bash passed259 assertions/11files (50 focused), reference/JSON/
-staged+unstaged diff checks passed. Checkpoint/push and exact-head public CI
-remain. No merge.
+Earlier watchdog/dead-wait/blocked-phase failures and controlled red/green
+test-only corrections remain in release evidence. Failed/cancelled jobs are
+not passing gates. Duplicate push/main CI was cancelled after exact tree
+equality to the complete accepted PR workflow. No new provider generation.
 
-Corrected candidate8488ed44ee30c7fa5b2c20370827093715130d36 is pushed.
-Final PR CI37088621735 passed all four jobs: Bash259/11, optionalMCP23/4.656s
-(one optional skip), Python3.11.9 full604/804.964s and Python3.14.7 full604/
-1110.004s (two SDK skips each/no failures/errors/unraisable). PR1 merged as
-e7ec4ce9f889dc5fa083fe4289b5bfc3d424edfa; treebc76f192 equals tested8488.
-v0.11.0 published2026-10-03T02:29:54Z, release402283042; tag exactmerge,
-not draft/prerelease, source/plugin header hashes match. All three downloaded
-assets and SHA256SUMS match. Source/plugin/wheel hashes are in public evidence.
-Duplicate push/main CI was cancelled after tree equality, not accepted.
-
-Actual scoped Claude updater installed0.11.0/enabled/exit0, but plugin list
-and actual installed validator failed: hooks expected record/undefined.
-Old hooks/hooks.json lacked outer hooks object. v0.11.0 notes now disclose it;
-retain original tag/assets. Corrective0.11.1 only wraps existing event map,
-bumps three metadata versions and adds offline shape/negative/version tests.
-Core tree62ee unchanged, commands/matchers/timeouts exactly unchanged.
-Six-file diff0542f696c655c801a541d6b7066e37bddf2ea59066a83c4f0ab1bf992ad509da
-independently reviewed clean. Actual Claude2.1.220 corrected validator passes;
-independent exact-old shape exits1, corrected exits0/.362s, packaging9 passes.
-Root Bash261/11 passes. Checkpoint/push/PR2/fullCI/merge0.11.1 and actual
-installed no-error validation remain. Original core/full/live gates stay valid.
-
-Corrective remote headbefc7e8a00c9b9251af0a83e3a77f12adae5db11 is frozen.
-PR2 https://github.com/joshidikshant/devsquad/pull/2 is attached; final PR CI
-37090495321 active, optionalMCP passed; duplicate push37090462788 cancelled. Keep
-later local docs checkpoints local until release. Require all four CI jobs;
-merge only this tested head and prove merged tree equality before0.11.1 tag.
-
-Rejected private diagnostic RELEASE+cancel cleanup overlapped import and
-raised stale-phase ConflictError. Independent read-only triage: fail-closed
-completion fence, no duplicate-writer/false-cancel evidence. No error-time
-ledger snapshot proves ordering/final rows/lost-intent liveness; retain as
-diagnostic concurrency-conflict / possible follow-up, not confirmed defect.
-Corrected helper waits import DONE before teardown; no product edit/probes.
+Final recovery Bash261/11, reference/JSON/diff checks pass. Only documentation
+differs from released main. Finished r6-readiness/r6-terminal/r7-council
+worktrees are archived with recoverable Git snapshots; only disposable ignored
+bytecode was omitted. All production run/evidence worktrees remain intact.
 
 ## Accepted gates — do not repeat unchanged
 
@@ -138,19 +89,17 @@ This chat's existing Codex MCP server returned SCHEMA_UNSUPPORTED because it
 still uses an old package. New CLI and agy succeed on the same saved run.
 A scoped DevSquad-only reconnect request is pending; do not change global
 settings or repeatedly probe the unchanged old connection. This does not block
-the public CLI release. Local Claude plugin is0.11.0 but has the confirmed
-hook load error above; complete0.11.1 and verify actual installed validation
-and plugin list without errors. Do not claim local plugin usability yet.
+the public CLI release. Local Claude plugin0.11.1 passes actual installed
+validation with no load errors; only DevSquad's normal user-scoped update ran.
 
 ## Exact next action
 
-1. Await all-four final PR CI37090495321 on exact frozenbefc7e8 head.
-2. Merge exact tested head, prove merged tree equality; regenerate source/
-   plugin0.11.1 archives from exact merge, reuse unchanged core wheel only
-   after tree/hash equality. Publish/verify tag, release and downloads.
-3. Normal scoped Claude plugin update, actual installed validator and plugin
-   list must have no load errors. Update evidence/backlog/checkpoint, end clean.
-   Core source/full/native/installed/provider gates need no unchanged repeat.
+Public release/update gates are finished. Do not rerun accepted core/full/
+native/installed/provider gates unchanged. Remaining R8 action is the user's
+DevSquad-only MCP reconnect in this Codex chat, followed by one bounded saved-
+run read once they confirm reconnection; do not repeatedly probe the old server.
+Claude Code-tab/TCC proof and native Council remain separate external gates.
+No need to reload this old chat or repeat architecture work. Read these files.
 
 ## Residual scope and boundaries
 
@@ -161,10 +110,15 @@ Native Council remains unavailable; fixture comparison inconclusive, automatic
 OFF. No additional network attempts or permission widening.
 Jev OFF; the single authorized pilot is spent. Laya is conditional, not adopted.
 Claude desktop Code-tab proof remains unverified/TCC; CLI is not a substitute.
+Rejected diagnostic import/cancel overlap remains a possible liveness follow-
+up, not a confirmed unsafe finding: no error-time ledger snapshot establishes
+ordering/final rows/lost intent. Completion fence failed closed; corrected
+diagnostic cleanup waits for import DONE. No further probe is authorized here.
 No credit purchase, reset redemption, paid API fallback or global AI settings
 change. Raw provider diagnostics/credentials remain outside tracked evidence.
 
-Evidence: evidence/public-release-0.11.0.json,
+Evidence: evidence/public-release-0.11.1.json (published patch/install proof),
+evidence/public-release-0.11.0.json (core/live/install/failed-gate history),
 evidence/legacy-watchdog-release-repair.json, R6-terminal-readiness-partial,
 evidence/release-receipt-synchronization.json and
 evidence/release-runner-exit-synchronization.json,
