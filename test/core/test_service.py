@@ -591,9 +591,11 @@ class ServiceTest(unittest.TestCase):
         try:
             attempt=store.attempt(started["run_id"])
             deadline=time.monotonic()+5
+            # A dying runner may be ambiguous between identity and pgid lookup.
+            # Recovery needs confirmed death, not merely an observation of not-live.
             while (inspect_process(
                     attempt["pid"],attempt["pgid"],attempt["process_start_id"],
-                    )=="live" and time.monotonic()<deadline):
+                    )!="dead" and time.monotonic()<deadline):
                 time.sleep(.02)
             self.assertEqual(
                 inspect_process(attempt["pid"],attempt["pgid"],attempt["process_start_id"]),

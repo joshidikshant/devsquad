@@ -25,7 +25,11 @@ Root integration Bash259 passed;33 service tests FAILED1/32.435s at the
 neighboring before-gate crash waiter598 (ambiguous !=dead). Concurrent Bash
 alone is not causal proof. Isolated test-only exactdead wait repair retains
 the5s boundary and all before-gate/exact-once assertions; no core edit.
-Independent review/root rerun pending. No merge/tag.
+e7b63b0 confirmed-dead waiter is integrated: both independent reviews clean,
+same5s boundary/core unchanged, agent33 service tests3.12/3.14 pass;
+root complete33 module PASSED29.820s/no failures/errors/skips. Root Bash259/
+11files/reference/JSON/diff passed. Corrected checkpoint/push/new exact-head
+public CI pending. No merge/tag.
 
 ## Accepted gates — do not repeat unchanged
 
@@ -81,8 +85,8 @@ released run its normal scoped plugin updater and verify0.11.0.
 ## Exact next action
 
 1. Root integrated watchdog Bash259/affected45/reference/diff/JSON gates pass.
-   Finish/review the isolated coordinator-recovery test synchronization repair,
-   record both CI platform outcomes, run affected/Bash checks and checkpoint.
+   Both receipt/dead-wait test repairs are integrated/reviewed; root33 passes.
+   Finish Bash/JSON/reference/diff checks and checkpoint the corrected candidate.
    Core source/full/native/installed gates need no unchanged repeat.
 2. Push codex/engineering-team, require final exact-head public CI green:
    legacy Bash3.2, core Python3.11 and3.14, optional MCP. Earlier CI
@@ -110,5 +114,7 @@ change. Raw provider diagnostics/credentials remain outside tracked evidence.
 
 Evidence: evidence/public-release-0.11.0.json,
 evidence/legacy-watchdog-release-repair.json, R6-terminal-readiness-partial,
+evidence/release-receipt-synchronization.json and
+evidence/release-runner-exit-synchronization.json,
 R7 reconciliation/final-network diagnostics, R8-installed-workflows and
 R3/R4/R5 closure files. Historical recovery detail is preserved in Git.
